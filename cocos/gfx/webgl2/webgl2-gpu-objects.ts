@@ -22,12 +22,8 @@
  THE SOFTWARE.
 */
 
-import { nextPow2 } from '../../core';
-import {
-    Address, DescriptorType, BufferUsage, Filter, Format, MemoryUsage, SampleCount, UniformInputAttachment,
-    ShaderStageFlagBit, TextureFlags, TextureType, TextureUsage, Type, DynamicStateFlagBit, DrawInfo, Attribute,
-    ColorAttachment, DepthStencilAttachment, UniformBlock, UniformSamplerTexture, DescriptorSetLayoutBinding,
-} from '../base/define';
+import { nextPow2 } from '@base/math';
+import { Address, DescriptorType, BufferUsage, Filter, Format, MemoryUsage, SampleCount, UniformInputAttachment, ShaderStageFlagBit, TextureFlags, TextureType, TextureUsage, Type, DynamicStateFlagBit, DrawInfo, Attribute, ColorAttachment, DepthStencilAttachment, UniformBlock, UniformSamplerTexture, DescriptorSetLayoutBinding } from '../base/define';
 import { BlendState, DepthStencilState, RasterizerState } from '../base/pipeline-state';
 import { WebGL2DeviceManager } from './webgl2-define';
 import { WebGL2Device } from './webgl2-device';
@@ -52,13 +48,13 @@ export class WebGL2IndirectDrawInfos {
         this.byteOffsets = new Int32Array(this._capacity);
     }
 
-    public clearDraws () {
+    public clearDraws (): void {
         this.drawCount = 0;
         this.drawByIndex = false;
         this.instancedDraw = false;
     }
 
-    public setDrawInfo (idx: number, info: Readonly<DrawInfo>) {
+    public setDrawInfo (idx: number, info: Readonly<DrawInfo>): void {
         this._ensureCapacity(idx);
         this.drawByIndex = info.indexCount > 0;
         this.instancedDraw = !!info.instanceCount;
@@ -74,7 +70,7 @@ export class WebGL2IndirectDrawInfos {
         this.instances[idx] = Math.max(1, info.instanceCount);
     }
 
-    private _ensureCapacity (target: number) {
+    private _ensureCapacity (target: number): void {
         if (this._capacity > target) return;
         this._capacity = nextPow2(target);
 
@@ -119,7 +115,6 @@ export interface IWebGL2GPUBuffer {
     glOffset: number;
 
     buffer: ArrayBufferView | null;
-    indirects: WebGL2IndirectDrawInfos;
 }
 
 export interface IWebGL2GPUTexture {
@@ -315,7 +310,6 @@ export interface IWebGL2GPUInputAssembler {
     attributes: Attribute[];
     gpuVertexBuffers: IWebGL2GPUBuffer[];
     gpuIndexBuffer: IWebGL2GPUBuffer | null;
-    gpuIndirectBuffer: IWebGL2GPUBuffer | null;
 
     glAttribs: IWebGL2Attrib[];
     glIndexType: GLenum;
@@ -326,11 +320,11 @@ export class IWebGL2BlitManager {
     private _srcFramebuffer: WebGLFramebuffer | null;
     private _dstFramebuffer: WebGLFramebuffer | null;
 
-    get srcFramebuffer () {
+    get srcFramebuffer (): WebGLFramebuffer | null {
         return this._srcFramebuffer;
     }
 
-    get dstFramebuffer () {
+    get dstFramebuffer (): WebGLFramebuffer | null {
         return this._dstFramebuffer;
     }
 
@@ -340,7 +334,7 @@ export class IWebGL2BlitManager {
         this._dstFramebuffer = gl.createFramebuffer();
     }
 
-    destroy () {
+    destroy (): void {
         const { gl } = WebGL2DeviceManager.instance;
         gl.deleteFramebuffer(this._srcFramebuffer);
         gl.deleteFramebuffer(this._dstFramebuffer);

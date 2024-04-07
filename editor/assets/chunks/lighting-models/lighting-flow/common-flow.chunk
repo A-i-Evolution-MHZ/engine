@@ -1,5 +1,5 @@
 #if (CC_PIPELINE_TYPE == CC_PIPELINE_TYPE_FORWARD || CC_FORCE_FORWARD_SHADING)
-  #if CC_FORWARD_ADD && !CC_ENABLE_CLUSTERED_LIGHT_CULLING
+  #if CC_FORWARD_ADD
     void CCSurfacesLighting(inout LightingResult lightingResultAccumulated, in SurfacesMaterialData surfaceData, in vec2 shadowBias)
     {
       vec3 worldPos;
@@ -15,11 +15,12 @@
       lightingResultAccumulated.diffuseColorWithLighting = lightingResult.diffuseColorWithLighting;
       lightingResultAccumulated.specularColorWithLighting = lightingResult.specularColorWithLighting;
 
-      #if CC_SURFACES_LIGHTING_TRT
+      #if CC_SURFACES_LIGHTING_2ND_LAYER_SPECULAR
         vec3 diff;
-        SurfacesMaterialData surfaceDataTRT;
-        CCSurfacesGetSurfacesMaterialDataTRT(surfaceDataTRT, surfaceData);
-        CCSurfacesLightingInitializeColorWithLighting(diff, lightingResultAccumulated.specularColorWithLightingTRT, surfaceDataTRT, lightingData);
+        SurfacesMaterialData surfaceData2ndSpecular;
+        CCSurfacesGetSurfacesMaterialData2ndSpecular(surfaceData2ndSpecular, surfaceData);
+        CCSurfacesLightingInitializeColorWithLighting(diff, lightingResult.specularColorWithLighting2ndSpecular, surfaceData2ndSpecular, lightingData);
+        lightingResultAccumulated.specularColorWithLighting2ndSpecular = lightingResult.specularColorWithLighting2ndSpecular;
       #endif
 
       int numLights = CC_PIPELINE_TYPE == CC_PIPELINE_TYPE_FORWARD ? LIGHTS_PER_PASS : int(cc_lightDir[0].w);
@@ -29,19 +30,21 @@
         vec3 lightDirWithLength = IS_RANGED_DIRECTIONAL_LIGHT(cc_lightPos[i].w) ? -normalize(cc_lightDir[i].xyz) : cc_lightPos[i].xyz - worldPos;
         CCSurfacesLightingCalculateIntermediateData_PerLight(lightingData, surfaceData, lightDirWithLength);
         CCSurfacesLightingCalculateColorWithLighting(lightingResult.diffuseColorWithLighting, lightingResult.specularColorWithLighting, surfaceData, lightingData);
-  
+
         vec3 diffuseLighting, specularLighting;
         CCSurfacesLightingCalculateDirect(diffuseLighting, specularLighting, lightingData, cc_lightColor[i]);
 
-        float fresnel = 1.0;
       #if CC_SURFACES_LIGHTING_USE_FRESNEL
-        fresnel = lightingResult.fresnel = CCSurfaceLightingCalculateFresnel(lightingData);
+        vec3 fresnel = CCSurfaceLightingCalculateExtraFresnel(lightingData);
+      #else
+        vec3 fresnel = vec3(1.0);
       #endif
+        lightingResult.fresnel = fresnel;
 
-        // shadows
+
         float shadow = 1.0;
       #if CC_RECEIVE_SHADOW && CC_SHADOW_TYPE == CC_SHADOW_MAP
-        if (IS_SPOT_LIGHT(cc_lightPos[i].w) && cc_lightSizeRangeAngle[i].w > 0.0) {
+        if (cc_lightPos[i].w > 0.0 && cc_lightSizeRangeAngle[i].w > 0.0) {
           vec4 shadowPos = vec4(0.0), shadowPosWithDepthBias = vec4(0.0);
           if (CCSurfacesLightingEnableShadow(lightingData.NoL)) {
             shadowPos = cc_matLightViewProj * vec4(worldPos, 1.0);
@@ -57,15 +60,14 @@
           #endif
         }
       #endif
-      
+
       #if CC_USE_DEBUG_VIEW == CC_SURFACES_DEBUG_VIEW_COMPOSITE_AND_MISC
-        if (!IS_DEBUG_VIEW_COMPOSITE_ENABLE_SHADOW) {
+        if (!IS_DEBUG_VIEW_COMPOSITE_ENABLE_SHADOW)
           shadow = 1.0;
-        }
       #endif
 
         lightingResult.shadow = shadow;
-      
+
         // attenuations
         float distAtt = 1.0;
         if(IS_RANGED_DIRECTIONAL_LIGHT(cc_lightPos[i].w)) {
@@ -85,7 +87,8 @@
         lightingData.angleAttenuation = angleAtt;
         lightingData.distAttenuation = distAtt;
         lightingResult.directDiffuse = diffuseLighting * multiplier;
-        lightingResult.directSpecular = specularLighting * multiplier * fresnel;
+        lightingResult.directSpecular = specularLighting * multiplier;
+        CCSurfaceLightingCalculateDirectFresnel(lightingResult.directGF, lightingData, lightingResult.specularColorWithLighting, vec3(1.0));
 
         vec4 attenuatedLightColorAndIntensity = vec4(cc_lightColor[i].xyz, cc_lightColor[i].w * multiplier);
 
@@ -102,18 +105,28 @@
           CCSurfacesLightingCalculateDirectTransmitDiffuse(lightingResult.directTransmitDiffuse, lightingDataTD, attenuatedLightColorAndIntensity, lightingResult.shadow);
         #endif
 
-        #if CC_SURFACES_LIGHTING_TRT
-          LightingIntermediateData lightingDataTRT;
-          CCSurfacesGetLightingIntermediateDataTRT(lightingDataTRT, lightingData, surfaceData);
-          CCSurfacesLightingCalculateIntermediateData_PerLight(lightingDataTRT, surfaceData, lightDirWithLength);
-          CCSurfacesLightingCalculateDirectTRT(lightingResult.directTRT, lightingDataTRT, attenuatedLightColorAndIntensity, lightingResult.directSpecular);
-          lightingResult.directTRT *= multiplier * fresnel;
+        #if CC_SURFACES_LIGHTING_2ND_LAYER_SPECULAR
+          LightingIntermediateData lightingData2ndSpecular;
+          CCSurfacesInitializeLightingIntermediateData(lightingData2ndSpecular, surfaceData2ndSpecular);
+          CCSurfacesLightingCalculateIntermediateData_PerLight(lightingData2ndSpecular, surfaceData, lightDirWithLength);
+          #if !CC_SURFACES_LIGHTING_SHEEN
+            CCSurfacesLightingCalculateDirect2ndSpecular(lightingResult.direct2ndSpecular, lightingData2ndSpecular, attenuatedLightColorAndIntensity, surfaceData2ndSpecular.intensity2ndSpecular, lightingResult.directSpecular);
+            CCSurfaceLightingCalculateDirectFresnel(lightingResult.directGF2ndSpecular, lightingData2ndSpecular, lightingResult.specularColorWithLighting2ndSpecular, vec3(1.0));
+          #else
+            CCSurfacesLightingCalculateDirectSheen(lightingResult.direct2ndSpecular, lightingResult.directGF2ndSpecular, lightingData2ndSpecular, attenuatedLightColorAndIntensity, surfaceData2ndSpecular.intensity2ndSpecular);
+          #endif
+
+          lightingResult.direct2ndSpecular *= multiplier;
         #endif
 
         #if CC_SURFACES_LIGHTING_TT
           CCSurfacesLightingCalculateDirectTT(lightingResult, lightingData, attenuatedLightColorAndIntensity);
         #endif
 
+        #if CC_SURFACES_LIGHTING_USE_MULTIPLE_LAYER_BLEND
+          lightingResult.specularColorWithLighting2ndSpecular *= surfaceData.color2ndSpecular; //temporary coloration
+          CCSurfacesLightingCalculateDirectMultiLayerBlending(lightingResult, lightingData2ndSpecular);
+        #endif
 
         // user-defined lighting model
         #ifdef CC_SURFACES_LIGHTING_MODIFY_FINAL_RESULT
@@ -124,7 +137,7 @@
           miscData.lightColorAndIntensity = cc_lightColor[i];
           miscData.lightSizeRangeAngle = cc_lightSizeRangeAngle[i];
           SurfacesLightingModifyFinalResult(lightingResult, lightingData, surfaceData, miscData);
-        #endif     
+        #endif
 
         // accumulate per-light results
         CCSurfacesAccumulateLightingResult(lightingResultAccumulated, lightingResult);
@@ -135,11 +148,11 @@
     {
       vec3 worldPos;
       HIGHP_VALUE_FROM_STRUCT_DEFINED(worldPos, surfaceData.worldPos);
-      
+
       LightingIntermediateData lightingData;
       CCSurfacesInitializeLightingIntermediateData(lightingData, surfaceData);
       CCSurfacesInitializeLightingResult(lightingResult, surfaceData);
-      
+
       CCSurfacesLightingInitializeColorWithLighting(lightingResult.diffuseColorWithLighting, lightingResult.specularColorWithLighting, surfaceData, lightingData);
 
       CCSurfacesLightingCalculateIntermediateData_PerLight(lightingData, surfaceData, -cc_mainLitDir.xyz);
@@ -181,38 +194,51 @@
       // CCSurfacesLightingCalculateBaked:
       lightingResult.lightmapColor = vec3(0.0);
       #if CC_SURFACES_USE_LIGHT_MAP && !CC_FORWARD_ADD
-		    float lightmapShadow, lightmapAO;
+        float lightmapShadow, lightmapAO;
         GetLightMapColor(lightingResult.lightmapColor, lightmapShadow, lightmapAO, cc_lightingMap, FSInput_lightMapUV.xy, FSInput_lightMapUV.z, surfaceData.worldNormal);
-      
+
         #if CC_SURFACES_USE_LIGHT_MAP == LIGHT_MAP_TYPE_INDIRECT_OCCLUSION
           lightingResult.shadow *= lightmapShadow;
-          lightingResult.ao *= lightmapAO;
         #endif
+        // env lighting hasn't baked with static / stationary type, so ao need to be output all the time
+        lightingResult.ao *= lightmapAO;
       #endif
+
+      // apply screen-space shadow and ao
+      // lightingResult.shadow/ao *= XXX;
+      #if CC_USE_DEBUG_VIEW == CC_SURFACES_DEBUG_VIEW_COMPOSITE_AND_MISC
+        if (!IS_DEBUG_VIEW_COMPOSITE_ENABLE_SHADOW)
+          lightingResult.shadow = 1.0;
+        if (!IS_DEBUG_VIEW_COMPOSITE_ENABLE_AO)
+          lightingResult.ao = 1.0;
+      #endif
+
+
+      // apply SSR, local probe & global probe
+      vec3 unused;
+      CCSurfacesLightingCalculateEnvironment(lightingResult.environmentDiffuse, lightingResult.environmentSpecular, lightingData, cc_ambientSky.w);
+      CCSurfaceLightingCalculateEnvironmentFresnel(lightingResult.environmentGF, unused, lightingData, lightingResult.specularColorWithLighting);
 
       // dynamic & stationary dir light
       lightingResult.directDiffuse = lightingResult.directSpecular = vec3(0.0);
       #if !CC_DISABLE_DIRECTIONAL_LIGHT && !CC_FORWARD_ADD
         CCSurfacesLightingCalculateColorWithLighting(lightingResult.diffuseColorWithLighting, lightingResult.specularColorWithLighting, surfaceData, lightingData);
-  
+
         CCSurfacesLightingCalculateDirect(lightingResult.directDiffuse, lightingResult.directSpecular, lightingData, cc_mainLitColor);
+        CCSurfaceLightingCalculateDirectFresnel(lightingResult.directGF, lightingData, lightingResult.specularColorWithLighting, lightingResult.environmentGF);
       #endif
 
-      // apply SSR, local probe & global probe
-      CCSurfacesLightingCalculateEnvironment(lightingResult.environmentDiffuse, lightingResult.environmentSpecular, lightingData, cc_ambientSky.w);
-
-      // apply screen-space shadow and ao
-      // lightingResult.shadow/ao *= XXX;
-
       #if CC_SURFACES_LIGHTING_USE_FRESNEL
-        lightingResult.fresnel = CCSurfaceLightingCalculateFresnel(lightingData);
+        lightingResult.fresnel = CCSurfaceLightingCalculateExtraFresnel(lightingData);
+      #else
+        lightingResult.fresnel = vec3(1.0);
       #endif
 
       #if CC_SURFACES_LIGHTING_TRANSMIT_SPECULAR
         CCSurfacesLightingCalculateDirectTransmitSpecular(lightingResult.directTransmitSpecular, lightingData, cc_mainLitColor);
         CCSurfacesLightingCalculateEnvironmentTransmitSpecular(lightingResult.environmentTransmitSpecular, lightingData, cc_ambientSky.w);
       #endif
-      
+
       #if CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
         LightingIntermediateData lightingDataTD;
         CCSurfacesGetLightingIntermediateDataTransmitDiffuse(lightingDataTD, lightingData, surfaceData);
@@ -221,21 +247,37 @@
         CCSurfacesLightingCalculateEnvironmentTransmitDiffuse(lightingResult.environmentTransmitDiffuse, lightingDataTD, cc_ambientSky.w, lightingResult.ao, -cc_mainLitDir.xyz);
       #endif
 
-      #if CC_SURFACES_LIGHTING_TRT
-        LightingIntermediateData lightingDataTRT;
-        CCSurfacesGetLightingIntermediateDataTRT(lightingDataTRT, lightingData, surfaceData);
-        CCSurfacesLightingCalculateIntermediateData_PerLight(lightingDataTRT, surfaceData, -cc_mainLitDir.xyz);
-        CCSurfacesLightingCalculateDirectTRT(lightingResult.directTRT, lightingDataTRT, cc_mainLitColor, lightingResult.directSpecular);
-        CCSurfacesLightingCalculateEnvironmentTRT(lightingResult.environmentTRT, lightingDataTRT, cc_ambientSky.w, lightingResult.environmentSpecular);
+      #if CC_SURFACES_LIGHTING_2ND_LAYER_SPECULAR
+        SurfacesMaterialData surfaceData2ndSpecular;
+        CCSurfacesGetSurfacesMaterialData2ndSpecular(surfaceData2ndSpecular, surfaceData);
+
+        LightingIntermediateData lightingData2ndSpecular;
+        CCSurfacesInitializeLightingIntermediateData(lightingData2ndSpecular, surfaceData2ndSpecular);
+        CCSurfacesLightingCalculateIntermediateData_PerLight(lightingData2ndSpecular, surfaceData2ndSpecular, -cc_mainLitDir.xyz);
 
         vec3 diff;
-        SurfacesMaterialData surfaceDataTRT;
-        CCSurfacesGetSurfacesMaterialDataTRT(surfaceDataTRT, surfaceData);
-        CCSurfacesLightingInitializeColorWithLighting(diff, lightingResult.specularColorWithLightingTRT, surfaceDataTRT, lightingDataTRT);
+        CCSurfacesLightingInitializeColorWithLighting(diff, lightingResult.specularColorWithLighting2ndSpecular, surfaceData2ndSpecular, lightingData2ndSpecular);
+
+        #if !CC_SURFACES_LIGHTING_SHEEN
+          CCSurfacesLightingCalculateEnvironment2ndSpecular(lightingResult.environment2ndSpecular, lightingData2ndSpecular, cc_ambientSky.w, surfaceData2ndSpecular.intensity2ndSpecular, lightingResult.environmentSpecular);
+          CCSurfaceLightingCalculateEnvironmentFresnel(lightingResult.environmentGF2ndSpecular, lightingResult.environmentSubLayerF, lightingData2ndSpecular, lightingResult.specularColorWithLighting2ndSpecular);
+
+          CCSurfacesLightingCalculateDirect2ndSpecular(lightingResult.direct2ndSpecular, lightingData2ndSpecular, cc_mainLitColor, surfaceData2ndSpecular.intensity2ndSpecular, lightingResult.directSpecular);
+          CCSurfaceLightingCalculateDirectFresnel(lightingResult.directGF2ndSpecular, lightingData2ndSpecular, lightingResult.specularColorWithLighting2ndSpecular, lightingResult.environmentGF2ndSpecular);
+        #else
+          CCSurfacesLightingCalculateDirectSheen(lightingResult.direct2ndSpecular, lightingResult.directGF2ndSpecular, lightingData2ndSpecular, cc_mainLitColor, surfaceData2ndSpecular.intensity2ndSpecular);
+          CCSurfacesLightingCalculateEnvironmentSheen(lightingResult.environment2ndSpecular, lightingResult.environmentGF2ndSpecular, lightingData2ndSpecular, cc_ambientSky.w, surfaceData2ndSpecular.intensity2ndSpecular);
+        #endif
       #endif
 
       #if CC_SURFACES_LIGHTING_TT
         CCSurfacesLightingCalculateDirectTT(lightingResult, lightingData, cc_mainLitColor);
+      #endif
+
+      #if CC_SURFACES_LIGHTING_USE_MULTIPLE_LAYER_BLEND
+        lightingResult.specularColorWithLighting2ndSpecular *= surfaceData.color2ndSpecular; //temporary coloration
+        CCSurfacesLightingCalculateDirectMultiLayerBlending(lightingResult, lightingData2ndSpecular);
+        CCSurfacesLightingCalculateEnvironmentMultiLayerBlending(lightingResult, lightingData2ndSpecular);
       #endif
 
       // user-defined lighting model
@@ -247,7 +289,7 @@
         miscData.lightColorAndIntensity = cc_mainLitColor;
         miscData.lightSizeRangeAngle = vec4(0.0, 0.0, 0.0, 0.0);
         SurfacesLightingModifyFinalResult(lightingResult, lightingData, surfaceData, miscData);
-      #endif      
+      #endif
     }
     #if CC_ENABLE_CLUSTERED_LIGHT_CULLING
       // #todo: cluster related lighting flow, invoke after CCSurfacesLighting

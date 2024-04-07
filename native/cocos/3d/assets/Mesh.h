@@ -72,6 +72,13 @@ public:
         gfx::AttributeList attributes;
     };
 
+    struct IMeshCluster {
+        IBufferView clusterView;
+        IBufferView triangleView;
+        IBufferView vertexView;
+        IBufferView coneView;
+    };
+
     /**
      * @en Sub mesh contains a list of primitives with the same type (Point, Line or Triangle)
      * @zh 子网格。子网格由一系列相同类型的图元组成（例如点、线、面等）。
@@ -101,6 +108,8 @@ public:
          * 如未定义或指向的映射表不存在，则默认 VB 内所有关节索引数据直接对应骨骼资源数据。
          */
         ccstd::optional<uint32_t> jointMapIndex;
+
+        ccstd::optional<IMeshCluster> cluster;
     };
 
     /**
@@ -196,6 +205,18 @@ public:
          * @zh 动态网格特有数据
          */
         ccstd::optional<IDynamicStruct> dynamic;
+
+        ccstd::optional<bool> encoded;
+
+        ccstd::optional<bool> compressed;
+
+        ccstd::optional<bool> quantized;
+
+        /**
+         * @en Whether to support GPU Scene
+         * @zh 是否支持 GPU Scene
+         */
+        ccstd::optional<bool> supportGPUScene;
     };
 
     struct ICreateInfo {
@@ -446,6 +467,13 @@ public:
      */
     inline bool isAllowDataAccess() const { return _allowDataAccess; }
 
+    void releaseData();
+
+    bool isGPUMeshFormat() const;
+    inline bool supportGPUScene() const { return _supportGPUScene; }
+    inline bool isInGPUScene() const { return _isInGPUScene; }
+    inline void setInGPUScene(bool b) { _isInGPUScene = b; }
+
 private:
     using AccessorType = std::function<void(const IVertexBundle &vertexBundle, int32_t iAttribute)>;
 
@@ -455,7 +483,6 @@ private:
     void tryConvertVertexData();
 
     void initDefault(const ccstd::optional<ccstd::string> &uuid) override;
-    void releaseData();
 
     static TypedArray createTypedArrayWithGFXFormat(gfx::Format format, uint32_t count);
 
@@ -470,6 +497,8 @@ private:
     bool _initialized{false};
     bool _allowDataAccess{true};
     bool _isMeshDataUploaded{false};
+    bool _isInGPUScene{false};
+    bool _supportGPUScene{true};
 
     RenderingSubMeshList _renderingSubMeshes;
 

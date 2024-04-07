@@ -23,7 +23,8 @@
 */
 
 import { JSB } from 'internal:constants';
-import { Mat4, Quat, Vec3, cclegacy } from '../../core';
+import { cclegacy } from '@base/global';
+import { Mat4, Quat, Vec3 } from '@base/math';
 import { IAnimInfo, JointAnimationInfo } from './skeletal-animation-utils';
 import { Node } from '../../scene-graph/node';
 import type { AnimationClip } from '../../animation/animation-clip';
@@ -69,7 +70,7 @@ export class SkeletalAnimationState extends AnimationState {
         this._animInfoMgr = cclegacy.director.root.dataPoolManager.jointAnimationInfo;
     }
 
-    public initialize (root: Node) {
+    public initialize (root: Node): void {
         if (this._curveLoaded) { return; }
         this._parent = root.getComponent('cc.SkeletalAnimation') as SkeletalAnimation;
         const baked = this._parent.useBakedAnimation;
@@ -83,7 +84,7 @@ export class SkeletalAnimationState extends AnimationState {
         this.setUseBaked(baked);
     }
 
-    protected onPlay () {
+    protected onPlay (): void {
         super.onPlay();
         const baked = this._parent!.useBakedAnimation;
         if (baked) {
@@ -98,7 +99,7 @@ export class SkeletalAnimationState extends AnimationState {
     /**
      * @internal This method only friends to `SkeletalAnimation`.
      */
-    public setUseBaked (useBaked: boolean) {
+    public setUseBaked (useBaked: boolean): void {
         if (useBaked) {
             this._sampleCurves = this._sampleCurvesBaked;
             this.duration = this._bakedDuration;
@@ -119,7 +120,7 @@ export class SkeletalAnimationState extends AnimationState {
      * @param sockets @en The sockets need update @zh 需要重建的挂点列表
      * @returns void
      */
-    public rebuildSocketCurves (sockets: Socket[]) {
+    public rebuildSocketCurves (sockets: Socket[]): void {
         this._sockets.length = 0;
         if (!this._targetNode) { return; }
         const root = this._targetNode;
@@ -169,7 +170,7 @@ export class SkeletalAnimationState extends AnimationState {
         }
     }
 
-    private _sampleCurvesBaked (time: number) {
+    private _sampleCurvesBaked (time: number): void {
         const ratio = time / this.duration;
         const info = this._animInfo!;
         const clip = this.clip;
@@ -183,6 +184,7 @@ export class SkeletalAnimationState extends AnimationState {
             users.forEach((user) => {
                 user.uploadAnimation(clip);
             });
+            info.data[0] = -1; // reset frame index to -1. sampleCurves will calculate frame to 0.
         }
 
         const curFrame = (ratio * this._frames + 0.5) | 0;

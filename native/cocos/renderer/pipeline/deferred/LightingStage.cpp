@@ -24,7 +24,6 @@
 ****************************************************************************/
 
 #include "LightingStage.h"
-#include "../BatchedBuffer.h"
 #include "../Define.h"
 #if CC_USE_GEOMETRY_RENDERER
     #include "../GeometryRenderer.h"
@@ -34,7 +33,6 @@
 #include "../PipelineStateManager.h"
 #include "../PipelineUBO.h"
 #include "../PlanarShadowQueue.h"
-#include "../RenderBatchedQueue.h"
 #include "../RenderInstancedQueue.h"
 #include "../RenderQueue.h"
 #include "DeferredPipeline.h"
@@ -45,11 +43,11 @@
 #include "gfx-base/GFXDevice.h"
 #include "pipeline/Define.h"
 #include "profiler/Profiler.h"
+#include "scene/PointLight.h"
+#include "scene/RangedDirectionalLight.h"
 #include "scene/RenderScene.h"
 #include "scene/SphereLight.h"
 #include "scene/SpotLight.h"
-#include "scene/PointLight.h"
-#include "scene/RangedDirectionalLight.h"
 
 namespace cc {
 namespace pipeline {
@@ -265,8 +263,7 @@ void LightingStage::gatherLights(scene::Camera *camera) {
 
         if (sceneData->isHDR()) {
             tmpArray.w = light->getLuminanceHDR() * exposure * _lightMeterScale;
-        }
-        else {
+        } else {
             tmpArray.w = light->getLuminanceLDR();
         }
 
@@ -683,7 +680,7 @@ void LightingStage::putTransparentObj2Queue() {
         const auto *const model = ro.model;
         for (const auto &subModel : model->getSubModels()) {
             p = 0;
-            for (const auto &pass : subModel->getPasses()) {
+            for (const auto &pass : *(subModel->getPasses())) {
                 // TODO(): need to fallback unlit and gizmo material.
                 if (pass->getPhase() != _phaseID) continue;
                 for (k = 0; k < _renderQueues.size(); k++) {
@@ -972,7 +969,7 @@ void LightingStage::fgSsprPass(scene::Camera *camera) {
         const auto &subModels = model->getSubModels();
         for (m = 0; m < subModels.size(); ++m) {
             const auto &subModel = subModels[m];
-            const auto &passes = subModel->getPasses();
+            const auto &passes = *(subModel->getPasses());
             auto passCount = passes.size();
             for (p = 0; p < passCount; ++p) {
                 const auto &pass = passes[p];

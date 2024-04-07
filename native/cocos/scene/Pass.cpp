@@ -37,7 +37,6 @@
 #include "renderer/core/ProgramLib.h"
 #include "renderer/gfx-base/GFXDef.h"
 #include "renderer/gfx-base/states/GFXSampler.h"
-#include "renderer/pipeline/BatchedBuffer.h"
 #include "renderer/pipeline/Define.h"
 #include "renderer/pipeline/InstancedBuffer.h"
 #include "scene/Define.h"
@@ -221,7 +220,8 @@ void Pass::setUniform(uint32_t handle, const MaterialProperty &value) {
     _rootBufferDirty = true;
 }
 
-MaterialProperty &Pass::getUniform(uint32_t handle, MaterialProperty &out) const {
+MaterialProperty Pass::getUniform(uint32_t handle) const {
+    MaterialProperty out;
     const uint32_t binding = Pass::getBindingFromHandle(handle);
     const gfx::Type type = Pass::getTypeFromHandle(handle);
     const uint32_t ofs = Pass::getOffsetFromHandle(handle);
@@ -296,16 +296,6 @@ pipeline::InstancedBuffer *Pass::getInstancedBuffer(int32_t extraKey) {
     return instancedBuffer;
 }
 
-pipeline::BatchedBuffer *Pass::getBatchedBuffer(int32_t extraKey) {
-    auto iter = _batchedBuffers.find(extraKey);
-    if (iter != _batchedBuffers.end()) {
-        return iter->second.get();
-    }
-    auto *batchedBuffers = ccnew pipeline::BatchedBuffer(this);
-    _batchedBuffers[extraKey] = batchedBuffers;
-    return batchedBuffers;
-}
-
 void Pass::destroy() {
     if (!_buffers.empty()) {
         for (const auto &u : _shaderInfo->blocks) {
@@ -324,11 +314,6 @@ void Pass::destroy() {
         ib.second->destroy();
     }
     _instancedBuffers.clear();
-
-    for (auto &bb : _batchedBuffers) {
-        bb.second->destroy();
-    }
-    _batchedBuffers.clear();
 
     // NOTE: There may be many passes reference the same descriptor set,
     // so here we can't use _descriptorSet->destroy() to release it.
@@ -431,17 +416,8 @@ void Pass::resetUBOs() {
             ofs += size;
         }
     };
-    auto *programLib = render::getProgramLibrary();
-    if (programLib) {
-        const auto &set = _shaderInfo->descriptors.at(
-            static_cast<size_t>(pipeline::SetIndex::MATERIAL));
-        for (const auto &block : set.blocks) {
-            updateBuffer(block);
-        }
-    } else {
-        for (const auto &u : _shaderInfo->blocks) {
-            updateBuffer(u);
-        }
+    for (const auto &u : _shaderInfo->blocks) {
+        updateBuffer(u);
     }
     _rootBufferDirty = true;
 }
@@ -522,6 +498,10 @@ gfx::Shader *Pass::getShaderVariant(const ccstd::vector<IMacroPatch> &patches) {
         _defines[patch.name] = patch.value;
     }
 
+    if (isBlend()) {
+        _defines["CC_IS_TRANSPARENCY_PASS"] = MacroValue(true);
+    }
+
     gfx::Shader *shader = nullptr;
     auto *programLib = render::getProgramLibrary();
     if (programLib) {
@@ -540,6 +520,17 @@ gfx::Shader *Pass::getShaderVariant(const ccstd::vector<IMacroPatch> &patches) {
         }
     }
     return shader;
+}
+
+bool Pass::isBlend() {
+    bool isBlend = false;
+    for (const auto target : _blendState.targets) {
+        if (target.blend) {
+            isBlend = true;
+        }
+    }
+
+    return isBlend;
 }
 
 IPassInfoFull Pass::getPassInfoFull() const {
@@ -571,6 +562,7 @@ IPassInfoFull Pass::getPassInfoFull() const {
     ret.phase = _phaseString;
 
     ret.passID = _passID;
+    ret.subpassID = _subpassID;
     ret.phaseID = _phaseID;
 
     return ret;
@@ -592,8 +584,9 @@ void Pass::doInit(const IPassInfoFull &info, bool /*copyDefines*/ /* = false */)
     if (programLib2) {
         const auto *rendering = render::getRenderingModule();
         CC_EXPECTS(rendering);
-        if (info.phaseID != 0xFFFFFFFF) {
+        if (info.phaseID != INVALID_ID) {
             _passID = info.passID;
+            _subpassID = info.subpassID;
             _phaseID = info.phaseID;
         } else {
             if (info.pass) {
@@ -601,15 +594,24 @@ void Pass::doInit(const IPassInfoFull &info, bool /*copyDefines*/ /* = false */)
             } else {
                 _passID = rendering->getPassID("default");
             }
-            CC_ENSURES(_passID != 0xFFFFFFFF);
+            CC_ENSURES(_passID != INVALID_ID);
+            if (info.subpass) {
+                CC_EXPECTS(!info.subpass->empty());
+                _subpassID = rendering->getSubpassID(_passID, *info.subpass);
+                CC_ENSURES(_subpassID != INVALID_ID);
+            }
             if (info.phase) {
-                _phaseID = rendering->getPhaseID(_passID, *info.phase);
+                _phaseID = rendering->getPhaseID(getSubpassOrPassID(), *info.phase);
             } else {
-                _phaseID = rendering->getPhaseID(_passID, "default");
+                _phaseID = rendering->getPhaseID(getSubpassOrPassID(), "default");
             }
         }
         if (_passID == INVALID_ID) {
             CC_LOG_ERROR("Invalid pass ID");
+            return;
+        }
+        if (info.subpass && _subpassID == INVALID_ID) {
+            CC_LOG_ERROR("Invalid subpass ID");
             return;
         }
         if (_phaseID == INVALID_ID) {
@@ -823,13 +825,18 @@ void Pass::syncBatchingScheme() {
             _batchingScheme = BatchingSchemes::NONE;
         }
     } else {
-        auto iter = _defines.find("USE_BATCHING");
-        if (iter != _defines.end() && macroRecordAsBool(iter->second)) {
-            _batchingScheme = BatchingSchemes::VB_MERGING;
-        } else {
-            _batchingScheme = BatchingSchemes::NONE;
+        _batchingScheme = BatchingSchemes::NONE;
+    }
+}
+
+bool Pass::isBlend() const {
+    bool bBlend = false;
+    for (const auto &target : getBlendState()->targets) {
+        if (target.blend) {
+            bBlend = true;
         }
     }
+    return bBlend;
 }
 
 void Pass::initPassFromTarget(Pass *target, const gfx::DepthStencilState &dss, ccstd::hash_t hashFactor) {
@@ -837,6 +844,7 @@ void Pass::initPassFromTarget(Pass *target, const gfx::DepthStencilState &dss, c
     _stage = target->_stage;
     _phase = target->_phase;
     _passID = target->_passID;
+    _subpassID = target->_subpassID;
     _phaseID = target->_phaseID;
     _batchingScheme = target->_batchingScheme;
     _primitive = target->_primitive;

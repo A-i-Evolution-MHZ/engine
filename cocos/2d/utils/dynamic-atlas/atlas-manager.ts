@@ -22,12 +22,25 @@
  THE SOFTWARE.
 */
 
-import { EDITOR } from 'internal:constants';
-import { System, macro, js, cclegacy } from '../../../core';
+import { EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { cclegacy } from '@base/global';
+import { js } from '@base/utils';
+import { System, macro } from '../../../core';
 import { Filter } from '../../../asset/assets/asset-enum';
-import { Atlas } from './atlas';
+import { Atlas, DynamicAtlasTexture } from './atlas';
 import { director } from '../../../game';
 
+/**
+ * @en The dynamic atlas manager which manages all runtime dynamic packed atlas texture for UI rendering.
+ * It generates a maximum of [[maxAtlasCount]] atlas texture, all atlas texture have the size of [[textureSize]].
+ * Normally the [[Root.batcher2D]] is in charge of submitting sprite frames to the dynamic atlas manager, the process is transparent to user.
+ * Note that the first committed sprite frame will define the filter settings of the atlas textures,
+ * only sprite frame with the same setting will be accepted afterward.
+ * @zh 动态合图的管理器，管理所有运行时动态合成的图集，主要用于 UI 渲染。
+ * 该管理器支持生成 [[maxAtlasCount]] 张动态合图，并且所有合图都有同样的 [[textureSize]] 像素尺寸。
+ * 一般来说 [[Root.batcher2D]] 负责提交 [[SpriteFrame]] 到动态合图管理器中，这个过程对于开发者是透明的。
+ * 需要注意的是，第一个提交的 [[SpriteFrame]] 会决定图集的过滤器参数，在此之后只有同样参数的贴图才会被管理器接受。
+ */
 export class DynamicAtlasManager extends System {
     public static instance: DynamicAtlasManager;
 
@@ -48,7 +61,7 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 开启或关闭动态图集。
      */
-    get enabled () {
+    get enabled (): boolean {
         return this._enabled;
     }
     set enabled (value) {
@@ -72,7 +85,7 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 可以创建的最大图集数量。
      */
-    get maxAtlasCount () {
+    get maxAtlasCount (): number {
         return this._maxAtlasCount;
     }
     set maxAtlasCount (value) {
@@ -86,7 +99,7 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 获取当前已经创建的图集数量。
      */
-    get atlasCount () {
+    get atlasCount (): number {
         return this._atlases.length;
     }
 
@@ -97,7 +110,7 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 是否开启 textureBleeding。
      */
-    get textureBleeding () {
+    get textureBleeding (): boolean {
         return this._textureBleeding;
     }
     set textureBleeding (enable) {
@@ -111,7 +124,7 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 创建的图集的宽高。
      */
-    get textureSize () {
+    get textureSize (): number {
         return this._textureSize;
     }
     set textureSize (value) {
@@ -125,14 +138,14 @@ export class DynamicAtlasManager extends System {
      * @zh
      * 可以添加进图集的图片的最大尺寸。
      */
-    get maxFrameSize () {
+    get maxFrameSize (): number {
         return this._maxFrameSize;
     }
     set maxFrameSize (value) {
         this._maxFrameSize = value;
     }
 
-    private newAtlas () {
+    private newAtlas (): Atlas {
         let atlas = this._atlases[++this._atlasIndex];
         if (!atlas) {
             atlas = new Atlas(this._textureSize, this._textureSize);
@@ -141,14 +154,14 @@ export class DynamicAtlasManager extends System {
         return atlas;
     }
 
-    private beforeSceneLoad () {
+    private beforeSceneLoad (): void {
         this.reset();
     }
 
     /**
      * @internal
      */
-    public init () {
+    public init (): void {
         this.enabled = !macro.CLEANUP_IMAGE_CACHE;
     }
 
@@ -162,8 +175,12 @@ export class DynamicAtlasManager extends System {
      * @method insertSpriteFrame
      * @param spriteFrame  the sprite frame that will be inserted in the atlas.
      */
-    public insertSpriteFrame (spriteFrame) {
-        if (EDITOR && !cclegacy.GAME_VIEW) return null;
+    public insertSpriteFrame (spriteFrame):  {
+        x: number;
+        y: number;
+        texture: DynamicAtlasTexture;
+    } | null {
+        if (EDITOR_NOT_IN_PREVIEW) return null;
         if (!this._enabled || this._atlasIndex === this._maxAtlasCount
             || !spriteFrame || spriteFrame._original) return null;
 
@@ -197,7 +214,7 @@ export class DynamicAtlasManager extends System {
      *
      * @method reset
     */
-    public reset () {
+    public reset (): void {
         for (let i = 0, l = this._atlases.length; i < l; i++) {
             this._atlases[i].destroy();
         }
@@ -215,7 +232,7 @@ export class DynamicAtlasManager extends System {
      * @method deleteAtlasSpriteFrame
      * @param spriteFrame  the sprite frame that will be removed from the atlas.
      */
-    public deleteAtlasSpriteFrame (spriteFrame) {
+    public deleteAtlasSpriteFrame (spriteFrame): void {
         if (!spriteFrame._original) return;
 
         let atlas;
@@ -237,7 +254,7 @@ export class DynamicAtlasManager extends System {
      * @method deleteAtlasTexture
      * @param texture  the texture that will be removed from the atlas.
      */
-    public deleteAtlasTexture (texture) {
+    public deleteAtlasTexture (texture): void {
         if (texture) {
             for (let i = this._atlases.length - 1; i >= 0; i--) {
                 this._atlases[i].deleteInnerTexture(texture);
@@ -261,8 +278,8 @@ export class DynamicAtlasManager extends System {
      * @method packToDynamicAtlas
      * @param frame  the sprite frame that will be packed in the dynamic atlas.
      */
-    public packToDynamicAtlas (comp, frame) {
-        if ((EDITOR && !cclegacy.GAME_VIEW) || !this._enabled) return;
+    public packToDynamicAtlas (comp, frame): void {
+        if (EDITOR_NOT_IN_PREVIEW || !this._enabled) return;
 
         if (frame && !frame._original && frame.packable && frame.texture && frame.texture.width > 0 && frame.texture.height > 0) {
             const packedFrame = this.insertSpriteFrame(frame);
@@ -274,8 +291,9 @@ export class DynamicAtlasManager extends System {
 }
 
 /**
- * @en Dynamic Atlas Manager，use to auto merge sprite frame.
- * @zh 动态合图管理器，用于引擎的自动合图功能。
+ * @en The singleton instance of [[DynamicAtlasManager]], please use [[DynamicAtlasManager.instance]] instead.
+ * @zh [[DynamicAtlasManager]] 的单例对象，请直接使用 [[DynamicAtlasManager.instance]]。
+ * @deprecated since v3.7
  */
 export const dynamicAtlasManager: DynamicAtlasManager = DynamicAtlasManager.instance = new DynamicAtlasManager();
 

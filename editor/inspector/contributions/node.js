@@ -1,8 +1,76 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+module.paths.push(path.join(Editor.App.path, 'node_modules'));
+const Profile = require('@base/electron-profile');
+const { throttle } = require('lodash');
 const utils = require('./utils');
 const { trackEventWithTimer } = require('../utils/metrics');
+const { injectionStyle } = require('../utils/prop');
+
+// ipc messages protocol
+const messageProtocol = {
+    scene: 'scene',
+};
+
+const lockList = [];
+let lockPerform = false;
+let lastSnapShot = null;
+async function performLock() {
+    if (lockPerform) { return; }
+    if (lockList.length === 0) { return; }
+    lockPerform = true;
+    const params = lockList.shift();
+    const { snapshotLock, lock, uuids, cancel } = params;
+    if (snapshotLock && !lock) {
+
+        if (lastSnapShot) {
+            await endRecording(lastSnapShot, cancel);
+            lastSnapShot = null;
+        }
+    // start snapshot
+    } else if (!snapshotLock && lock) {
+        lastSnapShot = await beginRecording(uuids);
+    }
+    lockPerform = false;
+    await performLock();
+}
+/**
+ * 替换之前的snapshotLock,由于UI层的事件是同步的，
+ * 而新的beginRecording是异步的，所以需要使用队列来保证顺序
+ * @param {*} lock 
+ * @param {*} uuids 
+ * @param {*} cancel 
+ */
+function snapshotLock(panel, lock, uuids, cancel = false) {
+    // 保存当前状态，放到队列中
+    const params = {
+        snapshotLock:panel.snapshotLock,
+        lock,
+        uuids,
+        cancel,
+    };
+    lockList.push(params);
+    // 执行队列中的操作;
+    performLock();
+    panel.snapshotLock = lock;
+}
+
+// 不传options时，会自动记录到undo队列，不需要调用endRecording
+async function beginRecording(uuids, options) {
+    if (!uuids) { return; }
+    const undoID = await Editor.Message.request(messageProtocol.scene, 'begin-recording', uuids, options);
+    return undoID;
+}
+
+async function endRecording(undoID, cancel) {
+    if (!undoID) { return; }
+    if (cancel) {
+        await Editor.Message.request(messageProtocol.scene, 'cancel-recording', undoID);
+    } else {
+        await Editor.Message.request(messageProtocol.scene, 'end-recording', undoID);
+    }
+}
 
 exports.listeners = {
     async 'change-dump'(event) {
@@ -13,20 +81,19 @@ exports.listeners = {
             return;
         }
 
+        clearTimeout(panel.previewTimeId);
+
         if (!panel.snapshotLock) {
-            Editor.Message.send('scene', 'snapshot');
-            panel.snapshotLock = true;
+            snapshotLock(panel, true, panel.uuidList);
         }
 
-        const dump = event.target.dump;
+        const dump = target.dump;
         if (!dump || panel.isDialoging) {
             return;
         }
 
         let setChildrenLayer = false;
         if (dump.path === 'layer') {
-            const newValue = Number(panel.$.nodeLayerSelect.value);
-
             if (panel.dumps && panel.dumps.some((perdump) => perdump.children && perdump.children.length > 0)) {
                 // 只修改自身节点
                 let choose = 1;
@@ -47,24 +114,21 @@ exports.listeners = {
 
                 // 取消，需要还原数值
                 if (choose === 2) {
+                    dump.value = panel.$.nodeLayerSelect.prevValues[0];
+                    if (dump.values) {
+                        dump.values = panel.$.nodeLayerSelect.prevValues;
+                    }
                     Elements.layer.update.call(panel);
                     return;
                 } else {
                     setChildrenLayer = choose === 0 ? true : false;
-
-                    dump.value = newValue;
-                    if (setChildrenLayer && 'values' in dump) {
-                        dump.values.forEach((val, index) => {
-                            dump.values[index] = newValue;
-                        });
-                    }
                 }
-            } else {
-                dump.value = newValue;
             }
         }
 
         try {
+            panel.readyToUpdate = false;
+
             for (let i = 0; i < panel.uuidList.length; i++) {
                 const uuid = panel.uuidList[i];
                 const { path, type, isArray } = dump;
@@ -75,7 +139,7 @@ exports.listeners = {
                 }
 
                 if (setChildrenLayer) {
-                    await Editor.Message.request('scene', 'set-node-and-children-layer', {
+                    await Editor.Message.request(messageProtocol.scene, 'set-node-and-children-layer', {
                         uuid,
                         dump: {
                             value,
@@ -85,7 +149,7 @@ exports.listeners = {
                     continue;
                 }
 
-                await Editor.Message.request('scene', 'set-property', {
+                await Editor.Message.request(messageProtocol.scene, 'set-property', {
                     uuid,
                     path,
                     dump: {
@@ -97,15 +161,18 @@ exports.listeners = {
             }
         } catch (error) {
             console.error(error);
+        } finally {
+            if (!panel.snapshotLock) {
+                snapshotLock(panel, false);
+            }
+            panel.readyToUpdate = true;
         }
     },
     'confirm-dump'() {
         const panel = this;
-
-        panel.snapshotLock = false;
-
+        clearTimeout(panel.previewTimeId);
+        snapshotLock(panel, false);
         // In combination with change-dump, snapshot only generated once after ui-elements continuously changed.
-        Editor.Message.send('scene', 'snapshot');
     },
     async 'create-dump'(event) {
         const panel = this;
@@ -115,10 +182,11 @@ exports.listeners = {
             return;
         }
 
-        Editor.Message.send('scene', 'snapshot');
+        clearTimeout(panel.previewTimeId);
 
-        const dump = event.target.dump;
-
+        const undoID = await beginRecording(panel.uuidList);
+        const dump = target.dump;
+        let cancel = false;
         try {
             for (let i = 0; i < panel.uuidList.length; i++) {
                 const uuid = panel.uuidList[i];
@@ -126,16 +194,17 @@ exports.listeners = {
                     dump.values[i] = dump.value;
                 }
 
-                await Editor.Message.request('scene', 'update-property-from-null', {
+                await Editor.Message.request(messageProtocol.scene, 'update-property-from-null', {
                     uuid,
                     path: dump.path,
                 });
             }
 
-            Editor.Message.send('scene', 'snapshot');
         } catch (error) {
+            cancel = true;
             console.error(error);
         }
+        await endRecording(undoID, cancel);
     },
     async 'reset-dump'(event) {
         const panel = this;
@@ -145,10 +214,10 @@ exports.listeners = {
             return;
         }
 
-        Editor.Message.send('scene', 'snapshot');
+        clearTimeout(panel.previewTimeId);
 
-        const dump = event.target.dump;
-
+        const undoID = await beginRecording(panel.uuidList);
+        const dump = target.dump;
         try {
             for (let i = 0; i < panel.uuidList.length; i++) {
                 const uuid = panel.uuidList[i];
@@ -156,14 +225,13 @@ exports.listeners = {
                     dump.values[i] = dump.value;
                 }
 
-                await Editor.Message.request('scene', 'reset-property', {
+                await Editor.Message.request(messageProtocol.scene, 'reset-property', {
                     uuid,
                     path: dump.path,
                 });
             }
-
-            Editor.Message.send('scene', 'snapshot');
         } catch (error) {
+            await endRecording(undoID, true);
             console.error(error);
         }
     },
@@ -175,7 +243,7 @@ exports.listeners = {
             return;
         }
 
-        const dump = event.target.dump;
+        const dump = target.dump;
         if (!dump || panel.isDialoging) {
             return;
         }
@@ -194,9 +262,10 @@ exports.listeners = {
         }
 
         const { method, value: assetUuid } = event.detail;
-        if (method === 'confirm') {
-            clearTimeout(panel.previewTimeId);
 
+        clearTimeout(panel.previewTimeId);
+
+        if (method === 'confirm') {
             try {
                 panel.previewTimeId = setTimeout(() => {
                     for (let i = 0; i < panel.uuidList.length; i++) {
@@ -208,12 +277,10 @@ exports.listeners = {
                             value = dump.values[i];
                         }
 
-
-
                         // 预览新的值
                         value.uuid = assetUuid;
 
-                        Editor.Message.send('scene', 'preview-set-property', {
+                        Editor.Message.send(messageProtocol.scene, 'preview-set-property', {
                             uuid,
                             path,
                             dump: {
@@ -227,206 +294,212 @@ exports.listeners = {
                 console.error(error);
             }
         } else if (method === 'cancel') {
-            clearTimeout(panel.previewTimeId);
+            panel.previewTimeId = setTimeout(() => {
+                try {
+                    for (let i = 0; i < panel.uuidList.length; i++) {
+                        const uuid = panel.uuidList[i];
+                        const { path } = dump;
 
-            try {
-                for (let i = 0; i < panel.uuidList.length; i++) {
-                    const uuid = panel.uuidList[i];
-                    const { path } = dump;
-
-                    Editor.Message.send('scene', 'cancel-preview-set-property', {
-                        uuid,
-                        path,
-                    });
+                        Editor.Message.send(messageProtocol.scene, 'cancel-preview-set-property', {
+                            uuid,
+                            path,
+                        });
+                    }
+                } catch (error) {
+                    console.error(error);
                 }
-            } catch (error) {
-                console.error(error);
-            }
+            }, 50);
         }
     },
 };
 
 exports.template = /* html*/`
 <ui-drag-area class="container">
-    <section class="prefab" hidden missing>
-        <ui-label value="Prefab"></ui-label>
-        <ui-button role="edit" tooltip="i18n:ENGINE.prefab.edit">
-            <ui-icon value="edit"></ui-icon>
-        </ui-button>
-        <ui-button role="unlink" tooltip="i18n:ENGINE.prefab.unlink">
-            <ui-icon value="unlink"></ui-icon>
-        </ui-button>
-        <ui-button role="local" tooltip="i18n:ENGINE.prefab.local">
-            <ui-icon value="location"></ui-icon>
-        </ui-button>
-        <ui-button role="reset" tooltip="i18n:ENGINE.prefab.reset">
-            <ui-icon value="reset"></ui-icon>
-        </ui-button>
-        <ui-button role="save" tooltip="i18n:ENGINE.prefab.save">
-            <ui-icon value="save-o"></ui-icon>
-        </ui-button>
-    </section>
-
     <header class="header">
-        <ui-checkbox class="active"></ui-checkbox>
-        <ui-input class="name"></ui-input>
+        <section class="prefab" hidden>
+            <ui-label value="Prefab"></ui-label>
+            <ui-button role="edit" tooltip="i18n:ENGINE.prefab.edit">
+                <ui-icon value="edit"></ui-icon>
+            </ui-button>
+            <ui-button role="unlink" tooltip="i18n:ENGINE.prefab.unlink">
+                <ui-icon value="unlink"></ui-icon>
+            </ui-button>
+            <ui-button role="local" tooltip="i18n:ENGINE.prefab.local">
+                <ui-icon value="location"></ui-icon>
+            </ui-button>
+            <ui-button role="reset" tooltip="i18n:ENGINE.prefab.reset">
+                <ui-icon value="reset"></ui-icon>
+            </ui-button>
+            <ui-button role="save" tooltip="i18n:ENGINE.prefab.save">
+                <ui-icon value="save-o"></ui-icon>
+            </ui-button>
+        </section>
+
+        <section class="node">
+            <ui-checkbox class="active"></ui-checkbox>
+            <ui-input class="name"></ui-input>
+        </section>
     </header>
 
-    <section class="component scene">
-        <ui-prop class="release" type="dump"></ui-prop>
-        <ui-prop class="ambient" type="dump"></ui-prop>
-        <ui-section class="skybox" expand>
-            <div slot="header" style="display: flex;width: 100%;justify-content: space-between;">
-                <span>Skybox</span>
-                <ui-link tooltip="i18n:scene.menu.help_url">
+    <section class="body">
+        <section class="component scene">
+            <ui-prop class="release" type="dump"></ui-prop>
+            <ui-prop class="ambient" type="dump" ui-section-config></ui-prop>
+            <ui-section class="skybox config" expand cache-expand="inspector-scene-skybox">
+                <div slot="header" class="component-header">
+                    <span>Skybox</span>
+                    <ui-link tooltip="i18n:scene.menu.help_url">
+                        <ui-icon value="help"></ui-icon>
+                    </ui-link>
+                </div>
+                <div class="before"></div>
+                <ui-section class="envmap" expand cache-expand="inspector-scene-skybox-envmap">
+                    <ui-label slot="header" value="Envmap"></ui-label>
+                    <ui-radio-group class="useHDR" default-value="HDR" value="HDR">
+                        <ui-prop class="envmap-prop">
+                            <ui-radio class="envmap-radio" slot="label" type="single" value="HDR" tabindex="0">
+                                <ui-label value="HDR"></ui-label>
+                            </ui-radio>
+                            <ui-prop slot="content" class="envmapHDR" type="dump" no-label ui-section-config></ui-prop>
+                        </ui-prop>
+                        <ui-prop class="envmap-prop">
+                            <ui-radio class="envmap-radio" slot="label" type="single" value="LDR" tabindex="0">
+                                <ui-label value="LDR"></ui-label>
+                            </ui-radio>
+                            <ui-prop slot="content" class="envmapLDR" type="dump" no-label ui-section-config></ui-prop>
+                        </ui-prop>
+                    </ui-radio-group>
+                    <ui-prop class="reflection">
+                        <ui-label slot="label">Reflection Convolution</ui-label>
+                        <div slot="content">
+                            <ui-loading style="display:none; position: relative;top: 4px;"></ui-loading>
+                            <ui-button class="blue bake" style="display:none;">Bake</ui-button>
+                            <ui-button class="red remove" style="display:none;">Remove</ui-button>
+                        </div>
+                    </ui-prop>
+                </ui-section>
+                <div class="after"></div>
+            </ui-section>
+            <ui-prop class="fog" type="dump" ui-section-config></ui-prop>
+            <ui-prop class="shadows" type="dump" ui-section-config></ui-prop>
+            <ui-prop class="octree" type="dump" ui-section-config></ui-prop>
+            <ui-prop class="skin" type="dump" ui-section-config></ui-prop>
+            <ui-prop class="postSettings" type="dump" ui-section-config></ui-prop>
+        </section>
+
+        <ui-section class="component node config" expand cache-expand="inspector-node">
+            <header class="component-header" slot="header">
+                <span class="name">Node</span>
+                <ui-link class="link" tooltip="i18n:ENGINE.menu.help_url">
                     <ui-icon value="help"></ui-icon>
                 </ui-link>
-            </div>
-            <div class="before"></div>
-            <ui-section class="envmap" expand>
-                <ui-label slot="header" value="Envmap"></ui-label>
-                <ui-radio-group class="useHDR" default-value="HDR" value="HDR">
-                    <ui-prop class="envmap-prop">
-                        <ui-radio class="envmap-radio" slot="label" type="single" value="HDR" tabindex="0">
-                            <ui-label value="HDR"></ui-label>
-                        </ui-radio>
-                        <ui-prop slot="content" class="envmapHDR" type="dump" no-label></ui-prop>
-                    </ui-prop>
-                    <ui-prop class="envmap-prop">
-                        <ui-radio class="envmap-radio" slot="label" type="single" value="LDR" tabindex="0">
-                            <ui-label value="LDR"></ui-label>
-                        </ui-radio>
-                        <ui-prop slot="content" class="envmapLDR" type="dump" no-label></ui-prop>
-                    </ui-prop>
-                </ui-radio-group>
-                <ui-prop class="reflection">
-                    <ui-label slot="label">Reflection Convolution</ui-label>
-                    <div slot="content">
-                        <ui-loading style="display:none; position: relative;top: 4px;"></ui-loading>
-                        <ui-button class="blue bake" style="display:none;">Bake</ui-button>
-                        <ui-button class="red remove" style="display:none;">Remove</ui-button>
-                    </div>
-                </ui-prop>
-            </ui-section>
-            <div class="after"></div>
+                <ui-icon class="menu" value="menu" tooltip="i18n:ENGINE.menu.component"></ui-icon>
+            </header>
+
+            <ui-prop class="position" type="dump"></ui-prop>
+            <ui-prop class="rotation" type="dump"></ui-prop>
+            <ui-prop class="scale" type="dump"></ui-prop>
+            <ui-prop class="mobility" type="dump"></ui-prop>
+            <ui-prop class="layer">
+                <ui-label slot="label" value="Layer"></ui-label>
+                <div class="layer-content" slot="content">
+                    <ui-prop class="layer-select" type="dump" no-label></ui-prop>
+                    <ui-button class="layer-edit">Edit</ui-button>
+                </div>
+            </ui-prop>
+            <div class="node-section"></div>
         </ui-section>
-        <ui-prop class="postProcess" type="dump"></ui-prop>
-        <ui-prop class="fog" type="dump"></ui-prop>
-        <ui-prop class="shadows" type="dump"></ui-prop>
-        <ui-prop class="octree" type="dump"></ui-prop>
+
+        <section class="section-body"></section>
+        <section class="section-missing"></section>
+
+        <footer class="footer">
+            <ui-button class="add-component" size="medium">
+                <ui-label value="i18n:ENGINE.components.add_component"></ui-label>
+            </ui-button>
+        </footer>
+
+        <section class="section-asset"></section>
     </section>
-
-    <ui-section class="component node" expand>
-        <header class="component-header" slot="header">
-            <span class="name">Node</span>
-            <ui-link class="link" tooltip="i18n:ENGINE.menu.help_url">
-                <ui-icon value="help"></ui-icon>
-            </ui-link>
-            <ui-icon class="menu" value="menu" tooltip="i18n:ENGINE.menu.component"></ui-icon>
-        </header>
-
-        <ui-prop class="position" type="dump"></ui-prop>
-        <ui-prop class="rotation" type="dump"></ui-prop>
-        <ui-prop class="scale" type="dump"></ui-prop>
-        <ui-prop class="mobility" type="dump"></ui-prop>
-        <ui-prop class="layer" type="dump" html="false">
-            <ui-label slot="label" value="Layer"></ui-label>
-            <div class="layer-content" slot="content">
-                <ui-select class="layer-select"></ui-select>
-                <ui-button class="layer-edit">Edit</ui-button>
-            </div>
-        </ui-prop>
-        <div class="node-section"></div>
-    </ui-section>
-
-    <section class="section-body"></section>
-    <section class="section-missing"></section>
-
-    <footer class="footer">
-        <ui-button class="add-component">
-            <ui-label value="i18n:ENGINE.components.add_component"></ui-label>
-        </ui-button>
-    </footer>
-
-    <section class="section-asset"></section>
 </ui-drag-area>
 `;
 exports.style = fs.readFileSync(path.join(__dirname, './node.css'), 'utf8');
 
 exports.$ = {
     container: '.container',
+    header: '.container > .header',
+    body: '.container > .body',
 
-    prefab: '.prefab',
-    prefabUnlink: '.prefab > [role="unlink"]',
-    prefabLocal: '.prefab > [role="local"]',
-    prefabReset: '.prefab > [role="reset"]',
-    prefabSave: '.prefab > [role="save"]',
-    prefabEdit: '.prefab > [role="edit"]',
+    prefab: '.container > .header > .prefab',
+    prefabUnlink: '.container > .header > .prefab > [role="unlink"]',
+    prefabLocal: '.container > .header > .prefab > [role="local"]',
+    prefabReset: '.container > .header > .prefab > [role="reset"]',
+    prefabSave: '.container > .header > .prefab > [role="save"]',
+    prefabEdit: '.container > .header > .prefab > [role="edit"]',
 
-    header: '.header',
-    active: '.active',
-    name: '.name',
+    active: '.container > .header > .node > .active',
+    name: '.container > .header > .node > .name',
 
-    scene: '.scene',
-    sceneRelease: '.scene > .release',
-    sceneAmbient: '.scene > .ambient',
-    sceneFog: '.scene > .fog',
-    sceneShadows: '.scene > .shadows',
-    sceneSkybox: '.scene > .skybox',
-    sceneSkyboxBefore: '.scene > .skybox > .before',
-    sceneSkyboxUseHDR: '.scene > .skybox .useHDR',
-    sceneSkyboxEnvmapHDR: '.scene > .skybox .envmapHDR',
-    sceneSkyboxEnvmapLDR: '.scene > .skybox .envmapLDR',
-    sceneSkyboxReflection: '.scene > .skybox .reflection',
-    sceneSkyboxReflectionLoading: '.scene > .skybox .reflection ui-loading',
-    sceneSkyboxReflectionBake: '.scene > .skybox .reflection .bake',
-    sceneSkyboxReflectionRemove: '.scene > .skybox .reflection .remove',
-    sceneSkyboxAfter: '.scene > .skybox > .after',
-    postProcess: '.scene > .postProcess',
-    sceneOctree: '.scene > .octree',
+    scene: '.container > .body > .scene',
+    sceneRelease: '.container > .body > .scene > .release',
+    sceneAmbient: '.container > .body > .scene > .ambient',
+    sceneFog: '.container > .body > .scene > .fog',
+    sceneShadows: '.container > .body > .scene > .shadows',
+    sceneSkybox: '.container > .body > .scene > .skybox',
+    sceneSkyboxBefore: '.container > .body > .scene > .skybox > .before',
+    sceneSkyboxUseHDR: '.container > .body > .scene > .skybox .useHDR',
+    sceneSkyboxEnvmapHDR: '.container > .body > .scene > .skybox .envmapHDR',
+    sceneSkyboxEnvmapLDR: '.container > .body > .scene > .skybox .envmapLDR',
+    sceneSkyboxReflection: '.container > .body > .scene > .skybox .reflection',
+    sceneSkyboxReflectionLoading: '.container > .body > .scene > .skybox .reflection ui-loading',
+    sceneSkyboxReflectionBake: '.container > .body > .scene > .skybox .reflection .bake',
+    sceneSkyboxReflectionRemove: '.container > .body > .scene > .skybox .reflection .remove',
+    sceneSkyboxAfter: '.container > .body > .scene > .skybox > .after',
+    sceneOctree: '.container > .body > .scene > .octree',
+    sceneSkin: '.container > .body > .scene > .skin',
+    scenePostSettings: '.container > .body > .scene > .postSettings',
 
-    node: '.node',
-    nodeHeader: '.node > header',
-    nodeSection: '.node-section',
-    nodeMenu: '.node > header > .menu',
-    nodeLink: '.node > header > .link',
+    node: '.container > .body > .node',
+    nodeHeader: '.container > .body > .node > .component-header',
+    nodeSection: '.container > .body > .node >.node-section',
+    nodeMenu: '.container > .body > .node > .component-header > .menu',
+    nodeLink: '.container > .body > .node > .component-header > .link',
 
-    nodePosition: '.node > .position',
-    nodeRotation: '.node > .rotation',
-    nodeScale: '.node > .scale',
-    nodeMobility: '.node > .mobility',
-    nodeLayer: '.node > .layer',
-    nodeLayerSelect: '.node > .layer .layer-select',
-    nodeLayerButton: '.node > .layer .layer-edit',
+    nodePosition: '.container > .body > .node > .position',
+    nodeRotation: '.container > .body > .node > .rotation',
+    nodeScale: '.container > .body > .node > .scale',
+    nodeMobility: '.container > .body > .node > .mobility',
+    nodeLayerSelect: '.container > .body > .node > .layer .layer-select',
+    nodeLayerButton: '.container > .body > .node > .layer .layer-edit',
 
-    sectionBody: '.section-body',
-    sectionMissing: '.section-missing',
-    sectionAsset: '.section-asset',
+    sectionBody: '.container > .body > .section-body',
+    sectionMissing: '.container > .body > .section-missing',
+    sectionAsset: '.container > .body > .section-asset',
 
-    footer: '.footer',
-    componentAdd: '.footer .add-component',
+    footer: '.container > .body > .footer',
+    componentAdd: '.container > .body > .footer .add-component',
 };
 
 const Elements = {
     panel: {
         ready() {
             const panel = this;
-            panel.__nodeChangedHandle__ = undefined;
+
+            panel.throttleUpdate = throttle(async () => {
+                if (!panel.readyToUpdate) {
+                    return;
+                }
+                for (const prop in Elements) {
+                    const element = Elements[prop];
+                    if (element.update) {
+                        await element.update.call(panel);
+                    }
+                }
+            }, 100, { leading: false, trailing: true });
 
             panel.__nodeChanged__ = (uuid) => {
                 if (Array.isArray(panel.uuidList) && panel.uuidList.includes(uuid)) {
-                    window.cancelAnimationFrame(panel.__nodeChangedHandle__);
-                    panel.__nodeChangedHandle__ = window.requestAnimationFrame(async () => {
-                        for (const prop in Elements) {
-                            if (!panel.ready) {
-                                return;
-                            }
-                            const element = Elements[prop];
-                            if (element.update) {
-                                await element.update.call(panel);
-                            }
-                        }
-                    });
+                    panel.throttleUpdate();
                 }
             };
 
@@ -457,6 +530,21 @@ const Elements = {
 
             Editor.Message.addBroadcastListener('project:setting-change', panel.__projectSettingChanged__);
 
+            panel.__throttleProfileChanged__ = throttle(async (protocol, file, key) => {
+                if (protocol === 'defaultPreferences' && file === 'packages/inspector.json' && key === 'message-protocol') {
+                    await panel.__queryMessageProtocolScene__();
+
+                    for (const prop in Elements) {
+                        const element = Elements[prop];
+                        if (element.update) {
+                            await element.update.call(panel);
+                        }
+                    }
+                }
+            }, 100, { leading: false, trailing: true });
+
+            Profile.on('change', panel.__throttleProfileChanged__);
+
             // 识别拖入脚本资源
             panel.$.container.addEventListener('dragover', (event) => {
                 event.preventDefault();
@@ -483,17 +571,31 @@ const Elements = {
                     additional.push({ value, type });
                 }
 
-                Editor.Message.send('scene', 'snapshot');
-
+                // Todo
+                // await beginRecording(panel.uuidList);
                 for (const info of additional) {
                     const config = panel.dropConfig[info.type];
                     if (config) {
                         await Editor.Message.request(config.package, config.message, info, panel.dumps, panel.uuidList);
                     }
                 }
-
-                Editor.Message.send('scene', 'snapshot');
             });
+
+            panel._readyToUpdate = true;
+            if (panel.readyToUpdate === undefined) {
+                Object.defineProperty(panel, 'readyToUpdate', {
+                    enumerable: true,
+                    get() {
+                        return panel._readyToUpdate;
+                    },
+                    set(val) {
+                        panel._readyToUpdate = val;
+                        if (val) {
+                            panel.throttleUpdate();
+                        }
+                    },
+                });
+            }
         },
         async update() {
             const panel = this;
@@ -503,7 +605,7 @@ const Elements = {
             try {
                 dumps = await Promise.all(
                     panel.uuidList.map((uuid) => {
-                        return Editor.Message.request('scene', 'query-node', uuid);
+                        return Editor.Message.request(messageProtocol.scene, 'query-node', uuid);
                     }),
                 );
             } catch (err) {
@@ -518,9 +620,7 @@ const Elements = {
             panel.assets = {};
 
             if (panel.dump) {
-                panel.$.container.style.display = 'flex';
-                panel.$.header.style.display = 'flex';
-                panel.$.footer.style.display = 'block';
+                panel.$.container.removeAttribute('hidden');
 
                 // 以第一个节点的类型，过滤多选的其他不同类型，比如 node 和 sceneNode 就不能混为多选编辑
                 const type = panel.dump.__type__;
@@ -534,20 +634,22 @@ const Elements = {
                 // 补充缺失的 dump 数据，如 path values 等，收集节点内的资源
                 utils.translationDump(panel.dump, panel.dumps.length > 1 ? panel.dumps : undefined, panel.assets);
             } else {
-                panel.$.container.style.display = 'none';
+                panel.$.container.setAttribute('hidden', '');
             }
         },
         close() {
             const panel = this;
 
-            if (panel.__nodeChangedHandle__) {
-                window.cancelAnimationFrame(panel.__nodeChangedHandle__);
-                panel.__nodeChangedHandle__ = undefined;
-            }
+            panel.throttleUpdate.cancel();
+            panel.throttleUpdate = undefined;
 
             Editor.Message.removeBroadcastListener('scene:change-node', panel.__nodeChanged__);
             Editor.Message.removeBroadcastListener('scene:animation-time-change', panel.__animationTimeChange__);
             Editor.Message.removeBroadcastListener('project:setting-change', panel.__projectSettingChanged__);
+
+            Profile.removeListener('change', panel.__throttleProfileChanged__);
+            panel.__throttleProfileChanged__.cancel();
+            panel.__throttleProfileChanged__ = undefined;
         },
     },
     prefab: {
@@ -561,16 +663,22 @@ const Elements = {
                     return;
                 }
 
-                Editor.Message.send('scene', 'snapshot');
-
                 const role = button.getAttribute('role');
 
                 for (const dump of panel.dumps) {
                     const prefab = dump.__prefab__;
 
                     switch (role) {
+                        case 'edit': {
+                            const assetId = prefab.prefabStateInfo?.assetUuid;
+                            if (!assetId) {
+                                return;
+                            }
+                            Editor.Message.request('asset-db', 'open-asset', assetId);
+                            break;
+                        }
                         case 'unlink': {
-                            await Editor.Message.request('scene', 'unlink-prefab', prefab.rootUuid, false);
+                            await Editor.Message.request(messageProtocol.scene, 'unlink-prefab', prefab.rootUuid, false);
                             break;
                         }
                         case 'local': {
@@ -578,25 +686,16 @@ const Elements = {
                             break;
                         }
                         case 'reset': {
-                            await Editor.Message.request('scene', 'restore-prefab', prefab.rootUuid, prefab.uuid);
+                            await Editor.Message.request(messageProtocol.scene, 'restore-prefab', prefab.rootUuid, prefab.uuid);
                             break;
                         }
                         case 'save': {
-                            await Editor.Message.request('scene', 'apply-prefab', prefab.rootUuid);
+                            // apply-prefab是自定义的undo,在场景中实现了undo
+                            await Editor.Message.request(messageProtocol.scene, 'apply-prefab', prefab.rootUuid);
                             break;
                         }
                     }
                 }
-
-                Editor.Message.send('scene', 'snapshot');
-            });
-
-            panel.$.prefabEdit.addEventListener('click', () => {
-                const assetId = panel.dump?.__prefab__?.prefabStateInfo?.assetUuid;
-                if (!assetId) {
-                    return;
-                }
-                Editor.Message.request('asset-db', 'open-asset', assetId);
             });
         },
         async update() {
@@ -612,7 +711,16 @@ const Elements = {
             const prefab = panel.dump.__prefab__;
             const prefabStateInfo = prefab.prefabStateInfo;
 
-            if (prefabStateInfo.assetUuid) {
+            const canUnlink = panel.dumps.some(dump => {
+                if (dump.__prefab__ && dump.__prefab__.prefabStateInfo) {
+                    const state = dump.__prefab__.prefabStateInfo.state;
+                    if (state === 2 || state === 3) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (canUnlink) {
                 panel.$.prefabUnlink.removeAttribute('disabled');
             } else {
                 panel.$.prefabUnlink.setAttribute('disabled', '');
@@ -641,6 +749,7 @@ const Elements = {
                 }
             } else {
                 panel.$.prefab.setAttribute('missing', '');
+                panel.$.prefabEdit.setAttribute('disabled', '');
                 panel.$.prefabLocal.setAttribute('disabled', '');
                 panel.$.prefabReset.setAttribute('disabled', '');
                 panel.$.prefabSave.setAttribute('disabled', '');
@@ -668,7 +777,7 @@ const Elements = {
                 panel.$.active.dispatch('change-dump');
             });
             panel.$.active.addEventListener('confirm', () => {
-                panel.snapshotLock = false;
+                panel.$.active.dispatch('confirm-dump');
             });
 
             panel.$.name.addEventListener('change', (event) => {
@@ -685,7 +794,7 @@ const Elements = {
                 panel.$.name.dispatch('change-dump');
             });
             panel.$.name.addEventListener('confirm', () => {
-                panel.snapshotLock = false;
+                panel.$.name.dispatch('confirm-dump');
             });
         },
         update() {
@@ -738,7 +847,7 @@ const Elements = {
             const panel = this;
 
             const $help = panel.$.sceneSkybox.querySelector('ui-link');
-            $help.value = panel.getHelpUrl({ help: 'i18n:cc.Skybox' });
+            panel.setHelpUrl($help, { help: 'i18n:cc.Skybox' });
             $help.addEventListener('click', (event) => {
                 event.stopPropagation();
                 event.preventDefault();
@@ -769,15 +878,18 @@ const Elements = {
 
             // 由于场景属性对象不是继承于 Component 所以没有修饰器，displayName, help 数据在这里配置
             panel.dump._globals.ambient.displayName = 'Ambient';
-            panel.dump._globals.ambient.help = panel.getHelpUrl({ help: 'i18n:cc.Ambient' });
+            panel.dump._globals.ambient.editor = { help: 'i18n:cc.Ambient' };
+            panel.dump._globals.ambient.help = panel.getHelpUrl(panel.dump._globals.ambient.editor);
             panel.$.sceneAmbient.render(panel.dump._globals.ambient);
 
             panel.dump._globals.fog.displayName = 'Fog';
-            panel.dump._globals.fog.help = panel.getHelpUrl({ help: 'i18n:cc.Fog' });
+            panel.dump._globals.fog.editor = { help: 'i18n:cc.Fog' };
+            panel.dump._globals.fog.help = panel.getHelpUrl(panel.dump._globals.fog.editor);
             panel.$.sceneFog.render(panel.dump._globals.fog);
 
             panel.dump._globals.shadows.displayName = 'Shadows';
-            panel.dump._globals.shadows.help = panel.getHelpUrl({ help: 'i18n:cc.Shadow' });
+            panel.dump._globals.shadows.editor = { help: 'i18n:cc.Shadow' };
+            panel.dump._globals.shadows.help = panel.getHelpUrl(panel.dump._globals.shadows.editor);
             panel.$.sceneShadows.render(panel.dump._globals.shadows);
 
             // skyBox 逻辑 start
@@ -843,14 +955,17 @@ const Elements = {
             // skyBox 逻辑 end
 
             panel.dump._globals.octree.displayName = 'Octree Scene Culling';
-            panel.dump._globals.octree.help = panel.getHelpUrl({ help: 'i18n:cc.OctreeCulling' });
+            panel.dump._globals.octree.editor = { help: 'i18n:cc.OctreeCulling' };
+            panel.dump._globals.octree.help = panel.getHelpUrl(panel.dump._globals.octree.editor);
             panel.$.sceneOctree.render(panel.dump._globals.octree);
 
-            // TODO：这个 if 暂时配合引擎调整使用，测试调通后可以去掉
-            if (panel.dump._globals.postProcess) {
-                panel.dump._globals.postProcess.displayName = 'Post Process';
-                panel.$.postProcess.render(panel.dump._globals.postProcess);
-            }
+            panel.dump._globals.skin.displayName = 'Skin';
+            panel.dump._globals.skin.editor = { help: 'i18n:cc.Skin' };
+            panel.dump._globals.skin.help = panel.getHelpUrl(panel.dump._globals.skin.editor);
+            panel.$.sceneSkin.render(panel.dump._globals.skin);
+
+            panel.dump._globals.postSettings.displayName = 'PostSettings';
+            panel.$.scenePostSettings.render(panel.dump._globals.postSettings);
 
             const $skyProps = panel.$.sceneSkybox.querySelectorAll('ui-prop[type="dump"]');
             $skyProps.forEach(($prop) => {
@@ -879,22 +994,27 @@ const Elements = {
 
             // DIFFUSEMAP_WITH_REFLECTION 的枚举值为 2
             if (envLightingType === 2) {
-                await Editor.Message.request('scene', 'execute-scene-script', {
+                await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                     name: 'inspector',
                     method: 'generateDiffuseMap',
                     args: [envMapUuid],
                 });
             } else {
-                await Editor.Message.request('scene', 'execute-scene-script', {
+                await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                     name: 'inspector',
                     method: 'generateVector',
                     args: [envMapUuid],
                 });
             }
         },
-        async setReflectionConvolutionMap(uuid) {
+        async setEnvMapAndConvolutionMap(uuid) {
+            await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
+                name: 'inspector',
+                method: 'setSkyboxEnvMap',
+                args: [uuid],
+            });
             if (uuid) {
-                await Editor.Message.request('scene', 'execute-scene-script', {
+                await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                     name: 'inspector',
                     method: 'setReflectionConvolutionMap',
                     args: [uuid],
@@ -910,9 +1030,9 @@ const Elements = {
             const reflectionMap = panel.dump._globals.skybox.value['reflectionMap'];
             if (reflectionMap.value && reflectionMap.value.uuid) {
                 panel.$.sceneSkyboxReflectionBake.style.display = 'none';
-                panel.$.sceneSkyboxReflectionRemove.style.display = 'inline-block';
+                panel.$.sceneSkyboxReflectionRemove.style.display = 'inline-flex';
             } else {
-                panel.$.sceneSkyboxReflectionBake.style.display = 'inline-block';
+                panel.$.sceneSkyboxReflectionBake.style.display = 'inline-flex';
                 panel.$.sceneSkyboxReflectionRemove.style.display = 'none';
 
                 // if envmap value unexist, the column of bake button hidden;
@@ -930,10 +1050,10 @@ const Elements = {
                 return;
             }
 
-            panel.$.sceneSkyboxReflectionLoading.style.display = 'inline-block';
+            panel.$.sceneSkyboxReflectionLoading.style.display = 'inline-flex';
             panel.$.sceneSkyboxReflectionBake.style.display = 'none';
 
-            await Editor.Message.request('scene', 'execute-scene-script', {
+            await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                 name: 'inspector',
                 method: 'bakeReflectionConvolution',
                 args: [envMapData.value.uuid],
@@ -982,7 +1102,9 @@ const Elements = {
 
             const $prop = useHDR ? panel.$.sceneSkyboxEnvmapHDR : panel.$.sceneSkyboxEnvmapLDR;
             const uuid = $prop.dump.value.uuid;
-            Elements.scene.setReflectionConvolutionMap.call(panel, uuid);
+            Elements.scene.setEnvMapAndConvolutionMap.call(panel, uuid);
+
+            panel.$.scenePostSettings.style.display = useHDR ? 'block' : 'none';
         },
         skyboxEnvmapChange(useHDR, event) {
             const panel = this;
@@ -993,7 +1115,7 @@ const Elements = {
 
             const $prop = event.currentTarget;
             const uuid = $prop.dump.value.uuid;
-            Elements.scene.setReflectionConvolutionMap.call(panel, uuid);
+            Elements.scene.setEnvMapAndConvolutionMap.call(panel, uuid);
         },
     },
     node: {
@@ -1002,7 +1124,7 @@ const Elements = {
 
             panel.$skyboxProps = {};
 
-            panel.$.nodeLink.value = Editor.I18n.t('ENGINE.help.cc.Node');
+            panel.setHelpUrl(panel.$.nodeLink, { help: 'i18n:cc.Node' });
 
             panel.$.nodeMenu.addEventListener('click', (event) => {
                 event.stopPropagation();
@@ -1019,6 +1141,8 @@ const Elements = {
         async update() {
             const panel = this;
 
+            panel.componentCacheExpand = {};
+
             if (!panel.dump || panel.dump.isScene) {
                 return;
             }
@@ -1029,7 +1153,6 @@ const Elements = {
             panel.$.nodeRotation.render(panel.dump.rotation);
             panel.$.nodeScale.render(panel.dump.scale);
             panel.$.nodeMobility.render(panel.dump.mobility);
-            panel.$.nodeLayer.render(panel.dump.layer);
 
             // 查找需要渲染的 component 列表
             const componentList = [];
@@ -1075,13 +1198,14 @@ const Elements = {
                         $active.invalid = false;
                     }
 
-                    const url = panel.getHelpUrl(dump.editor);
-                    const $link = $section.querySelector('ui-link');
-                    if (url) {
-                        $link.setAttribute('value', url);
+                    if (dump.value.enabled.visible === false) {
+                        $active.setAttribute('hidden', '');
                     } else {
-                        $link.removeAttribute('value');
+                        $active.removeAttribute('hidden');
                     }
+
+                    const $link = $section.querySelector('ui-link');
+                    panel.setHelpUrl($link, dump.editor);
 
                     await Promise.all($section.__panels__.map(($panel) => {
                         return $panel.update(dump);
@@ -1101,12 +1225,21 @@ const Elements = {
 
                     const $section = document.createElement('ui-section');
                     $section.setAttribute('expand', '');
-                    $section.setAttribute('class', 'component');
-                    $section.setAttribute('cache-expand', `${component.path}:${component.type}`);
+                    $section.setAttribute('class', 'component config');
+
+                    let cacheExpandKey = `node-component:${component.type}`;
+                    if (panel.componentCacheExpand[cacheExpandKey]) {
+                        // when exist duplicated component, use uuid as key;
+                        cacheExpandKey = `node-component:${component.value.uuid.value}`;
+                    }
+                    panel.componentCacheExpand[cacheExpandKey] = true;
+                    $section.setAttribute('cache-expand', `${cacheExpandKey}`);
+
                     $section.innerHTML = `
                     <header class="component-header" slot="header">
                         <ui-checkbox class="active"></ui-checkbox>
                         <ui-drag-item additional='${additional}'>
+                            <ui-icon default="component" color="true" value="${component.type}"></ui-icon>
                             <span class="name">${component.type}${component.mountedRoot ? '+' : ''}</span>
                         </ui-drag-item>
                         <ui-link class="link" tooltip="i18n:ENGINE.menu.help_url">
@@ -1138,15 +1271,22 @@ const Elements = {
                         }
                         $active.dispatch('change-dump');
                     });
+                    $active.addEventListener('confirm', (event) => {
+                        event.stopPropagation();
+                        $active.dispatch('confirm-dump');
+                    });
+
+                    if (component.value.enabled.visible === false) {
+                        $active.setAttribute('hidden', '');
+                    } else {
+                        $active.removeAttribute('hidden');
+                    }
 
                     const $link = $section.querySelector('.link');
-                    const url = panel.getHelpUrl(component.editor);
-                    if (url) {
-                        $link.setAttribute('value', url);
-                        $link.addEventListener('click', (event) => {
-                            event.stopPropagation();
-                        });
-                    }
+                    $link.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                    });
+                    panel.setHelpUrl($link, component.editor);
 
                     const $menu = $section.querySelector('.menu');
                     $menu.addEventListener('click', (event) => {
@@ -1179,15 +1319,8 @@ const Elements = {
 
                     renderList.forEach((file) => {
                         const $panel = document.createElement('ui-panel');
+                        $panel.injectionStyle(injectionStyle);
                         $panel.setAttribute('src', file);
-                        $panel.injectionStyle(`
-                            ui-prop,
-                            ui-section { margin-top: 5px; }
-
-                            ui-prop > ui-prop,
-                            ui-section > ui-prop[slot="header"],
-                            ui-prop [slot="content"] ui-prop { margin-top: 0; }
-                        `);
 
                         $panel.shadowRoot.addEventListener('change-dump', (event) => {
                             exports.listeners['change-dump'].call(panel, event);
@@ -1212,6 +1345,7 @@ const Elements = {
                         $section.appendChild($panel);
                         $section.__panels__.push($panel);
                         $panel.dump = component;
+                        $panel.messageProtocol = messageProtocol;
                         $panel.update(component);
                     });
 
@@ -1235,9 +1369,12 @@ const Elements = {
                 panel.renderMap.section['cc.Node'].forEach((file, index) => {
                     if (!array[index]) {
                         array[index] = document.createElement('ui-panel');
+                        array[index].injectionStyle(injectionStyle);
                         panel.$.nodeSection.appendChild(array[index]);
                     }
                     array[index].setAttribute('src', file);
+                    array[index].dump = panel.dump;
+                    array[index].messageProtocol = messageProtocol;
                     array[index].update(panel.dump);
                 });
 
@@ -1259,25 +1396,8 @@ const Elements = {
         i18nChange() {
             const panel = this;
 
-            panel.$.nodeLink.value = Editor.I18n.t('ENGINE.help.cc.Node');
-
-            const sectionBody = panel.$.sectionBody;
-            for (let index = 0; index < sectionBody.__sections__.length; index++) {
-                const $section = sectionBody.__sections__[index];
-                const $link = $section.querySelector('ui-link');
-
-                if (!$link) {
-                    continue;
-                }
-
-                const dump = $section.dump;
-                const url = panel.getHelpUrl(dump.editor);
-                if (url) {
-                    $link.setAttribute('value', url);
-                } else {
-                    $link.removeAttribute('value');
-                }
-            }
+            const $links = panel.$.container.querySelectorAll('ui-link');
+            $links.forEach($link => panel.setHelpUrl($link));
         },
     },
     missingComponent: {
@@ -1305,11 +1425,11 @@ const Elements = {
                 const uuidList = panel.uuidList;
                 switch (type) {
                     case 'save-o': {
-                        Editor.Message.request('scene', 'apply-removed-component', uuidList[0], info.fileID);
+                        Editor.Message.request(messageProtocol.scene, 'apply-removed-component', uuidList[0], info.fileID);
                         break;
                     }
                     case 'reset': {
-                        Editor.Message.request('scene', 'revert-removed-component', uuidList[0], info.fileID);
+                        Editor.Message.request(messageProtocol.scene, 'revert-removed-component', uuidList[0], info.fileID);
                         break;
                     }
                 }
@@ -1360,31 +1480,20 @@ const Elements = {
                 Editor.Message.send('project', 'open-settings', 'project', 'layer');
             });
         },
-        async update() {
+        update() {
             const panel = this;
 
             if (!panel.dump || panel.dump.isScene) {
                 return;
             }
 
-            const layerDump = panel.dump.layer;
-            const enumList = layerDump.enumList || [];
+            panel.$.nodeLayerSelect.render(panel.dump.layer);
 
-            let optionHtml = '';
-            if (enumList) {
-                for (const item of enumList) {
-                    optionHtml += `<option value="${item.value}">${item.name}</option>`;
-                }
+            let prevValues = [panel.dump.layer.value];
+            if (panel.dump.layer.values) {
+                prevValues = panel.dump.layer.values.slice();
             }
-            panel.$.nodeLayerSelect.innerHTML = optionHtml;
-            panel.$.nodeLayerSelect.value = layerDump.value;
-
-            if (layerDump.values && layerDump.values.some((value) => value !== layerDump.value)) {
-                panel.$.nodeLayerSelect.invalid = true;
-            } else {
-                panel.$.nodeLayerSelect.invalid = false;
-            }
-            panel.$.nodeLayer.setReadonly(layerDump, panel.$.nodeLayerSelect);
+            panel.$.nodeLayerSelect.prevValues = prevValues;
         },
     },
     footer: {
@@ -1401,10 +1510,12 @@ const Elements = {
                     ],
                     listeners: {
                         async confirm(detail/* info */) {
-                            Editor.Message.send('scene', 'snapshot');
+                            if (!detail) { return; }
 
+                            // 批量调用request意味着编辑操作在很多帧后才会完成，所以不能自动记录undo
+                            const undoID = await beginRecording(panel.uuidList);
                             for (const uuid of panel.uuidList) {
-                                await Editor.Message.request('scene', 'create-component', {
+                                await Editor.Message.request(messageProtocol.scene, 'create-component', {
                                     uuid,
                                     component: detail.info.cid,
                                 });
@@ -1412,8 +1523,7 @@ const Elements = {
                             if (detail.info.name) {
                                 trackEventWithTimer('laber', `A100000_${detail.info.name}`);
                             }
-
-                            Editor.Message.send('scene', 'snapshot');
+                            await endRecording(undoID);
                         },
                     },
                 });
@@ -1438,11 +1548,17 @@ const Elements = {
                 if (!materialPanel) {
                     // 添加新的
                     materialPanel = document.createElement('ui-panel');
+                    materialPanel.injectionStyle(injectionStyle);
                     materialPanel.setAttribute('src', panel.typeManager[materialPanelType]);
                     materialPanel.setAttribute('type', materialPanelType);
+                    materialPanel.setAttribute('sub-type', 'unknown');
                     materialPanel.setAttribute('uuid', materialUuid);
-                    materialPanel.panelObject.$.container.removeAttribute('whole');
-                    materialPanel.panelObject.$.container.setAttribute('cache-expand', materialUuid);
+
+                    materialPanel.panelObject.replaceContainerWithUISection({
+                        type: materialPanelType,
+                        uuid: materialUuid,
+                    });
+
                     const { section = {} } = panel.renderManager[materialPanelType];
 
                     // 按数组顺序放置
@@ -1544,19 +1660,36 @@ exports.methods = {
             }
         }
 
-        Editor.Message.send('scene', cmd);
+        Editor.Message.send(messageProtocol.scene, cmd);
     },
 
+    setHelpUrl($link, data) {
+        if (data) {
+            $link.helpData = data;
+        } else {
+            if (!$link.helpData) {
+                return;
+            }
+            data = $link.helpData;
+        }
+
+        const url = this.getHelpUrl(data);
+        if (url) {
+            $link.setAttribute('value', url);
+        } else {
+            $link.removeAttribute('value');
+        }
+    },
     /**
      * 获取组件帮助菜单的 url
      * @param editor
      */
-    getHelpUrl(editor) {
-        if (!editor || !editor.help) {
+    getHelpUrl(data) {
+        if (!data || !data.help) {
             return '';
         }
 
-        const help = editor.help;
+        const help = data.help;
 
         /**
          * 约定的规则
@@ -1595,77 +1728,75 @@ exports.methods = {
                 {
                     label: Editor.I18n.t('ENGINE.menu.reset_component'),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
                         const values = dump.value.uuid.values || [dump.value.uuid.value];
+                        const undoID = await beginRecording(values);
                         for (const compUuid of values) {
-                            await Editor.Message.request('scene', 'reset-component', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-component', {
                                 uuid: compUuid,
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
                 {
                     label: Editor.I18n.t('ENGINE.menu.remove_component'),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
                         const values = dump.value.uuid.values || [dump.value.uuid.value];
-
+                        // 收集待修改的uuids
+                        const uuids = [];
+                        const indexes = [];
                         for (const value of values) {
                             for (const nodeDump of nodeDumps) {
                                 const uuid = nodeDump.uuid.value;
                                 const index = nodeDump.__comps__.findIndex((dumpData) => dumpData.value.uuid.value === value);
                                 if (index !== -1) {
-                                    await Editor.Message.request('scene', 'remove-array-element', {
-                                        uuid,
-                                        path: '__comps__',
-                                        index,
-                                    });
-
+                                    uuids.push(uuid);
+                                    indexes.push(index);
                                     if (nodeDump.__comps__[index].type) {
                                         trackEventWithTimer('laber', `A100001_${nodeDump.__comps__[index].type}`);
                                     }
                                 }
                             }
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        if (!uuids.length > 0) { return; }
+                        const undoID = await beginRecording(uuids);
+                        for (let i = 0; i < uuids.length; i++) {
+                            await Editor.Message.request(messageProtocol.scene, 'remove-array-element', {
+                                uuid: uuids[i],
+                                path: '__comps__',
+                                index: indexes[i],
+                            });
+                        }
+                        await endRecording(undoID);
                     },
                 },
                 {
                     label: Editor.I18n.t('ENGINE.menu.move_up_component'),
                     enabled: !isMultiple && index !== 0,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
-                        await Editor.Message.request('scene', 'move-array-element', {
+                        const undoID = await beginRecording(uuid);
+                        await Editor.Message.request(messageProtocol.scene, 'move-array-element', {
                             uuid,
                             path: '__comps__',
                             target: index,
                             offset: -1,
                         });
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 {
                     label: Editor.I18n.t('ENGINE.menu.move_down_component'),
                     enabled: !isMultiple && index !== total - 1,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
-                        await Editor.Message.request('scene', 'move-array-element', {
+                        const undoID = await beginRecording(uuid);
+                        await Editor.Message.request(messageProtocol.scene, 'move-array-element', {
                             uuid,
                             path: '__comps__',
                             target: index,
                             offset: 1,
                         });
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
@@ -1685,24 +1816,33 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.paste_component_values'),
                     enabled: !!(clipboardComponentInfo && clipboardComponentInfo.cid === dump.cid),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
                         const values = dump.value.uuid.values || [dump.value.uuid.value];
+                        const uuids = [];
+                        const indexes = [];
                         for (const value of values) {
                             for (const nodeDump of nodeDumps) {
                                 const uuid = nodeDump.uuid.value;
                                 const index = nodeDump.__comps__.findIndex((dumpData) => dumpData.value.uuid.value === value);
                                 if (index !== -1) {
-                                    await Editor.Message.request('scene', 'set-property', {
-                                        uuid,
-                                        path: nodeDump.__comps__[index].path,
-                                        dump: clipboardComponentInfo.dump,
-                                    });
+                                    uuids.push(uuid);
+                                    indexes.push(index);
                                 }
                             }
                         }
+                        const undoID = await beginRecording(uuids);
+                        // 遍历uuids
+                        for (let i = 0; i < uuids.length; i++) {
+                            const uuid = uuids[i];
+                            const index = indexes[i];
 
-                        Editor.Message.send('scene', 'snapshot');
+                            const nodeDump = nodeDumps.find(nodeDump => uuid === nodeDump.uuid.value);
+                            await Editor.Message.request(messageProtocol.scene, 'set-property', {
+                                uuid,
+                                path: nodeDump.__comps__[index].path,
+                                dump: clipboardComponentInfo.dump,
+                            });
+                        }
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
@@ -1711,26 +1851,25 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.paste_component'),
                     enabled: !!clipboardComponentInfo,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         const values = dump.value.uuid.values || [dump.value.uuid.value];
                         let index = 0;
                         for (const dump of values) {
                             const uuid = uuidList[index];
-                            await Editor.Message.request('scene', 'create-component', {
+                            await Editor.Message.request(messageProtocol.scene, 'create-component', {
                                 uuid,
                                 component: clipboardComponentInfo.cid,
                             });
 
                             // 检查是否创建成功，是的话，给赋值
-                            const nodeDump = await Editor.Message.request('scene', 'query-node', uuid);
+                            const nodeDump = await Editor.Message.request(messageProtocol.scene, 'query-node', uuid);
                             const length = nodeDump.__comps__ && nodeDump.__comps__.length;
                             if (length) {
                                 const lastIndex = length - 1;
                                 const lastComp = nodeDump.__comps__[lastIndex];
 
                                 if (lastComp?.cid === clipboardComponentInfo.cid) {
-                                    await Editor.Message.request('scene', 'set-property', {
+                                    await Editor.Message.request(messageProtocol.scene, 'set-property', {
                                         uuid,
                                         path: `__comps__.${lastIndex}`,
                                         dump: clipboardComponentInfo.dump,
@@ -1740,6 +1879,7 @@ exports.methods = {
 
                             index++;
                         }
+                        await endRecording(undoID);
                     },
                 },
             ],
@@ -1768,15 +1908,13 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.reset_node'),
                     enabled: !dump.position.readonly && !dump.rotation.readonly && !dump.scale.readonly,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'reset-node', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-node', {
                                 uuid,
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
@@ -1795,19 +1933,17 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.paste_node_value'),
                     enabled: !!clipboardNodeInfo,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
                             for (const attr of clipboardNodeInfo.attrs) {
-                                await Editor.Message.request('scene', 'set-property', {
+                                await Editor.Message.request(messageProtocol.scene, 'set-property', {
                                     uuid,
                                     path: attr,
                                     dump: clipboardNodeInfo.dump[attr],
                                 });
                             }
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
@@ -1815,7 +1951,7 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.copy_node_world_transform'),
                     enabled: !isMultiple,
                     async click() {
-                        const data = await Editor.Message.request('scene', 'execute-scene-script', {
+                        const data = await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                             name: 'inspector',
                             method: 'queryNodeWorldTransform',
                             args: [dump.uuid.value],
@@ -1832,18 +1968,16 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.paste_node_world_transform'),
                     enabled: !!clipboardNodeWorldTransform,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
                         if (clipboardNodeWorldTransform.data) {
+                            const undoID = await beginRecording(uuidList);
                             for (const uuid of uuidList) {
-                                await Editor.Message.request('scene', 'execute-scene-script', {
+                                await Editor.Message.request(messageProtocol.scene, 'execute-scene-script', {
                                     name: 'inspector',
                                     method: 'setNodeWorldTransform',
                                     args: [uuid, clipboardNodeWorldTransform.data],
                                 });
                             }
-
-                            Editor.Message.send('scene', 'snapshot');
+                            await endRecording(undoID);
                         }
                     },
                 },
@@ -1852,23 +1986,22 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.paste_component'),
                     enabled: !!clipboardComponentInfo,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'create-component', {
+                            await Editor.Message.request(messageProtocol.scene, 'create-component', {
                                 uuid,
                                 component: clipboardComponentInfo.cid,
                             });
 
                             // 检查是否创建成功，是的话，给赋值
-                            const nodeDump = await Editor.Message.request('scene', 'query-node', uuid);
+                            const nodeDump = await Editor.Message.request(messageProtocol.scene, 'query-node', uuid);
                             const length = nodeDump.__comps__ && nodeDump.__comps__.length;
                             if (length) {
                                 const lastIndex = length - 1;
                                 const lastComp = nodeDump.__comps__[lastIndex];
 
                                 if (lastComp?.cid === clipboardComponentInfo.cid) {
-                                    await Editor.Message.request('scene', 'set-property', {
+                                    await Editor.Message.request(messageProtocol.scene, 'set-property', {
                                         uuid,
                                         path: `__comps__.${lastIndex}`,
                                         dump: clipboardComponentInfo.dump,
@@ -1876,8 +2009,7 @@ exports.methods = {
                                 }
                             }
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 { type: 'separator' },
@@ -1885,64 +2017,56 @@ exports.methods = {
                     label: Editor.I18n.t('ENGINE.menu.reset_node_position'),
                     enabled: !dump.position.readonly && notEqualDefaultValueVec3('position'),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'reset-property', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-property', {
                                 uuid,
                                 path: 'position',
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 {
                     label: Editor.I18n.t('ENGINE.menu.reset_node_rotation'),
                     enabled: !dump.rotation.readonly && notEqualDefaultValueVec3('rotation'),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'reset-property', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-property', {
                                 uuid,
                                 path: 'rotation',
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 {
                     label: Editor.I18n.t('ENGINE.menu.reset_node_scale'),
                     enabled: !dump.scale.readonly && notEqualDefaultValueVec3('scale'),
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'reset-property', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-property', {
                                 uuid,
                                 path: 'scale',
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
                 {
                     label: Editor.I18n.t('ENGINE.menu.reset_node_mobility'),
                     enabled: !dump.mobility.readonly && dump.mobility.value !== dump.mobility.default,
                     async click() {
-                        Editor.Message.send('scene', 'snapshot');
-
+                        const undoID = await beginRecording(uuidList);
                         for (const uuid of uuidList) {
-                            await Editor.Message.request('scene', 'reset-property', {
+                            await Editor.Message.request(messageProtocol.scene, 'reset-property', {
                                 uuid,
                                 path: 'mobility',
                             });
                         }
-
-                        Editor.Message.send('scene', 'snapshot');
+                        await endRecording(undoID);
                     },
                 },
             ],
@@ -1957,13 +2081,12 @@ exports.methods = {
         }
 
         try {
-            Editor.Message.send('scene', 'snapshot');
-
+            const undoID = await beginRecording(panel.uuidList);
             for (const dumpPath in materialUuids[assetUuid]) {
                 const dumpData = materialUuids[assetUuid][dumpPath];
                 for (let i = 0; i < panel.uuidList.length; i++) {
                     const nodeUuid = panel.uuidList[i];
-                    await Editor.Message.request('scene', 'set-property', {
+                    await Editor.Message.request(messageProtocol.scene, 'set-property', {
                         uuid: nodeUuid,
                         path: dumpPath,
                         dump: {
@@ -1973,14 +2096,13 @@ exports.methods = {
                     });
                 }
             }
-
-            Editor.Message.send('scene', 'snapshot');
+            await endRecording(undoID);
         } catch (error) {
             console.error(error);
         }
     },
     toggleShowAddComponentBtn(show) {
-        this.$.componentAdd.style.display = show ? 'inline-block' : 'none';
+        this.$.componentAdd.style.display = show ? 'inline-flex' : 'none';
     },
     isAnimationMode() {
         return Editor.EditMode.getMode() === 'animation';
@@ -2021,7 +2143,23 @@ exports.ready = async function ready() {
 
     // 为了避免把 ui-num-input, ui-color 的连续 change 进行 snapshot
     panel.snapshotLock = false;
-    panel.ready = true;
+
+    // 节点的 ipc 协议，指向 scene 或 xr-scene 等进程
+    panel.__queryMessageProtocolScene__ = async function() {
+        try {
+            if (!panel.messageProtocol) {
+                panel.messageProtocol = messageProtocol;
+            }
+            const config = await await Editor.Profile.getConfig('inspector', 'message-protocol');
+            if (config) {
+                Object.assign(messageProtocol, config);
+            }
+        } catch (error) {
+            console.error(error);
+            messageProtocol.scene = 'scene';
+        }
+    };
+    await panel.__queryMessageProtocolScene__();
 
     for (const prop in Elements) {
         const element = Elements[prop];
@@ -2038,7 +2176,6 @@ exports.ready = async function ready() {
 
 exports.close = async function close() {
     const panel = this;
-    panel.ready = false;
 
     for (const prop in Elements) {
         const element = Elements[prop];

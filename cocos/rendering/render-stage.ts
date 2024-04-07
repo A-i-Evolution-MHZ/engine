@@ -23,7 +23,7 @@
 */
 
 import { ccclass, displayOrder, serializable } from 'cc.decorator';
-import { cclegacy } from '../core';
+import { cclegacy } from '@base/global';
 import { RenderPipeline } from './render-pipeline';
 import { RenderFlow } from './render-flow';
 import { RenderQueueDesc } from './pipeline-serialization';
@@ -97,7 +97,7 @@ export abstract class RenderStage {
     public set enabled (val: boolean) {
         this._enabled = val;
     }
-    public get enabled () {
+    public get enabled (): boolean {
         return this._enabled;
     }
 
@@ -128,7 +128,7 @@ export abstract class RenderStage {
      * @zh 为指定的渲染流程开启当前渲染阶段
      * @param flow The render flow to activate this render stage
      */
-    public activate (pipeline: RenderPipeline, flow: RenderFlow) {
+    public activate (pipeline: RenderPipeline, flow: RenderFlow): void {
         this._pipeline = pipeline;
         this._flow = flow;
     }
@@ -137,14 +137,14 @@ export abstract class RenderStage {
      * @en Destroy function
      * @zh 销毁函数。
      */
-    public abstract destroy ();
+    public abstract destroy (): void;
 
     /**
      * @en Render function
      * @zh 渲染函数。
      * @param view The render view
      */
-    public abstract render (camera: Camera);
+    public abstract render (camera: Camera): void;
 }
 
 cclegacy.RenderStage = RenderStage;

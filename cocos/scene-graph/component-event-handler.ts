@@ -24,8 +24,8 @@
 */
 
 import { ccclass, serializable, editable, tooltip } from 'cc.decorator';
+import { cclegacy } from '@base/global';
 import type { Node } from './node';
-import { legacyCC } from '../core/global-exports';
 
 /**
  * @en
@@ -60,7 +60,7 @@ export class EventHandler {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    get _componentName () {
+    get _componentName (): any {
         this._genCompIdIfNeeded();
 
         return this._compId2Name(this._componentId);
@@ -78,7 +78,7 @@ export class EventHandler {
      * @param events - The event list to be emitted
      * @param args - The callback arguments
      */
-    public static emitEvents (events: EventHandler[], ...args: any[]) {
+    public static emitEvents (events: EventHandler[], ...args: any[]): void {
         for (let i = 0, l = events.length; i < l; i++) {
             const event = events[i];
             if (!(event instanceof EventHandler)) {
@@ -153,15 +153,15 @@ export class EventHandler {
      * eventHandler.emit(["param1", "param2", ....]);
      * ```
      */
-    public emit (params: any[]) {
+    public emit (params: any[]): void {
         const target = this.target;
-        if (!legacyCC.isValid(target)) { return; }
+        if (!cclegacy.isValid(target)) { return; }
 
         this._genCompIdIfNeeded();
-        const compType = legacyCC.js.getClassById(this._componentId);
+        const compType = cclegacy.js.getClassById(this._componentId);
 
         const comp = target!.getComponent(compType);
-        if (!legacyCC.isValid(comp)) { return; }
+        if (!cclegacy.isValid(comp)) { return; }
 
         const handler = comp![this.handler];
         if (typeof (handler) !== 'function') { return; }
@@ -174,18 +174,18 @@ export class EventHandler {
         handler.apply(comp, params);
     }
 
-    private _compName2Id (compName) {
-        const comp = legacyCC.js.getClassByName(compName);
-        return legacyCC.js.getClassId(comp);
+    private _compName2Id (compName): any {
+        const comp = cclegacy.js.getClassByName(compName);
+        return cclegacy.js.getClassId(comp);
     }
 
-    private _compId2Name (compId) {
-        const comp = legacyCC.js.getClassById(compId);
-        return legacyCC.js.getClassName(comp);
+    private _compId2Name (compId): any {
+        const comp = cclegacy.js.getClassById(compId);
+        return cclegacy.js.getClassName(comp);
     }
 
     // to be deprecated in the future
-    private _genCompIdIfNeeded () {
+    private _genCompIdIfNeeded (): void {
         if (!this._componentId) {
             this._componentName = this.component;
             this.component = '';

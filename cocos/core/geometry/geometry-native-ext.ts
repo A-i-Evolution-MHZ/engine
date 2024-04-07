@@ -22,6 +22,7 @@
 
 import { NATIVE } from 'internal:constants';
 
+import { assert, error } from '@base/debug';
 import { Line } from './line';
 import { Plane } from './plane';
 import { Ray } from './ray';
@@ -34,7 +35,7 @@ import { Frustum } from './frustum';
 /**
  * cache jsb attributes in js, reduce cross language invokations.
  */
-function cacheProperty (ctor: Constructor, property: string) {
+function cacheProperty (ctor: Constructor, property: string): void {
     const propDesc = Object.getOwnPropertyDescriptor(ctor.prototype, property);
     const propCacheKey = `_$cache_${property}`;
     const propRealKey = `_$_${property}`;
@@ -59,9 +60,9 @@ function cacheProperty (ctor: Constructor, property: string) {
 /**
  * cache native object's `underlyingData()` result in __data
  */
-function cacheUnderlyingData (ctor: Constructor) {
+function cacheUnderlyingData (ctor: Constructor): void {
     // eslint-disable-next-line func-names
-    ctor.prototype._arraybuffer = function () {
+    ctor.prototype._arraybuffer = function (): ArrayBuffer {
         if (!this.__data) {
             this.__data = this.underlyingData();
         }
@@ -83,14 +84,13 @@ interface FieldDesc {
 /**
  * define accessor for attr, read/write directly to the underlyingData as Float32Array[1]
  */
-const defineAttrFloat = (kls: Constructor, attr: string) => {
+const defineAttrFloat = (kls: Constructor, attr: string): void => {
     // __nativeFields__ is defined in jsb_geometry_manual.cpp
     const desc: FieldDesc = (kls as any).__nativeFields__[attr];
     const cacheKey = `_$_${attr}`;
-    if (!window.oh) {
-        // openharmony does not support the console.assert interface at this time.
-        console.assert(desc.fieldSize === 4, `field ${attr} size ${desc.fieldSize}`);
-    }
+
+    assert(desc.fieldSize === 4, `field ${attr} size ${desc.fieldSize}`);
+
     Object.defineProperty(kls.prototype, desc.fieldName, {
         configurable: true,
         enumerable: true,
@@ -113,17 +113,16 @@ const defineAttrFloat = (kls: Constructor, attr: string) => {
 /**
  *  define accessor for attr, read/write directly to the underlyingData as Int32Array[1]
  */
-const defineAttrInt = (kls: Constructor, attr: string) => {
+const defineAttrInt = (kls: Constructor, attr: string): void => {
     // __nativeFields__ is defined in jsb_geometry_manual.cpp
     const desc: FieldDesc = (kls as any).__nativeFields__[attr];
     if (!desc) {
-        console.error(`attr ${attr} not defined in class ${kls.toString()}`);
+        error(`attr ${attr} not defined in class ${kls.toString()}`);
     }
     const cacheKey = `_$_${attr}`;
-    if (!window.oh) {
-        // openharmony does not support the console.assert interface at this time.
-        console.assert(desc.fieldSize === 4, `field ${attr} size ${desc.fieldSize}`);
-    }
+
+    assert(desc.fieldSize === 4, `field ${attr} size ${desc.fieldSize}`);
+
     Object.defineProperty(kls.prototype, desc.fieldName, {
         configurable: true,
         enumerable: true,

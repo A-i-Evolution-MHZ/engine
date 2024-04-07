@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { Mat4, Quat, Vec3, IVec3Like, geometry } from '../../../core';
+import { Mat4, Quat, Vec3, IVec3Like } from '@base/math';
+import { geometry } from '../../../core';
 import { BuiltinSharedBody } from '../builtin-shared-body';
 import { IBuiltinShape } from '../builtin-interface';
 import { Collider, RigidBody, PhysicsMaterial, PhysicsSystem } from '../../../../exports/physics-framework';
@@ -30,34 +31,34 @@ import { IBaseShape } from '../../spec/i-physics-shape';
 import { BuiltInWorld } from '../builtin-world';
 
 export class BuiltinShape implements IBaseShape {
-    getAABB (v: geometry.AABB) { }
-    getBoundingSphere (v: geometry.Sphere) { }
+    getAABB (v: geometry.AABB): void { }
+    getBoundingSphere (v: geometry.Sphere): void { }
     updateEventListener (): void { }
-    setMaterial (v: PhysicsMaterial | null) { }
-    setAsTrigger (v: boolean) { }
+    setMaterial (v: PhysicsMaterial | null): void { }
+    setAsTrigger (v: boolean): void { }
     get attachedRigidBody (): RigidBody | null { return null; }
 
-    setCenter (v: IVec3Like) {
+    setCenter (v: IVec3Like): void {
         Vec3.copy(this._localShape.center, v);
     }
 
-    get localShape () {
+    get localShape (): IBuiltinShape {
         return this._localShape;
     }
 
-    get worldShape () {
+    get worldShape (): IBuiltinShape {
         return this._worldShape;
     }
 
-    get impl () {
+    get impl (): IBuiltinShape {
         return this._worldShape;
     }
 
-    get sharedBody () {
+    get sharedBody (): BuiltinSharedBody {
         return this._sharedBody;
     }
 
-    get collider () {
+    get collider (): Collider {
         return this._collider;
     }
 
@@ -70,34 +71,34 @@ export class BuiltinShape implements IBaseShape {
     protected _localShape!: IBuiltinShape;
     protected _worldShape!: IBuiltinShape;
 
-    initialize (comp: Collider) {
+    initialize (comp: Collider): void {
         this._collider = comp;
         this._sharedBody = (PhysicsSystem.instance.physicsWorld as BuiltInWorld).getSharedBody(this._collider.node);
         this._sharedBody.reference = true;
     }
 
-    onLoad () {
+    onLoad (): void {
         this.setCenter(this._collider.center);
     }
 
-    onEnable () {
+    onEnable (): void {
         this._sharedBody.addShape(this);
         this._sharedBody.enabled = true;
     }
 
-    onDisable () {
+    onDisable (): void {
         this._sharedBody.removeShape(this);
         this._sharedBody.enabled = false;
     }
 
-    onDestroy () {
+    onDestroy (): void {
         this._sharedBody.reference = false;
         (this._collider as any) = null;
         (this._localShape as any) = null;
         (this._worldShape as any) = null;
     }
 
-    transform (m: Mat4 | Readonly<Mat4>, pos: Vec3 | Readonly<Vec3>, rot: Quat | Readonly<Quat>, scale: Vec3 | Readonly<Vec3>) {
+    transform (m: Mat4 | Readonly<Mat4>, pos: Vec3 | Readonly<Vec3>, rot: Quat | Readonly<Quat>, scale: Vec3 | Readonly<Vec3>): void {
         this._localShape.transform(m, pos, rot, scale, this._worldShape);
     }
 

@@ -1,5 +1,8 @@
 'use strict';
 const path = require('path');
+const { injectionStyle } = require('../../utils/prop');
+
+let cacheActiveTab = 'animation';
 
 exports.template = /* html */`
 <div class="asset-fbx">
@@ -17,13 +20,13 @@ exports.style = /* css */`
     display: flex;
     flex: 1;
     flex-direction: column;
-    padding-top: 5px;
 }
 
 .asset-fbx > .header {
-    text-align: center;
-    padding-bottom: 10px;
-    line-height: calc(var(--size-big-line) * 1px);
+    padding: 8px 4px;
+}
+.asset-fbx > .header > .tabs {
+    height: 24px;
 }
 `;
 
@@ -47,11 +50,11 @@ const Elements = {
             const panel = this;
 
             panel.$.tabs.addEventListener('change', () => {
-                panel.activeTab = panel.tabs[panel.$.tabs.value];
+                cacheActiveTab = panel.activeTab = panel.tabs[panel.$.tabs.value];
                 Elements.tabPanel.update.call(panel);
             });
 
-            panel.activeTab = 'animation';
+            panel.activeTab = cacheActiveTab;
         },
         update() {
             const panel = this;
@@ -68,6 +71,7 @@ const Elements = {
 
             panel.tabs.forEach((tab) => {
                 const button = document.createElement('ui-button');
+                button.setAttribute('size', 'medium');
                 panel.$.tabs.appendChild(button);
 
                 const label = document.createElement('ui-label');
@@ -81,6 +85,8 @@ const Elements = {
     tabPanel: {
         ready() {
             const panel = this;
+
+            panel.$.tabPanel.injectionStyle(injectionStyle);
 
             panel.$.tabPanel.addEventListener('change', () => {
                 panel.dispatch('change');
@@ -98,6 +104,12 @@ const Elements = {
     },
 };
 
+exports.methods = {
+    apply() {
+        Editor.Message.broadcast('fbx-inspector:apply');
+    },
+};
+
 exports.listeners = {
     track(event) {
         if (event.args?.length) {
@@ -105,7 +117,7 @@ exports.listeners = {
             if (!value) { return; } // 只有被勾选的时候上报埋点
 
             const trackMap = {
-                meshOptimizer: 'A100000',
+                meshSimplify: 'A100000',
                 'fbx.smartMaterialEnabled': 'A100001',
                 disableMeshSplit: 'A100002',
             };

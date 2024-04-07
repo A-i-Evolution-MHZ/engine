@@ -23,7 +23,7 @@
  THE SOFTWARE.
 */
 
-import { Event } from './event';
+import { Event } from '@base/event';
 import { SystemEventTypeUnion, SystemEventType } from '../event-enum';
 import { KeyCode } from '../key-code';
 
@@ -59,7 +59,7 @@ export class EventKeyboard extends Event {
      * @en Indicates whether the current key is being pressed
      * @zh 表示当前按键是否正在被按下
      */
-    public get isPressed () {
+    public get isPressed (): boolean {
         return this._isPressed;
     }
 

@@ -37,10 +37,11 @@
 #include "base/Macros.h"
 #include "platform/java/jni/JniHelper.h"
 #include "platform/java/jni/JniImp.h"
+#include "platform/java/jni/glue/JniNativeGlue.h"
 
 namespace {
-#ifndef JCLS_COCOSACTIVITY
-    #define JCLS_COCOSACTIVITY "com/cocos/lib/CocosActivity"
+#ifndef JCLS_COCOSENGINE
+    #define JCLS_COCOSENGINE "com/cocos/lib/CocosEngine"
 #endif
 } // namespace
 
@@ -50,10 +51,6 @@ SystemWindow::SystemWindow(uint32_t windowId, void *externalHandle)
 }
 
 void SystemWindow::setCursorEnabled(bool value) {
-}
-
-void SystemWindow::copyTextToClipboard(const ccstd::string &text) {
-    copyTextToClipboardJNI(text);
 }
 
 void SystemWindow::setWindowHandle(void *handle) {
@@ -112,7 +109,7 @@ bool SystemWindow::createWindow(const char *title, int x, int y, int w, int h, i
     CC_UNUSED_PARAM(title);
     CC_UNUSED_PARAM(flags);
 #if (CC_PLATFORM == CC_PLATFORM_ANDROID)
-    cc::JniHelper::callObjectVoidMethod(cc::JniHelper::getActivity(), JCLS_COCOSACTIVITY, "createSurface", x, y, w, h, static_cast<jint>(_windowId));
+    JniHelper::callStaticVoidMethod(JCLS_COCOSENGINE, "createSurface", x, y, w, h, static_cast<jint>(_windowId));
 #endif
     return true;
 }
@@ -121,7 +118,7 @@ bool SystemWindow::createWindow(const char *title, int w, int h, int flags) {
     CC_UNUSED_PARAM(title);
     CC_UNUSED_PARAM(flags);
 #if (CC_PLATFORM == CC_PLATFORM_ANDROID)
-    cc::JniHelper::callObjectVoidMethod(cc::JniHelper::getActivity(), JCLS_COCOSACTIVITY, "createSurface", 0, 0, w, h, static_cast<jint>(_windowId));
+    JniHelper::callStaticVoidMethod(JCLS_COCOSENGINE, "createSurface", 0, 0, w, h, static_cast<jint>(_windowId));
 #endif
     return true;
 }

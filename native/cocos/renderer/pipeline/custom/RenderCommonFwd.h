@@ -44,6 +44,7 @@ struct RasterPassTag;
 struct RasterSubpassTag;
 struct ComputeSubpassTag;
 struct ComputeTag;
+struct ResolveTag;
 struct CopyTag;
 struct MoveTag;
 struct RaytraceTag;
@@ -61,12 +62,8 @@ enum class SceneFlags : uint32_t;
 enum class LightingMode : uint32_t;
 enum class AttachmentType;
 enum class AccessType;
-
-struct RasterView;
-
 enum class ClearValueType;
 
-struct ComputeView;
 struct LightInfo;
 
 enum class DescriptorTypeOrder;
@@ -75,7 +72,12 @@ struct Descriptor;
 struct DescriptorBlock;
 struct DescriptorBlockFlattened;
 struct DescriptorBlockIndex;
+
+enum class ResolveFlags : uint32_t;
+
+struct ResolvePair;
 struct CopyPair;
+struct UploadPair;
 struct MovePair;
 struct PipelineStatistics;
 
@@ -86,13 +88,8 @@ struct PipelineStatistics;
 namespace ccstd {
 
 template <>
-struct hash<cc::render::RasterView> {
-    hash_t operator()(const cc::render::RasterView& val) const noexcept;
-};
-
-template <>
-struct hash<cc::render::ComputeView> {
-    hash_t operator()(const cc::render::ComputeView& val) const noexcept;
+struct hash<cc::render::ResolvePair> {
+    hash_t operator()(const cc::render::ResolvePair& val) const noexcept;
 };
 
 } // namespace ccstd

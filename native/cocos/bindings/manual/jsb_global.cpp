@@ -26,12 +26,14 @@
 #include "application/ApplicationManager.h"
 #include "base/Data.h"
 #include "base/DeferredReleasePool.h"
+#include "base/Log.h"
 #include "base/Scheduler.h"
 #include "base/ThreadPool.h"
 #include "base/ZipUtils.h"
 #include "base/base64.h"
 #include "bindings/auto/jsb_cocos_auto.h"
 #include "core/data/JSBNativeDataHolder.h"
+#include "engine/Engine.h"
 #include "gfx-base/GFXDef.h"
 #include "jsb_conversions.h"
 #include "network/Downloader.h"
@@ -45,6 +47,11 @@
 #if CC_PLATFORM == CC_PLATFORM_ANDROID
     #include "platform/java/jni/JniImp.h"
 #endif
+
+#if CC_PLATFORM == CC_PLATFORM_OPENHARMONY && SCRIPT_ENGINE_TYPE != SCRIPT_ENGINE_NAPI
+    #include "platform/openharmony/napi/NapiHelper.h"
+#endif
+
 #include <chrono>
 #include <regex>
 #include <sstream>
@@ -56,6 +63,25 @@ static LegacyThreadPool *gThreadPool = nullptr;
 static std::shared_ptr<cc::network::Downloader> gLocalDownloader = nullptr;
 static ccstd::unordered_map<ccstd::string, std::function<void(const ccstd::string &, unsigned char *, uint)>> gLocalDownloaderHandlers;
 static uint64_t gLocalDownloaderTaskId = 1000000;
+
+static bool jsb_set_blocking_timeout(se::State &state) { // NOLINT
+    int32_t blockingTimeout = state.args()[0].toInt32();
+    if (blockingTimeout < 0) {
+        CC_LOG_WARNING("The blockingTimeout value must be zero or greater. Setting a negative value will automatically default it to zero, subsequently disabling block detection.");
+        blockingTimeout = 0;
+    }
+    auto *engine = static_cast<cc::Engine *>(CC_CURRENT_ENGINE().get());
+    engine->setBlockingTimeout(blockingTimeout);
+    return true;
+}
+SE_BIND_PROP_SET(jsb_set_blocking_timeout)
+
+static bool jsb_get_blocking_timeout(se::State &state) { // NOLINT
+    auto *engine = static_cast<cc::Engine *>(CC_CURRENT_ENGINE().get());
+    state.rval().setInt32(engine->getBlockingTimeout());
+    return true;
+}
+SE_BIND_PROP_GET(jsb_get_blocking_timeout)
 
 static cc::network::Downloader *localDownloader() {
     if (!gLocalDownloader) {
@@ -789,9 +815,9 @@ static bool JSB_copyTextToClipboard(se::State &s) { // NOLINT
         ccstd::string text;
         ok = sevalue_to_native(args[0], &text);
         SE_PRECONDITION2(ok, false, "text is invalid!");
-        ISystemWindow *systemWindowIntf = CC_GET_PLATFORM_INTERFACE(ISystemWindow);
-        CC_ASSERT_NOT_NULL(systemWindowIntf);
-        systemWindowIntf->copyTextToClipboard(text);
+        ISystem *systemIntf = CC_GET_PLATFORM_INTERFACE(ISystem);
+        CC_ASSERT_NOT_NULL(systemIntf);
+        systemIntf->copyTextToClipboard(text);
         return true;
     }
 
@@ -1395,6 +1421,127 @@ static bool JSB_process_get_argv(se::State &s) // NOLINT(readability-identifier-
 }
 SE_BIND_PROP_GET(JSB_process_get_argv)
 
+#if CC_PLATFORM == CC_PLATFORM_OPENHARMONY && SCRIPT_ENGINE_TYPE != SCRIPT_ENGINE_NAPI
+
+static bool sevalue_to_napivalue(const se::Value &seVal, Napi::Value *napiVal, Napi::Env env);
+
+static bool seobject_to_napivalue(se::Object *seObj, Napi::Value *napiVal, Napi::Env env) {
+    auto napiObj = Napi::Object::New(env);
+    ccstd::vector<ccstd::string> allKeys;
+    bool ok = seObj->getAllKeys(&allKeys);
+    if (ok && !allKeys.empty()) {
+        for (const auto &key : allKeys) {
+            Napi::Value napiProp;
+            se::Value prop;
+            ok = seObj->getProperty(key, &prop);
+            if (ok) {
+                ok = sevalue_to_napivalue(prop, &napiProp, env);
+                if (ok) {
+                    napiObj.Set(key.c_str(), napiProp);
+                }
+            }
+        }
+    }
+    *napiVal = napiObj;
+    return true;
+}
+
+static bool sevalue_to_napivalue(const se::Value &seVal, Napi::Value *napiVal, Napi::Env env) {
+    // Only supports number or {tag: number, url: string} now
+    if (seVal.isNumber()) {
+        *napiVal = Napi::Number::New(env, seVal.toDouble());
+    } else if (seVal.isString()) {
+        *napiVal = Napi::String::New(env, seVal.toString().c_str());
+    } else if (seVal.isBoolean()) {
+        *napiVal = Napi::Boolean::New(env, seVal.toBoolean());
+    } else if (seVal.isObject()) {
+        seobject_to_napivalue(seVal.toObject(), napiVal, env);
+    } else {
+        CC_LOG_WARNING("sevalue_to_napivalue, Unsupported type: %d", static_cast<int32_t>(seVal.getType()));
+        return false;
+    }
+
+    return true;
+}
+
+static bool JSB_openharmony_postMessage(se::State &s) { // NOLINT(readability-identifier-naming)
+    const auto &args = s.args();
+    size_t argc = args.size();
+
+    if (argc == 2) {
+        bool ok = false;
+        ccstd::string msgType;
+        ok = sevalue_to_native(args[0], &msgType, s.thisObject());
+        SE_PRECONDITION2(ok, false, "Error processing arguments");
+
+        const auto &arg1 = args[1];
+        auto env = NapiHelper::getWorkerEnv();
+
+        Napi::Value napiArg1 = env.Undefined();
+
+        if (arg1.isNumber()) {
+            napiArg1 = Napi::Number::New(env, arg1.toDouble());
+        } else if (arg1.isObject()) {
+            seobject_to_napivalue(arg1.toObject(), &napiArg1, env);
+        } else {
+            SE_REPORT_ERROR("postMessage, Unsupported type");
+            return false;
+        }
+
+        NapiHelper::postMessageToUIThread(msgType.c_str(), napiArg1);
+        return true;
+    }
+
+    SE_REPORT_ERROR("wrong number of arguments: %d, was expecting %d", (int)argc, 2);
+    return false;
+}
+SE_BIND_FUNC(JSB_openharmony_postMessage)
+
+static bool JSB_empty_promise_then(se::State &s) {
+    return true;
+}
+SE_BIND_FUNC(JSB_empty_promise_then)
+
+static bool JSB_openharmony_postSyncMessage(se::State &s) { // NOLINT(readability-identifier-naming)
+    const auto &args = s.args();
+    size_t argc = args.size();
+
+    if (argc == 2) {
+        bool ok = false;
+        ccstd::string msgType;
+        ok = sevalue_to_native(args[0], &msgType, s.thisObject());
+        SE_PRECONDITION2(ok, false, "Error processing arguments");
+
+        const auto &arg1 = args[1];
+        auto env = NapiHelper::getWorkerEnv();
+
+        Napi::Value napiArg1 = env.Undefined();
+
+        if (arg1.isNumber()) {
+            napiArg1 = Napi::Number::New(env, arg1.toDouble());
+        } else if (arg1.isObject()) {
+            seobject_to_napivalue(arg1.toObject(), &napiArg1, env);
+        } else {
+            SE_REPORT_ERROR("postMessage, Unsupported type");
+            return false;
+        }
+
+        Napi::Value napiPromise = NapiHelper::postSyncMessageToUIThread(msgType.c_str(), napiArg1);
+
+        //TODO(cjh): Implement Promise for se
+        se::HandleObject retObj(se::Object::createPlainObject());
+        retObj->defineFunction("then", _SE(JSB_empty_promise_then));
+        s.rval().setObject(retObj);
+        //
+        return true;
+    }
+
+    SE_REPORT_ERROR("wrong number of arguments: %d, was expecting %d", (int)argc, 2);
+    return false;
+}
+SE_BIND_FUNC(JSB_openharmony_postSyncMessage)
+#endif
+
 bool jsb_register_global_variables(se::Object *global) { // NOLINT
     gThreadPool = LegacyThreadPool::newFixedThreadPool(3);
 
@@ -1423,6 +1570,12 @@ bool jsb_register_global_variables(se::Object *global) { // NOLINT
     __jsbObj->defineFunction("setCursorEnabled", _SE(JSB_setCursorEnabled));
     __jsbObj->defineFunction("saveByteCode", _SE(JSB_saveByteCode));
     __jsbObj->defineFunction("createExternalArrayBuffer", _SE(jsb_createExternalArrayBuffer));
+
+    se::HandleObject monitorObj(se::Object::createPlainObject());
+    se::HandleObject blockingObj(se::Object::createPlainObject());
+    monitorObj->setProperty("blocking", se::Value(blockingObj));
+    blockingObj->defineProperty("timeout", _SE(jsb_get_blocking_timeout), _SE(jsb_set_blocking_timeout));
+    __jsbObj->setProperty("monitor", se::Value(monitorObj));
 
     // Create process object
     se::HandleObject processObj{se::Object::createPlainObject()};
@@ -1457,6 +1610,15 @@ bool jsb_register_global_variables(se::Object *global) { // NOLINT
     se::HandleObject performanceObj(se::Object::createPlainObject());
     performanceObj->defineFunction("now", _SE(js_performance_now));
     global->setProperty("performance", se::Value(performanceObj));
+
+#if CC_PLATFORM == CC_PLATFORM_OPENHARMONY
+    #if SCRIPT_ENGINE_TYPE != SCRIPT_ENGINE_NAPI
+    se::HandleObject ohObj(se::Object::createPlainObject());
+    global->setProperty("oh", se::Value(ohObj));
+    ohObj->defineFunction("postMessage", _SE(JSB_openharmony_postMessage));
+    ohObj->defineFunction("postSyncMessage", _SE(JSB_openharmony_postSyncMessage));
+    #endif
+#endif
 
     jsb_register_TextEncoder(global);
     jsb_register_TextDecoder(global);

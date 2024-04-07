@@ -24,13 +24,12 @@
 
 import { EDITOR, TEST } from 'internal:constants';
 import { MouseCallback } from 'pal/input';
-import { systemInfo } from 'pal/system-info';
-import { screenAdapter } from 'pal/screen-adapter';
+import { systemInfo, Feature } from '@pal/system-info';
+import { screenAdapter } from '@pal/screen-adapter';
+import { EventTarget } from '@base/event';
+import { Rect, Vec2 } from '@base/math';
 import { EventMouse } from '../../../cocos/input/types';
-import { EventTarget } from '../../../cocos/core/event';
-import { Rect, Vec2 } from '../../../cocos/core/math';
 import { InputEventType } from '../../../cocos/input/types/event-enum';
-import { Feature } from '../../system-info/enum-type';
 
 export class MouseInputSource {
     private _canvas?: HTMLCanvasElement;
@@ -60,12 +59,12 @@ export class MouseInputSource {
         }
     }
 
-    public dispatchMouseDownEvent (nativeMouseEvent: any) { this._handleMouseDown(nativeMouseEvent); }
-    public dispatchMouseMoveEvent (nativeMouseEvent: any) { this._handleMouseMove(nativeMouseEvent); }
-    public dispatchMouseUpEvent (nativeMouseEvent: any) { this._handleMouseUp(nativeMouseEvent); }
-    public dispatchScrollEvent (nativeMouseEvent: WheelEvent) { this._handleMouseWheel(nativeMouseEvent); }
+    public dispatchMouseDownEvent (nativeMouseEvent: any): void { this._handleMouseDown(nativeMouseEvent); }
+    public dispatchMouseMoveEvent (nativeMouseEvent: any): void { this._handleMouseMove(nativeMouseEvent); }
+    public dispatchMouseUpEvent (nativeMouseEvent: any): void { this._handleMouseUp(nativeMouseEvent); }
+    public dispatchScrollEvent (nativeMouseEvent: WheelEvent): void { this._handleMouseWheel(nativeMouseEvent); }
 
-    public on (eventType: InputEventType, callback: MouseCallback, target?: any) {
+    public on (eventType: InputEventType, callback: MouseCallback, target?: any): void {
         this._eventTarget.on(eventType, callback, target);
     }
 
@@ -88,7 +87,7 @@ export class MouseInputSource {
         return new Vec2(x, y);
     }
 
-    private _registerEvent () {
+    private _registerEvent (): void {
         // register mouse down event
         window.addEventListener('mousedown', () => {
             this._isPressed = true;
@@ -108,8 +107,8 @@ export class MouseInputSource {
     }
 
     // To be removed in the future.
-    private _registerPointerLockEvent () {
-        const lockChangeAlert = () => {
+    private _registerPointerLockEvent (): void {
+        const lockChangeAlert = (): void => {
             const canvas = this._canvas;
             // NOTE: mozPointerLockElement is not a standard web interface
             if (document.pointerLockElement === canvas || (document as any).mozPointerLockElement === canvas) {
@@ -127,7 +126,7 @@ export class MouseInputSource {
     }
 
     private _createCallback (eventType: InputEventType) {
-        return (mouseEvent: MouseEvent) => {
+        return (mouseEvent: MouseEvent): void => {
             const location = this._getLocation(mouseEvent);
             const { button, buttons } = mouseEvent;
             let targetButton = button;
@@ -172,7 +171,7 @@ export class MouseInputSource {
         };
     }
 
-    private _handleMouseWheel (mouseEvent: WheelEvent) {
+    private _handleMouseWheel (mouseEvent: WheelEvent): void {
         const eventType = InputEventType.MOUSE_WHEEL;
         const location = this._getLocation(mouseEvent);
         const button = mouseEvent.button;

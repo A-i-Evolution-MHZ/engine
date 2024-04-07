@@ -23,10 +23,11 @@
 */
 
 import { DEV } from 'internal:constants';
-import { getSuper, mixin, getClassName } from '../../utils/js-typed';
-import { CCClass } from '../class';
-import { doValidateMethodWithProps_DEV } from '../utils/preprocess-class';
-import { CACHE_KEY, makeSmartClassDecorator } from './utils';
+import { js } from '@base/utils';
+import { CCClass, doValidateMethodWithProps_DEV } from '@base/object';
+import { getClassDecoratorStash, makeSmartClassDecorator, deleteClassDecoratorStash } from './utils';
+
+const { getSuper, mixin, getClassName } = js;
 
 /**
  * @en Declare a standard class as a CCClass, please refer to the [document](https://docs.cocos.com/creator3d/manual/en/scripting/ccclass.html)
@@ -61,14 +62,14 @@ export const ccclass: ((name?: string) => ClassDecorator) & ClassDecorator = mak
         extends: base,
         ctor: constructor,
     };
-    const cache = constructor[CACHE_KEY];
+    const cache = getClassDecoratorStash(constructor);
     if (cache) {
         const decoratedProto = cache.proto;
         if (decoratedProto) {
             // decoratedProto.properties = createProperties(ctor, decoratedProto.properties);
             mixin(proto, decoratedProto);
         }
-        constructor[CACHE_KEY] = undefined;
+        deleteClassDecoratorStash(constructor);
     }
 
     const res = CCClass(proto);
@@ -88,5 +89,6 @@ export const ccclass: ((name?: string) => ClassDecorator) & ClassDecorator = mak
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return res;
 });

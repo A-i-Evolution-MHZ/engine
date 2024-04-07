@@ -22,20 +22,13 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    help,
-    executeInEditMode,
-    menu,
-    type,
-    editable,
-    serializable,
-    tooltip,
-} from 'cc.decorator';
+import { ccclass, help, executeInEditMode, menu, type, editable, serializable, tooltip } from 'cc.decorator';
+import { warnID } from '@base/debug';
 import { Collider } from './collider';
 import { Mesh } from '../../../../3d/assets';
 import { ITrimeshShape } from '../../../spec/i-physics-shape';
-import { EColliderType } from '../../physics-enum';
+import { EColliderType, ERigidBodyType } from '../../physics-enum';
+import { RigidBody } from '../rigid-body';
 
 /**
  * @en
@@ -58,7 +51,7 @@ export class MeshCollider extends Collider {
      */
     @type(Mesh)
     @tooltip('i18n:physics3d.collider.mesh_mesh')
-    get mesh () {
+    get mesh (): Mesh | null {
         return this._mesh;
     }
 
@@ -76,7 +69,7 @@ export class MeshCollider extends Collider {
      */
     @editable
     @tooltip('i18n:physics3d.collider.mesh_convex')
-    get convex () {
+    get convex (): boolean {
         return this._convex;
     }
 
@@ -93,11 +86,20 @@ export class MeshCollider extends Collider {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    get shape () {
+    get shape (): ITrimeshShape {
         return this._shape as ITrimeshShape;
     }
 
-    /// PRIVATE PROPERTY ///
+    protected onEnable (): void {
+        super.onEnable();
+
+        if (this.node) {
+            const body = this.node.getComponent(RigidBody);
+            if (body && body.isValid && (body.type === ERigidBodyType.DYNAMIC) && !this.convex) {
+                warnID(9630, this.node.name);
+            }
+        }
+    }
 
     @serializable
     private _mesh: Mesh | null = null;

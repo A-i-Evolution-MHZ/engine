@@ -1,8 +1,10 @@
-const { template, $, update } = require('./base');
+const { template, $, update, close } = require('./base');
+const { getMessageProtocolScene } = require('../utils/prop');
 
 exports.template = template;
 exports.$ = $;
 exports.update = update;
+exports.close = close;
 
 exports.ready = function() {
     this.elements = {
@@ -20,18 +22,17 @@ exports.ready = function() {
 
                 $button.addEventListener('change', (event) => {
                     event.stopPropagation();
-                    Editor.Message.send('scene', 'snapshot');
                 });
 
                 $button.addEventListener('confirm', async (event) => {
                     event.stopPropagation();
 
                     const uuids = this.dump.value.uuid.values || [this.dump.value.uuid.value];
+                    const undoID = await Editor.Message.request(getMessageProtocolScene(this.$this), 'begin-recording', uuids);
                     for (const uuid of uuids) {
-                        await Editor.Message.request('scene', 'regenerate-polygon-2d-points', uuid);
+                        await Editor.Message.request(getMessageProtocolScene(this.$this), 'regenerate-polygon-2d-points', uuid);
                     }
-
-                    Editor.Message.send('scene', 'snapshot');
+                    await Editor.Message.request(getMessageProtocolScene(this.$this), 'end-recording', undoID);
                 });
             },
         },

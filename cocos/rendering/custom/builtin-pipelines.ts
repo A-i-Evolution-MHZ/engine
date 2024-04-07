@@ -24,51 +24,124 @@
 
 import { EDITOR } from 'internal:constants';
 import { Camera, CameraUsage } from '../../render-scene/scene';
-import { Pipeline, PipelineBuilder } from './pipeline';
-import { buildForwardPass, buildGBufferPass, buildLightingPass, buildPostprocessPass,
-    buildReflectionProbePasss, buildUIPass } from './define';
+import { BasicPipeline, PipelineBuilder } from './pipeline';
+import { buildClusterPasses } from './define';
 import { isUICamera } from './utils';
+import {
+    prepareResource,
+    setupForwardPass,
+    setupForwardRes,
+    setupReflectionProbePass,
+    setupReflectionProbeRes,
+    updateForwardRes,
+    updateReflectionProbeRes,
+    CameraInfo,
+    setupGBufferPass,
+    updateGBufferRes,
+    setupGBufferRes,
+    setupLightingPass,
+    setupLightingRes,
+    updateLightingRes,
+    setupPostprocessPass,
+    setupPostprocessRes,
+    updatePostprocessRes,
+    setupUIPass,
+    setupUIRes,
+    updateUIRes,
+    setupDeferredForward,
+    setupScenePassTiled,
+} from './pipeline-define';
+import { Feature } from '../../gfx';
 
 export class ForwardPipelineBuilder implements PipelineBuilder {
-    public setup (cameras: Camera[], ppl: Pipeline): void {
+    public setup (cameras: Camera[], ppl: BasicPipeline): void {
         for (let i = 0; i < cameras.length; i++) {
             const camera = cameras[i];
             if (camera.scene === null) {
                 continue;
             }
-            // forward pass
-            buildForwardPass(camera, ppl, false);
+            ppl.update(camera);
+            const info = prepareResource(ppl, camera, this.initResource, this.updateResource);
+            setupForwardPass(ppl, info);
             if (EDITOR) {
-                buildReflectionProbePasss(camera, ppl, false);
+                setupReflectionProbePass(ppl, info);
             }
         }
+    }
+    private initResource (ppl: BasicPipeline, cameraInfo: CameraInfo): void {
+        setupForwardRes(ppl, cameraInfo);
+        if (EDITOR) setupReflectionProbeRes(ppl, cameraInfo);
+    }
+    private updateResource (ppl: BasicPipeline, cameraInfo: CameraInfo): void {
+        updateForwardRes(ppl, cameraInfo);
+        if (EDITOR) updateReflectionProbeRes(ppl, cameraInfo);
     }
 }
 
 export class DeferredPipelineBuilder implements PipelineBuilder {
-    public setup (cameras: Camera[], ppl: Pipeline): void {
+    public setup (cameras: Camera[], ppl: BasicPipeline): void {
         for (let i = 0; i < cameras.length; ++i) {
             const camera = cameras[i];
             if (!camera.scene) {
                 continue;
             }
+            ppl.update(camera);
+            const forceDisableCluster = false;
+            const useCluster = !forceDisableCluster && ppl.device.hasFeature(Feature.COMPUTE_SHADER);
+
             const isGameView = camera.cameraUsage === CameraUsage.GAME
                 || camera.cameraUsage === CameraUsage.GAME_VIEW;
+            const info = prepareResource(ppl, camera, this.initResource, this.updateResource);
             if (!isGameView) {
-                buildForwardPass(camera, ppl, false);
+                setupForwardPass(ppl, info);
                 continue;
             }
             if (!isUICamera(camera)) {
-            // GBuffer Pass
-                const gBufferInfo = buildGBufferPass(camera, ppl);
+                if (useCluster) {
+                    buildClusterPasses(camera, ppl);
+                }
+
+                // GBuffer Pass
+                setupGBufferPass(ppl, info);
                 // Lighting Pass
-                const lightInfo = buildLightingPass(camera, ppl, gBufferInfo);
+                const lightInfo = setupLightingPass(ppl, info, useCluster);
+                // Deferred ForwardPass, for non-surface-shader material and transparent material
+                setupDeferredForward(ppl, info, lightInfo.rtName, useCluster);
                 // Postprocess
-                buildPostprocessPass(camera, ppl, lightInfo.rtName);
+                setupPostprocessPass(ppl, info, lightInfo.rtName);
+
                 continue;
             }
             // render ui
-            buildUIPass(camera, ppl);
+            setupUIPass(ppl, info);
+        }
+    }
+    private initResource (ppl: BasicPipeline, cameraInfo: CameraInfo): void {
+        if (EDITOR) {
+            setupForwardRes(ppl, cameraInfo);
+            return;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        if (!isUICamera(cameraInfo.camera)) {
+            setupGBufferRes(ppl, cameraInfo);
+            setupLightingRes(ppl, cameraInfo);
+            setupPostprocessRes(ppl, cameraInfo);
+        } else {
+            setupUIRes(ppl, cameraInfo);
+        }
+    }
+    private updateResource (ppl: BasicPipeline, cameraInfo: CameraInfo): void {
+        if (EDITOR) {
+            updateForwardRes(ppl, cameraInfo);
+            return;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        if (!isUICamera(cameraInfo.camera)) {
+            updateGBufferRes(ppl, cameraInfo);
+            updateLightingRes(ppl, cameraInfo);
+            updatePostprocessRes(ppl, cameraInfo);
+        } else {
+            updateUIRes(ppl, cameraInfo);
         }
     }
 }

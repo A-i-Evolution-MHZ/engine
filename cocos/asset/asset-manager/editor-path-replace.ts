@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 import { EDITOR, NATIVE, PREVIEW, TEST } from 'internal:constants';
-import { assert, Settings, settings } from '../../core';
+import { assert, error } from '@base/debug';
+import { Settings, settings } from '../../core';
 import { fetchPipeline, pipeline } from './shared';
 import Task from './task';
 
@@ -30,9 +31,9 @@ declare const Editor: any;
 if ((EDITOR || PREVIEW) && !TEST) {
     const cache: {[uuid: string]: string | null} = {};
     const resolveMap: { [uuid: string]: Function[] } = {};
-    const replaceExtension  = (task: Task, done) => {
+    const replaceExtension  = (task: Task, done): void => {
         task.output = task.input;
-        (async () => {
+        (async (): Promise<void> => {
             for (let i = 0; i < task.input.length; i++) {
                 const item = task.input[i];
                 if (!item.uuid || item.isNative) { continue; }
@@ -46,17 +47,17 @@ if ((EDITOR || PREVIEW) && !TEST) {
                     continue;
                 }
             }
-        })().then(() => {
+        })().then((): void => {
             done(null, null);
-        }).catch((reason) => {
+        }).catch((reason): void => {
             done(reason, null);
         });
     };
 
-    const fetchText = (url) => new Promise((resolve, reject) => {
+    const fetchText = (url): Promise<unknown> => new Promise((resolve, reject): void => {
         const xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
-        xhr.onload = () => {
+        xhr.onload = (): void => {
             if (xhr.status !== 200) {
                 reject();
                 return;
@@ -71,7 +72,7 @@ if ((EDITOR || PREVIEW) && !TEST) {
             if (cache[uuid] !== null) {
                 return cache[uuid] as string;
             }
-            return new Promise((resolve) => {
+            return new Promise((resolve): void => {
                 resolveMap[uuid] = resolveMap[uuid] || [];
                 resolveMap[uuid].push(resolve);
             });
@@ -81,25 +82,25 @@ if ((EDITOR || PREVIEW) && !TEST) {
             let text = '';
             if (EDITOR) {
                 const info = await Editor.Message.request('asset-db', 'query-asset-info', uuid);
-                if (info && info.library['.cconb']) {
+                if (info && info.library['.bin'] && Object.keys(info.library).length === 1) {
                     text = '.cconb';
                 }
             } else {
                 let previewServer = '';
                 if (NATIVE) {
                     previewServer = settings.querySettings<string>(Settings.Category.PATH, 'previewServer') || '';
-                    assert(previewServer);
+                    assert(Boolean(previewServer));
                 }
                 text = await fetchText(`${previewServer}/query-extname/${uuid}`) as string;
             }
             cache[uuid] = text;
             if (resolveMap[uuid]) {
-                resolveMap[uuid].forEach((func) => func(text));
+                resolveMap[uuid].forEach((func): any => func(text));
                 resolveMap[uuid] = [];
             }
             return text;
-        } catch (error) {
-            console.error(error);
+        } catch (err) {
+            error(err);
             cache[uuid] = '';
             return '';
         }

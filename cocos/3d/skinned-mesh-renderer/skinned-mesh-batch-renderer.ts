@@ -23,21 +23,23 @@
 */
 
 import { EDITOR } from 'internal:constants';
-import {
-    ccclass, help, executeInEditMode, executionOrder, menu, tooltip, type, visible, override, serializable, editable,
-} from 'cc.decorator';
+import { ccclass, help, executeInEditMode, executionOrder, menu, tooltip, type, visible, override, serializable, editable } from 'cc.decorator';
+import { ImageData } from 'pal/image';
+import { warn } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { CCString } from '@base/object';
+import { Mat4, Vec2, Vec3 } from '@base/math';
 import { getWorldTransformUntilRoot } from '../../animation/transform-utils';
 import { Filter, PixelFormat } from '../../asset/assets/asset-enum';
 import { Material } from '../../asset/assets/material';
 import { Mesh } from '../assets/mesh';
 import { Skeleton } from '../assets/skeleton';
 import { Texture2D } from '../../asset/assets/texture-2d';
-import { CCString, Mat4, Vec2, Vec3, cclegacy } from '../../core';
 import { AttributeName, FormatInfos, Format, Type, Attribute, BufferTextureCopy } from '../../gfx';
 import { mapBuffer, readBuffer, writeBuffer } from '../misc/buffer';
 import { SkinnedMeshRenderer } from './skinned-mesh-renderer';
 
-const repeat = (n: number) => n - Math.floor(n);
+const repeat = (n: number): number => n - Math.floor(n);
 const batch_id: Attribute = new Attribute(AttributeName.ATTR_BATCH_ID, Format.R32F);
 const batch_uv: Attribute = new Attribute(AttributeName.ATTR_BATCH_UV, Format.RG32F);
 const batch_extras_size = FormatInfos[batch_id.format].size + FormatInfos[batch_uv.format].size;
@@ -88,7 +90,7 @@ export class SkinnedMeshUnit {
         Vec2.copy(this._offset, offset);
     }
 
-    get offset () {
+    get offset (): Vec2 {
         return this._offset;
     }
 
@@ -101,7 +103,7 @@ export class SkinnedMeshUnit {
         Vec2.copy(this._size, size);
     }
 
-    get size () {
+    get size (): Vec2 {
         return this._size;
     }
 
@@ -114,11 +116,11 @@ export class SkinnedMeshUnit {
         if (!comp) { return; }
         this.mesh = comp.mesh;
         this.skeleton = comp.skeleton;
-        this.material = comp.getMaterial(0);
+        this.material = comp.getSharedMaterial(0);
         if (comp.skinningRoot) { getWorldTransformUntilRoot(comp.node, comp.skinningRoot, this._localTransform); }
     }
 
-    get copyFrom () {
+    get copyFrom (): SkinnedMeshRenderer | null {
         return null;
     }
 }
@@ -172,7 +174,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
 
     @override
     @visible(false)
-    get mesh () {
+    get mesh (): Mesh | null {
         return super.mesh;
     }
 
@@ -182,7 +184,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
 
     @override
     @visible(false)
-    get skeleton () {
+    get skeleton (): Skeleton | null {
         return super.skeleton;
     }
 
@@ -190,12 +192,12 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         super.skeleton = val;
     }
 
-    public onLoad () {
+    public onLoad (): void {
         super.onLoad();
         this.cook();
     }
 
-    public onDestroy () {
+    public onDestroy (): void {
         for (const tex in this._textures) {
             this._textures[tex].destroy();
         }
@@ -210,24 +212,24 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _onMaterialModified (idx: number, material: Material | null) {
+    public _onMaterialModified (idx: number, material: Material | null): void {
         this.cookMaterials();
         super._onMaterialModified(idx, this.getMaterialInstance(idx));
     }
 
-    public cook () {
+    public cook (): void {
         this.cookMaterials();
         this.cookSkeletons();
         this.cookMeshes();
     }
 
-    public cookMaterials () {
+    public cookMaterials (): void {
         if (!this._batchMaterial) {
-            this._batchMaterial = this.getMaterial(0);
+            this._batchMaterial = this.getSharedMaterial(0);
         }
         const mat = this.getMaterialInstance(0);
         if (!mat || !this._batchMaterial || !this._batchMaterial.effectAsset) {
-            console.warn('incomplete batch material!'); return;
+            warn('incomplete batch material!'); return;
         }
         mat.copy(this._batchMaterial); this.resizeAtlases();
         const tech = mat.effectAsset!.techniques[mat.technique];
@@ -258,8 +260,8 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         }
     }
 
-    public cookSkeletons () {
-        if (!this._skinningRoot) { console.warn('no skinning root specified!'); return; }
+    public cookSkeletons (): void {
+        if (!this._skinningRoot) { warn('no skinning root specified!'); return; }
         // merge joints accordingly
         const joints: string[] = [];
         const bindposes: Mat4[] = [];
@@ -275,7 +277,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                     if (EDITOR) { // consistency check
                         Mat4.multiply(m4_1, partial.bindposes[i], m4_local);
                         if (!m4_1.equals(bindposes[idx])) {
-                            console.warn(`${this.node.name}: Inconsistent bindpose at ${joints[idx]} in unit ${u}, artifacts may present`);
+                            warn(`${this.node.name}: Inconsistent bindpose at ${joints[idx]} in unit ${u}, artifacts may present`);
                         }
                     }
                     continue;
@@ -299,7 +301,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         this.skeleton = skeleton;
     }
 
-    public cookMeshes () {
+    public cookMeshes (): void {
         let isValid = false;
         for (let u = 0; u < this.units.length; u++) {
             const unit = this.units[u];
@@ -452,11 +454,9 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         this._updateModels();
     }
 
-    protected cookTextures (target: Texture2D, prop: string, passIdx: number) {
-        const texImages: TexImageSource[] = [];
-        const texImageRegions: BufferTextureCopy[] = [];
-        const texBuffers: ArrayBufferView[] = [];
-        const texBufferRegions: BufferTextureCopy[] = [];
+    protected cookTextures (target: Texture2D, prop: string, passIdx: number): void {
+        const texImageDatas: ImageData[] = [];
+        const texRegions: BufferTextureCopy[] = [];
         for (let u = 0; u < this.units.length; u++) {
             const unit = this.units[u];
             if (!unit.material) { continue; }
@@ -467,23 +467,16 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 region.texOffset.y = unit.offset.y * this.atlasSize;
                 region.texExtent.width = unit.size.x * this.atlasSize;
                 region.texExtent.height = unit.size.y * this.atlasSize;
-                const { data } = partial.image;
-                if (!ArrayBuffer.isView(data)) {
-                    texImages.push(data);
-                    texImageRegions.push(region);
-                } else {
-                    texBuffers.push(data);
-                    texBufferRegions.push(region);
-                }
+                texImageDatas.push(partial.image.imageData);
+                texRegions.push(region);
             }
         }
         const gfxTex = target.getGFXTexture()!;
         const { device } = cclegacy.director.root!;
-        if (texBuffers.length > 0) { device.copyBuffersToTexture(texBuffers, gfxTex, texBufferRegions); }
-        if (texImages.length > 0) { device.copyTexImagesToTexture(texImages, gfxTex, texImageRegions); }
+        if (texImageDatas.length > 0) { device.copyImageDatasToTexture(texImageDatas, gfxTex, texRegions); }
     }
 
-    protected createTexture (prop: string) {
+    protected createTexture (prop: string): Texture2D {
         const tex = new Texture2D();
         tex.setFilters(Filter.LINEAR, Filter.LINEAR);
         tex.setMipFilter(Filter.NEAREST);
@@ -496,7 +489,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         return tex;
     }
 
-    protected resizeAtlases () {
+    protected resizeAtlases (): void {
         for (const prop in this._textures) {
             const tex = this._textures[prop];
             tex.reset({
@@ -507,7 +500,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         }
     }
 
-    private _createUnitMesh (unitIdx: number, mesh: Mesh) {
+    private _createUnitMesh (unitIdx: number, mesh: Mesh): Mesh {
         // add batch ID to this temp mesh
         // first, update bookkeeping
         const newMeshStruct: Mesh.IStruct = JSON.parse(JSON.stringify(mesh.struct));

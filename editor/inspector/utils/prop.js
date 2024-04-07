@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
+const i18nPrefix = 'i18n:';
 /*
  * Returns the ordered PropMap
  * @param {*} value of dump
@@ -183,7 +184,33 @@ exports.setHidden = function(data, element) {
     }
 };
 
-exports.updatePropByDump = function(panel, dump) {
+// In order to avoid a large number of operations in a short time, the function of returning the same operation result in a time period is added
+let getMessageProtocolSceneResult = '';
+let getMessageProtocolSceneStartTime = Date.now();
+exports.getMessageProtocolScene = function(element) {
+    if (getMessageProtocolSceneResult && Date.now() - getMessageProtocolSceneStartTime < 1000) {
+        return getMessageProtocolSceneResult;
+    }
+
+    getMessageProtocolSceneResult = '';
+    getMessageProtocolSceneStartTime = Date.now();
+
+    while (element) {
+        element = element.parentElement || element.getRootNode().host;
+        if (element && element.messageProtocol) {
+            getMessageProtocolSceneResult = element.messageProtocol.scene;
+            break;
+        }
+    }
+
+    if (!getMessageProtocolSceneResult) {
+        getMessageProtocolSceneResult = 'scene';
+    }
+
+    return getMessageProtocolSceneResult;
+};
+
+exports.updatePropByDump = function(panel, dump, ignores) {
     panel.dump = dump;
 
     if (!panel.elements) {
@@ -202,16 +229,19 @@ exports.updatePropByDump = function(panel, dump) {
     const newPropKeys = [];
 
     Object.keys(dump.value).forEach((key, index) => {
+        // 如果该属性在忽略列表中就不参与自动化渲染
+        if (Array.isArray(ignores) && ignores.includes(key)) {
+            return;
+        }
         const info = dump.value[key];
         if (!info.visible) {
             return;
         }
 
-        const element = panel.elements[key];
-        let $prop = panel.$props[key];
-
         newPropKeys.push(key);
 
+        const element = panel.elements[key];
+        let $prop = panel.$props[key];
         if (!$prop) {
             if (element && element.create) {
                 // when it need to go custom initialize
@@ -235,6 +265,8 @@ exports.updatePropByDump = function(panel, dump) {
                     if (!panel.$groups[id] && dump.groups[id]) {
                         if (dump.groups[id].style === 'tab') {
                             panel.$groups[id] = exports.createTabGroup(dump.groups[id], panel);
+                        } else if (dump.groups[id].style === 'section') {
+                            panel.$groups[id] = exports.createGroup(dump.groups[id]);
                         }
                     }
 
@@ -242,13 +274,18 @@ exports.updatePropByDump = function(panel, dump) {
                         if (!panel.$groups[id].isConnected) {
                             exports.appendChildByDisplayOrder(panel.$.componentContainer, panel.$groups[id]);
                         }
-
                         if (dump.groups[id].style === 'tab') {
                             exports.appendToTabGroup(panel.$groups[id], name);
+                        } else if (dump.groups[id].style === 'section') {
+                            exports.appendToGroup(panel.$groups[id], name);
                         }
                     }
 
-                    exports.appendChildByDisplayOrder(panel.$groups[id].tabs[name], $prop);
+                    if (dump.groups[id].style === 'tab') {
+                        exports.appendChildByDisplayOrder(panel.$groups[id].tabs[name], $prop);
+                    } else if (dump.groups[id].style === 'section') {
+                        exports.appendChildByDisplayOrder(panel.$groups[id].names[name], $prop);
+                    }
                 } else {
                     exports.appendChildByDisplayOrder(panel.$.componentContainer, $prop);
                 }
@@ -257,7 +294,11 @@ exports.updatePropByDump = function(panel, dump) {
             if (!element || !element.isAppendToParent || element.isAppendToParent.call(panel)) {
                 if (info.group && dump.groups) {
                     const { id = 'default', name } = info.group;
-                    exports.appendChildByDisplayOrder(panel.$groups[id].tabs[name], $prop);
+                    if (dump.groups[id].style === 'tab') {
+                        exports.appendChildByDisplayOrder(panel.$groups[id].tabs[name], $prop);
+                    } else {
+                        exports.appendChildByDisplayOrder(panel.$groups[id].names[name], $prop);
+                    }
                 } else {
                     exports.appendChildByDisplayOrder(panel.$.componentContainer, $prop);
                 }
@@ -290,7 +331,7 @@ exports.updatePropByDump = function(panel, dump) {
         }
     }
 
-    exports.toggleGroups(panel.$groups);
+    exports.toggleGroup(panel.$groups);
 };
 
 /**
@@ -305,13 +346,9 @@ exports.isMultipleInvalid = function(dump) {
 
     return invalid;
 };
+
 /**
  * Get the name based on the dump data
- */
-/**
- *
- * @param {string} dump
- * @returns
  */
 exports.getName = function(dump) {
     if (!dump) {
@@ -319,7 +356,14 @@ exports.getName = function(dump) {
     }
 
     if (dump.displayName) {
-        return dump.displayName;
+        if (dump.displayName.startsWith(i18nPrefix)) {
+            const key = dump.displayName.substring(i18nPrefix.length);
+            if (Editor.I18n.t(key)) {
+                return dump.displayName;
+            }
+        } else {
+            return dump.displayName;
+        }
     }
 
     let name = dump.name || '';
@@ -333,6 +377,15 @@ exports.getName = function(dump) {
     return name.trim();
 };
 
+exports.createGroup = function(dump) {
+    const $group = document.createElement('div');
+    $group.setAttribute('class', 'ui-prop-group');
+    $group.dump = dump;
+    $group.names = {};
+    $group.displayOrder = dump.displayOrder;
+
+    return $group;
+};
 exports.createTabGroup = function(dump, panel) {
     const $group = document.createElement('div');
     $group.setAttribute('class', 'tab-group');
@@ -346,8 +399,12 @@ exports.createTabGroup = function(dump, panel) {
     $group.appendChild($group.$header);
 
     $group.$header.addEventListener('change', (e) => {
+        active(e.target.value);
+    });
+
+    function active(index) {
         const tabNames = Object.keys($group.tabs);
-        const tabName = tabNames[e.target.value || 0];
+        const tabName = tabNames[index];
         $group.childNodes.forEach((child) => {
             if (!child.classList.contains('tab-content')) {
                 return;
@@ -358,7 +415,7 @@ exports.createTabGroup = function(dump, panel) {
                 child.style.display = 'none';
             }
         });
-    });
+    }
 
     // check style
     if (!panel.$this.shadowRoot.querySelector('style#group-style')) {
@@ -366,42 +423,61 @@ exports.createTabGroup = function(dump, panel) {
         style.setAttribute('id', 'group-style');
         style.innerText = `
             .tab-group {
-                margin-top: 10px;
-                margin-bottom: 10px;
+                margin-top: 4px;
             }
             .tab-content {
                 display: none;
-                border: 1px dashed var(--color-normal-border);
-                padding: 10px;
-                margin-top: -9px;
-                border-top-right-radius: calc(var(--size-normal-radius) * 1px);
-                border-bottom-left-radius: calc(var(--size-normal-radius) * 1px);
-                border-bottom-right-radius: calc(var(--size-normal-radius) * 1px);
+                padding-bottom: 6px;
             }`;
 
         panel.$.componentContainer.before(style);
     }
 
     setTimeout(() => {
-        const $firstTab = $group.$header.shadowRoot.querySelector('ui-button');
-        if ($firstTab) {
-            $firstTab.dispatch('confirm');
-        }
+        active(0);
     });
 
     return $group;
 };
-exports.toggleGroups = function($groups) {
-    for (const key in $groups) {
-        const $props = Array.from($groups[key].querySelectorAll('.tab-content > ui-prop'));
-        const show = $props.some($prop => getComputedStyle($prop).display !== 'none');
-        if (show) {
-            $groups[key].removeAttribute('hidden');
-        } else {
-            $groups[key].setAttribute('hidden', '');
-        }
+
+exports.appendToGroup = function($group, name) {
+    if ($group.names[name]) {
+        return;
     }
-},
+
+    const $content = document.createElement('ui-section');
+    $content.setAttribute('class', 'ui-prop-group-content');
+    $content.setAttribute('expand', '');
+
+    let parentCacheKey = 'ui-prop-group-content';
+    let $parent = $group;
+    while ($parent) {
+        if ($parent.hasAttribute('cache-expand')) {
+            parentCacheKey = $parent.getAttribute('cache-expand');
+            break;
+        }
+
+        $parent = $parent.parentElement;
+    }
+    $content.setAttribute('cache-expand', `${parentCacheKey}-${name}`);
+
+    const $header = document.createElement('ui-label');
+    $header.setAttribute('slot', 'header');
+
+    let displayName = name;
+    if (displayName.startsWith(i18nPrefix)) {
+        displayName = exports.getName({ displayName: name });
+    } else {
+        displayName = exports.getName({ name });
+    }
+
+    $header.setAttribute('value', displayName);
+    $content.appendChild($header);
+
+    $group.appendChild($content);
+    $group.names[name] = $content;
+
+};
 exports.appendToTabGroup = function($group, tabName) {
     if ($group.tabs[tabName]) {
         return;
@@ -416,14 +492,19 @@ exports.appendToTabGroup = function($group, tabName) {
     $group.appendChild($content);
 
     const $label = document.createElement('ui-label');
-    $label.value = exports.getName(tabName);
+    let displayName = tabName;
+    if (displayName.startsWith(i18nPrefix)) {
+        displayName = exports.getName({ displayName: tabName });
+    } else {
+        displayName = exports.getName({ name: tabName });
+    }
+    $label.setAttribute('value', displayName);
 
     const $button = document.createElement('ui-button');
     $button.setAttribute('name', tabName);
     $button.appendChild($label);
     $group.$header.appendChild($button);
 };
-
 exports.appendChildByDisplayOrder = function(parent, newChild) {
     const displayOrder = newChild.displayOrder || 0;
     const children = Array.from(parent.children);
@@ -442,3 +523,61 @@ exports.appendChildByDisplayOrder = function(parent, newChild) {
         parent.appendChild(newChild);
     }
 };
+exports.toggleGroup = function($groups) {
+    for (const id in $groups) {
+        if ($groups[id].dump.style === 'section') {
+            const $contents = $groups[id].querySelectorAll('.ui-prop-group-content');
+            $contents.forEach($content => {
+                const $props = Array.from($content.querySelectorAll(':scope > ui-prop'));
+                const show = $props.some($prop => getComputedStyle($prop).display !== 'none');
+                if (show) {
+                    $content.removeAttribute('hidden');
+                } else {
+                    $content.setAttribute('hidden', '');
+                }
+            });
+        }
+
+        if ($groups[id].dump.style === 'tab') {
+            const $props = Array.from($groups[id].querySelectorAll('.tab-content > ui-prop'));
+            const show = $props.some($prop => getComputedStyle($prop).display !== 'none');
+            if (show) {
+                $groups[id].removeAttribute('hidden');
+            } else {
+                $groups[id].setAttribute('hidden', '');
+            }
+        }
+    }
+},
+exports.disconnectGroup = function(panel) {
+    if (panel.$groups) {
+        for (const key in panel.$groups) {
+            if (panel.$groups[key] instanceof HTMLElement) {
+                panel.$groups[key].remove();
+            }
+        }
+
+        panel.$groups = {};
+    }
+};
+
+exports.injectionStyle = `
+ui-prop,
+ui-section { margin-top: 4px; }
+
+ui-prop > ui-section,
+ui-prop > ui-prop,
+ui-section > ui-prop[slot="header"],
+ui-prop [slot="content"] ui-prop { 
+    margin-top: 0; 
+    margin-left: 0;
+}
+ui-prop[ui-section-config] + ui-section.config,
+ui-prop[ui-section-config] + ui-prop[ui-section-config],
+ui-section.config + ui-prop[ui-section-config],
+ui-section.config + ui-section.config { margin-top: 0; }
+
+ui-prop[ui-section-config]:last-child {
+    border-bottom: solid 1px var(--color-normal-fill-emphasis);
+}
+`;

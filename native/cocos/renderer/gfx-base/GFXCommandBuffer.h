@@ -46,6 +46,9 @@ public:
     virtual void end() = 0;
     virtual void beginRenderPass(RenderPass *renderPass, Framebuffer *fbo, const Rect &renderArea, const Color *colors, float depth, uint32_t stencil, CommandBuffer *const *secondaryCBs, uint32_t secondaryCBCount) = 0;
     virtual void endRenderPass() = 0;
+    virtual void insertMarker(const MarkerInfo &marker) = 0;
+    virtual void beginMarker(const MarkerInfo &marker) = 0;
+    virtual void endMarker() = 0;
     virtual void bindPipelineState(PipelineState *pso) = 0;
     virtual void bindDescriptorSet(uint32_t set, DescriptorSet *descriptorSet, uint32_t dynamicOffsetCount, const uint32_t *dynamicOffsets) = 0;
     virtual void bindInputAssembler(InputAssembler *ia) = 0;
@@ -59,15 +62,23 @@ public:
     virtual void setStencilCompareMask(StencilFace face, uint32_t ref, uint32_t mask) = 0;
     virtual void nextSubpass() = 0;
     virtual void draw(const DrawInfo &info) = 0;
+    virtual void drawIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) = 0;
+    virtual void drawIndexedIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) = 0;
     virtual void updateBuffer(Buffer *buff, const void *data, uint32_t size) = 0;
     virtual void copyBuffersToTexture(const uint8_t *const *buffers, Texture *texture, const BufferTextureCopy *regions, uint32_t count) = 0;
     virtual void blitTexture(Texture *srcTexture, Texture *dstTexture, const TextureBlit *regions, uint32_t count, Filter filter) = 0;
+    virtual void copyTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) = 0;
+    virtual void resolveTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) = 0;
+    virtual void copyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, const BufferCopy *regions, uint32_t count) = 0;
     virtual void execute(CommandBuffer *const *cmdBuffs, uint32_t count) = 0;
     virtual void dispatch(const DispatchInfo &info) = 0;
     virtual void beginQuery(QueryPool *queryPool, uint32_t id) = 0;
     virtual void endQuery(QueryPool *queryPool, uint32_t id) = 0;
     virtual void resetQueryPool(QueryPool *queryPool) = 0;
     virtual void completeQueryPool(QueryPool *queryPool) {}
+
+    using CustomCommand = std::function<void(void *)>;
+    virtual void customCommand(CustomCommand &&cmd) {}
 
     // barrier: excutionBarrier
     // bufferBarriers: array of BufferBarrier*, descriptions of access of buffers

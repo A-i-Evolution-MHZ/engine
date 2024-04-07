@@ -52,9 +52,7 @@ public:
     using Super = MorphModel;
     BakedSkinningModel();
     ~BakedSkinningModel() override = default;
-
     void destroy() override;
-
     ccstd::vector<scene::IMacroPatch> getMacroPatches(index_t subModelIndex) override;
     void updateLocalDescriptors(index_t subModelIndex, gfx::DescriptorSet *descriptorSet) override;
     void updateTransform(uint32_t stamp) override;

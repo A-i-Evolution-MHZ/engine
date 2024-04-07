@@ -1,3 +1,5 @@
+import { setTimeoutRAF } from "@pal/utils";
+
 /**
  * @zh
  * 重命名对象[自身的、可枚举的](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/propertyIsEnumerable)指定属性，并且保持原本的属性顺序。
@@ -32,38 +34,38 @@
  * // 成功重命名，属性顺序保留
  * const original = { a: 1, b: 2, c: 3 };
  * Object.defineProperty(original, 'x', { value: '', enumerable: false });
- * console.log(original); // {a: 1, b: 2, c: 3, x: ''}
+ * log(original); // {a: 1, b: 2, c: 3, x: ''}
  *
  * const renamed = renameObjectProperty(original, 'b', 'd');
- * console.log(original === renamed) // false
- * console.log(original); // {a: 1, d: 2, c: 3}
- * console.log(Object.entries(renamed)) // [['a', 1], ['d', 2], ['c', 3]]
+ * log(original === renamed) // false
+ * log(original); // {a: 1, d: 2, c: 3}
+ * log(Object.entries(renamed)) // [['a', 1], ['d', 2], ['c', 3]]
  *
  * // 重命名失败：原始键不存在
- * console.log(renameObjectProperty(original, 'e', 'f') === original); // true
+ * log(renameObjectProperty(original, 'e', 'f') === original); // true
  * // 重命名失败：新键已存在
- * console.log(renameObjectProperty(original, 'e', 'a') === original); // true
+ * log(renameObjectProperty(original, 'e', 'a') === original); // true
  * // 重命名失败：原始键对应的属性不是自身可枚举的
- * console.log(renameObjectProperty(original, 'x', 'x1') === original); // true
+ * log(renameObjectProperty(original, 'x', 'x1') === original); // true
  * ```
  * @en
  * ```ts
  * // Rename succeed, key order is retained.
  * const original = { a: 1, b: 2, c: 3 };
  * Object.defineProperty(original, 'x', { value: '', enumerable: false });
- * console.log(original); // {a: 1, b: 2, c: 3, x: ''}
+ * log(original); // {a: 1, b: 2, c: 3, x: ''}
  *
  * const renamed = renameObjectProperty(original, 'b', 'd');
- * console.log(original === renamed) // false
- * console.log(original); // {a: 1, d: 2, c: 3}
- * console.log(Object.entries(renamed)) // [['a', 1], ['d', 2], ['c', 3]]
+ * log(original === renamed) // false
+ * log(original); // {a: 1, d: 2, c: 3}
+ * log(Object.entries(renamed)) // [['a', 1], ['d', 2], ['c', 3]]
  *
  * // Rename failed: the original key does not exist.
- * console.log(renameObjectProperty(original, 'e', 'f') === original); // true
+ * log(renameObjectProperty(original, 'e', 'f') === original); // true
  * // Rename failed: the new key has already existed.
- * console.log(renameObjectProperty(original, 'e', 'a') === original); // true
+ * log(renameObjectProperty(original, 'e', 'a') === original); // true
  * // Rename failed: the corresponding original property is not enumerable own property.
- * console.log(renameObjectProperty(original, 'x', 'x1') === original); // true
+ * log(renameObjectProperty(original, 'x', 'x1') === original); // true
  * ```
  */
 export function renameObjectProperty<T extends Record<PropertyKey, any>> (
@@ -71,9 +73,12 @@ export function renameObjectProperty<T extends Record<PropertyKey, any>> (
     originalPropertyKey: keyof T,
     newPropertyKey: keyof T,
 ): T {
-    if (!Object.prototype.propertyIsEnumerable.call(object, originalPropertyKey)) {
+    const { propertyIsEnumerable } = Object.prototype;
+
+    if (!propertyIsEnumerable.call(object, originalPropertyKey)) {
         return object;
     }
+
     if (newPropertyKey in object) {
         return object;
     }
@@ -81,17 +86,23 @@ export function renameObjectProperty<T extends Record<PropertyKey, any>> (
     const result = {} as T;
 
     if (typeof originalPropertyKey === 'symbol') {
-        (Object.entries(object)).forEach(([k, v]) => {
+        (Object.entries(object)).forEach(([k, v]): void => {
             result[k as keyof T] = v;
         });
-        Object.getOwnPropertySymbols(object).forEach((k) => {
+        Object.getOwnPropertySymbols(object).forEach((k): void => {
+            if (!propertyIsEnumerable.call(object, k)) {
+                return;
+            }
             result[k === originalPropertyKey ? newPropertyKey : k as keyof T] = object[k as keyof T];
         });
     } else {
-        Object.entries(object).forEach(([k, v]) => {
+        Object.entries(object).forEach(([k, v]): void => {
             result[k === originalPropertyKey ? newPropertyKey : k as keyof T] = v;
         });
-        Object.getOwnPropertySymbols(object).forEach((k) => {
+        Object.getOwnPropertySymbols(object).forEach((k): void => {
+            if (!propertyIsEnumerable.call(object, k)) {
+                return;
+            }
             result[k as keyof T] = object[k as keyof T];
         });
     }
@@ -132,7 +143,7 @@ export function renameObjectProperty<T extends Record<PropertyKey, any>> (
  *
  * new FooProxy(); // 这句会抛出异常
  *                 // 达到了我们的目的：不允许直接 `new Foo`
- * console.log(createFoo() instanceof FooProxy); // 输出 "true"
+ * log(createFoo() instanceof FooProxy); // 输出 "true"
  *                                               // 达到了我们的目的：可以使用 `instanceof`
  * ```
  * @en
@@ -153,7 +164,7 @@ export function renameObjectProperty<T extends Record<PropertyKey, any>> (
  *
  * new FooProxy(); // This will throw
  *                 // This is what we want to achieve: `new Foo` is not allowed
- * console.log(createFoo() instanceof FooProxy); // Print "true"
+ * log(createFoo() instanceof FooProxy); // Print "true"
  *                                               // This is what we want to achieve: `instanceof` is available
  * ```
  */
@@ -167,7 +178,7 @@ export const createInstanceofProxy = ((): CreateInstanceofProxySignature => {
     // To guarantee we won't suffer from platform issue, we do check here.
     let isSymbolHasInstanceAvailable = false;
     try {
-        class Array1 { static [Symbol.hasInstance] (instance: unknown) { return Array.isArray(instance); } }
+        class Array1 { static [Symbol.hasInstance] (instance: unknown): boolean { return Array.isArray(instance); } }
         isSymbolHasInstanceAvailable = ([] instanceof Array1);
     } catch {
         isSymbolHasInstanceAvailable = false;
@@ -175,17 +186,17 @@ export const createInstanceofProxy = ((): CreateInstanceofProxySignature => {
 
     // If `Symbol.hasInstance` is not available, fallback to return the original constructor.
     if (!isSymbolHasInstanceAvailable) {
-        return (constructor) => constructor;
+        return (constructor): any => constructor;
     }
 
     // Otherwise, proxy it.
-    return (constructor) => {
-        function InstanceOfProxy () {
+    return (constructor): any => {
+        function InstanceOfProxy (): void {
             throw new Error(`This function can not be called as a constructor.`);
         }
 
         Object.defineProperty(InstanceOfProxy, Symbol.hasInstance, {
-            value (instance: unknown) {
+            value (instance: unknown): boolean {
                 return instance instanceof constructor;
             },
         });
@@ -195,7 +206,19 @@ export const createInstanceofProxy = ((): CreateInstanceofProxySignature => {
 })();
 
 // May be hacky?
-type ExcludeConstructor<T> = Omit<T, never>;
+type ExcludeConstructor<T> = T;
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 type CreateInstanceofProxySignature = <TConstructor extends Function> (constructor: TConstructor) => ExcludeConstructor<TConstructor>;
+
+/**
+ * Invoke a function in next frame.
+ * @param callback The function to be invoked next frame.
+ * @param p1 The first parameter passed to `callback`.
+ * @param p2 The seconde parameter passed to `callback`.
+ */
+export function callInNextTick (callback: AnyFunction, p1?: unknown, p2?: unknown): void {
+    setTimeoutRAF(() => {
+        callback(p1, p2);
+    }, 0);
+}

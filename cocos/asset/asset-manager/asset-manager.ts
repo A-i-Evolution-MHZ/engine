@@ -24,8 +24,11 @@
 */
 
 import { BUILD, EDITOR, PREVIEW } from 'internal:constants';
+import { error } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { EventTarget } from '@base/event';
 import { Asset } from '../assets/asset';
-import { error, sys, Settings, settings, path, cclegacy } from '../../core';
+import { sys, Settings, settings, path } from '../../core';
 import Bundle from './bundle';
 import Cache, { ICache } from './cache';
 import CacheManager from './cache-manager';
@@ -41,16 +44,14 @@ import { Pipeline } from './pipeline';
 import preprocess from './preprocess';
 import { releaseManager } from './release-manager';
 import RequestItem from './request-item';
-import {
-    presets,
-    references,
-    assets, BuiltinBundleName, bundles, fetchPipeline, files, parsed, pipeline, transformPipeline, assetsOverrideMap, IRequest } from './shared';
+import { presets, references, assets, BuiltinBundleName, bundles, fetchPipeline, files, parsed, pipeline, transformPipeline, assetsOverrideMap, IRequest } from './shared';
 
 import Task from './task';
 import { combine, parse, replaceOverrideAsset } from './url-transformer';
 import { asyncify, parseParameters } from './utilities';
 import { IAddressableInfo, IAssetInfo, IPackInfo, ISceneInfo } from './config';
 
+const EVENT_ASSET_MISSING = 'asset-missing';
 /**
  * @zh
  * AssetManager 配置。
@@ -200,7 +201,7 @@ export class AssetManager {
      * 是否优先使用 image bitmap 来加载图片，启用之后，图片加载速度会更快, 但内存占用会变高。
      *
      */
-    public allowImageBitmap = !EDITOR && !sys.isMobile;
+    public allowImageBitmap = false;
 
     /**
      * @en
@@ -304,6 +305,7 @@ export class AssetManager {
     private _parsePipeline = BUILD ? null : new Pipeline('parse existing json', [this.loadPipe]);
     private _projectBundles: string[] = [];
     private static _instance: AssetManager;
+    private _eventTarget = new EventTarget();
 
     /**
      * @en
@@ -312,7 +314,7 @@ export class AssetManager {
      * @zh
      * [[AssetManager]] 的全局单例，你可以直接通过 [[assetManager]] 访问。
      */
-    static get instance () {
+    static get instance (): AssetManager {
         if (!this._instance) {
             this._instance = new AssetManager();
         }
@@ -346,6 +348,52 @@ export class AssetManager {
 
     /**
      * @en
+     * Add a delegate which will be invoked when asset is missing.
+     *
+     * @zh
+     * 添加当资源丢失时调用的委托。
+     *
+     * @param func - @en The missing asset delegate. @zh 资源丢失委托。
+     * @param target - @en The target of the missing asset delegate, can be null. @zh 资源丢失委托的目标对象，可以为空。
+     * @internal
+     * @engineInternal
+     */
+    public onAssetMissing (func: (parentAsset: Asset, owner: any, propName: string, uuid: string) => void, target?: any): void {
+        this._eventTarget.on(EVENT_ASSET_MISSING, func, target);
+    }
+
+    /**
+     * @en
+     * Remove the delegate when asset is missing.
+     * @zh
+     * 移除资源丢失时调用的委托。
+     * @param func - @en The missing asset delegate. @zh 资源丢失委托。
+     * @param target - @en The target of the missing asset delegate, can be null. @zh 资源丢失委托的目标对象，可以为空。
+     * @internal
+     * @engineInternal
+     */
+    public offAssetMissing (func: (parentAsset: Asset, owner: any, propName: string, uuid: string) => void, target?: any): void {
+        this._eventTarget.off(EVENT_ASSET_MISSING, func, target);
+    }
+
+    /**
+     * @en
+     * Dispatch event when asset is missing.
+     * @zh
+     * 触发资源丢失时事件。
+     * @param parentAsset - @en The parent asset of the missing asset. @zh 丢失的资源的父资源。
+     * @param owner - @en The owner of the missing asset. @zh 丢失的资源的拥有者。
+     * @param propName - @en The property name of the missing asset. @zh 丢失的资源的属性名称。
+     * @param uuid - @en The uuid of the missing asset. @zh 丢失的资源的 uuid。
+     * @internal
+     * @engineInternal
+     */
+    public dispatchAssetMissing (parentAsset: Asset, owner: any, propName: string, uuid: string): void {
+        this._eventTarget.emit(EVENT_ASSET_MISSING, parentAsset, owner, propName, uuid);
+    }
+
+    /**
+     * @en
      * Initializes assetManager with options.
      * This method will be called automatically when the engine starts, you should not call this method manually at any time.
      *
@@ -355,7 +403,7 @@ export class AssetManager {
      * @param options @en The configuration of asset manager. @zh 资源管理器的配置选项。
      * @internal
      */
-    public init (options: IAssetManagerOptions = {}) {
+    public init (options: IAssetManagerOptions = {}): void {
         const server = options.server || settings.querySettings(Settings.Category.ASSETS, 'server') || '';
         const bundleVers = options.bundleVers || settings.querySettings(Settings.Category.ASSETS, 'bundleVers') || {};
         const remoteBundles = options.remoteBundles || settings.querySettings(Settings.Category.ASSETS, 'remoteBundles') || [];
@@ -381,7 +429,7 @@ export class AssetManager {
         this._projectBundles = settings.querySettings(Settings.Category.ASSETS, 'projectBundles') || [];
         const assetsOverride = settings.querySettings(Settings.Category.ASSETS, 'assetsOverrides') || {};
         for (const key in assetsOverride) {
-            this.assetsOverrideMap.set(key, assetsOverride[key]);
+            this.assetsOverrideMap.set(key, assetsOverride[key] as string);
         }
     }
 
@@ -417,7 +465,7 @@ export class AssetManager {
      * @param bundle @en The bundle to be removed. @zh 准备移除的 Bundle。
      *
      */
-    public removeBundle (bundle: Bundle) {
+    public removeBundle (bundle: Bundle): void {
         bundle._destroy();
         bundles.remove(bundle.name);
     }
@@ -483,7 +531,7 @@ export class AssetManager {
         options?: { [key: string]: any, preset?: string } | ((finished: number, total: number, item: RequestItem) => void) | ((err: Error | null, data: any) => void) | null,
         onProgress?: ((finished: number, total: number, item: RequestItem) => void) | ((err: Error | null, data: any) => void) | null,
         onComplete?: ((err: Error | null, data: any) => void) | null,
-    ) {
+    ): void {
         const { options: opts, onProgress: onProg, onComplete: onComp } = parseParameters(options, onProgress, onComplete);
         opts.preset = opts.preset || 'default';
         requests = Array.isArray(requests) ? requests.slice() : requests;
@@ -533,7 +581,7 @@ export class AssetManager {
         options?: { [key: string]: any, preset?: string } | ((finished: number, total: number, item: RequestItem) => void) | ((err: Error | null, data: RequestItem[]) => void) | null,
         onProgress?: ((finished: number, total: number, item: RequestItem) => void) | ((err: Error | null, data: RequestItem[]) => void) | null,
         onComplete?: ((err: Error | null, data: RequestItem[]) => void) | null,
-    ) {
+    ): void {
         const { options: opts, onProgress: onProg, onComplete: onComp } = parseParameters(options, onProgress, onComplete);
         opts.preset = opts.preset || 'preload';
         requests = Array.isArray(requests) ? requests.slice() : requests;
@@ -564,14 +612,14 @@ export class AssetManager {
      * @zh 加载好的资源，如果加载过程出现了错误，资源将会 null。
      *
      * @example
-     * assetManager.loadRemote('http://www.cloud.com/test1.jpg', (err, texture) => console.log(err));
-     * assetManager.loadRemote('http://www.cloud.com/test2.mp3', (err, audioClip) => console.log(err));
-     * assetManager.loadRemote('http://www.cloud.com/test3', { ext: '.png' }, (err, texture) => console.log(err));
+     * assetManager.loadRemote('http://www.cloud.com/test1.jpg', (err, texture) => log(err));
+     * assetManager.loadRemote('http://www.cloud.com/test2.mp3', (err, audioClip) => log(err));
+     * assetManager.loadRemote('http://www.cloud.com/test3', { ext: '.png' }, (err, texture) => log(err));
      *
      */
     public loadRemote<T extends Asset> (url: string, options: { [k: string]: any, ext?: string } | null, onComplete?: ((err: Error | null, data: T) => void) | null): void;
     public loadRemote<T extends Asset> (url: string, onComplete?: ((err: Error | null, data: T) => void) | null): void;
-    public loadRemote<T extends Asset> (url: string, options?: { [k: string]: any, ext?: string } | ((err: Error | null, data: T) => void) | null, onComplete?: ((err: Error | null, data: T) => void) | null) {
+    public loadRemote<T extends Asset> (url: string, options?: { [k: string]: any, ext?: string } | ((err: Error | null, data: T) => void) | null, onComplete?: ((err: Error | null, data: T) => void) | null): void {
         const { options: opts, onComplete: onComp } = parseParameters<((err: Error | null, data: T) => void)>(options, undefined, onComplete);
 
         if (!opts.reloadAsset && this.assets.has(url)) {
@@ -581,12 +629,12 @@ export class AssetManager {
 
         opts.__isNative__ = true;
         opts.preset = opts.preset || 'remote';
-        this.loadAny({ url }, opts, null, (err, data) => {
+        this.loadAny({ url }, opts, null, (err, data): void => {
             if (err) {
                 error(err.message, err.stack);
-                if (onComp) { onComp(err, data); }
+                if (onComp) { onComp(err, data as T); }
             } else {
-                factory.create(url, data, opts.ext || path.extname(url), opts, (p1, p2) => {
+                factory.create(url, data, (opts.ext as string) || path.extname(url), opts, (p1, p2): void => {
                     if (onComp) { onComp(p1, p2 as T); }
                 });
             }
@@ -623,13 +671,13 @@ export class AssetManager {
      * @zh 加载完成的 bundle。如果加载过程中出现了错误，则为 null。
      *
      * @example
-     * loadBundle('myBundle', (err, bundle) => console.log(bundle));
-     * loadBundle('http://localhost:8080/test', null, (err, bundle) => console.log(err));
+     * loadBundle('myBundle', (err, bundle) => log(bundle));
+     * loadBundle('http://localhost:8080/test', null, (err, bundle) => log(err));
      *
      */
     public loadBundle (nameOrUrl: string, options: { [k: string]: any, version?: string } | null, onComplete?: ((err: Error | null, data: Bundle) => void) | null): void;
     public loadBundle (nameOrUrl: string, onComplete?: ((err: Error | null, data: Bundle) => void) | null): void;
-    public loadBundle (nameOrUrl: string, options?: { [k: string]: any, version?: string } | ((err: Error | null, data: Bundle) => void) | null, onComplete?: ((err: Error | null, data: Bundle) => void) | null) {
+    public loadBundle (nameOrUrl: string, options?: { [k: string]: any, version?: string } | ((err: Error | null, data: Bundle) => void) | null, onComplete?: ((err: Error | null, data: Bundle) => void) | null): void {
         const { options: opts, onComplete: onComp } = parseParameters<((err: Error | null, data: Bundle) => void)>(options, undefined, onComplete);
 
         const bundleName = path.basename(nameOrUrl);
@@ -642,12 +690,12 @@ export class AssetManager {
         opts.preset = opts.preset || 'bundle';
         opts.ext = 'bundle';
         opts.__isNative__ = true;
-        this.loadAny({ url: nameOrUrl }, opts, null, (err, data) => {
+        this.loadAny({ url: nameOrUrl }, opts, null, (err, data): void => {
             if (err) {
                 error(err.message, err.stack);
-                if (onComp) { onComp(err, data); }
+                if (onComp) { onComp(err, data as Bundle); }
             } else {
-                factory.create(nameOrUrl, data, 'bundle', opts, (p1, p2) => {
+                factory.create(nameOrUrl, data, 'bundle', opts, (p1, p2): void => {
                     if (onComp) { onComp(p1, p2 as Bundle); }
                 });
             }
@@ -688,8 +736,8 @@ export class AssetManager {
      * @engineInternal
      *
      */
-    public releaseUnusedAssets () {
-        assets.forEach((asset) => {
+    public releaseUnusedAssets (): void {
+        assets.forEach((asset): void => {
             releaseManager.tryRelease(asset);
         });
     }
@@ -702,8 +750,8 @@ export class AssetManager {
      * 释放所有资源。详细信息请参考 [[releaseAsset]]。
      *
      */
-    public releaseAll () {
-        assets.forEach((asset) => {
+    public releaseAll (): void {
+        assets.forEach((asset): void => {
             releaseManager.tryRelease(asset, true);
         });
     }
@@ -728,7 +776,7 @@ export class AssetManager {
         options?: { [key: string]: any, assetId?: string } | ((err: Error | null, data: T) => void) | null,
         onProgress?: ((finished: number, total: number, item: RequestItem) => void) | ((err: Error | null, data: T) => void) | null,
         onComplete?: ((err: Error | null, data: T) => void) | null,
-    ) {
+    ): void {
         if (BUILD) { throw new Error('Only valid in Editor'); }
 
         const { options: opts, onProgress: onProg, onComplete: onComp } = parseParameters<((err: Error | null, data: T) => void)>(options, onProgress, onComplete);
@@ -743,7 +791,7 @@ export class AssetManager {
             input: [item],
             onProgress: onProg,
             options: opts,
-            onComplete: asyncify((err, data: T) => {
+            onComplete: asyncify((err: Error | null, data: T): void => {
                 if (!err) {
                     if (!opts.assetId) {
                         data._uuid = '';

@@ -24,6 +24,8 @@
 */
 
 import { ccclass, help, type, requireComponent } from 'cc.decorator';
+import { CCBoolean, CCObject } from '@base/object';
+import { Vec2, Color } from '@base/math';
 import { Component } from '../scene-graph/component';
 import { Sprite } from '../2d/components/sprite';
 import { Label } from '../2d/components/label';
@@ -32,7 +34,6 @@ import { BlendFactor } from '../gfx';
 import { TMXMapInfo } from './tmx-xml-parser';
 import { TiledTextureGrids, GID, TileFlag, Orientation, StaggerAxis, TMXObjectType, PropertiesInfo, TiledAnimationType, TMXObject, TMXObjectGroupInfo } from './tiled-types';
 import { UITransform } from '../2d/framework/ui-transform';
-import { CCBoolean, Vec2, Color, CCObject } from '../core';
 import { SpriteFrame } from '../2d/assets';
 import { Node } from '../scene-graph/node';
 
@@ -49,7 +50,7 @@ export class TiledObjectGroup extends Component {
     protected _premultiplyAlpha = false;
 
     @type(CCBoolean)
-    get premultiplyAlpha () {
+    get premultiplyAlpha (): boolean {
         return this._premultiplyAlpha;
     }
     set premultiplyAlpha (value: boolean) {
@@ -64,7 +65,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let offset = tMXObjectGroup.getPositionOffset();
      */
-    public getPositionOffset () {
+    public getPositionOffset (): Vec2 | undefined {
         return this._positionOffset;
     }
 
@@ -76,7 +77,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let offset = tMXObjectGroup.getProperties();
      */
-    public getProperties () {
+    public getProperties (): PropertiesInfo | undefined {
         return this._properties;
     }
 
@@ -88,7 +89,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let groupName = tMXObjectGroup.getGroupName;
      */
-    public getGroupName () {
+    public getGroupName (): string | undefined {
         return this._groupName;
     }
 
@@ -97,7 +98,7 @@ export class TiledObjectGroup extends Component {
      * @param {String} propertyName
      * @return {Object}
      */
-    public getProperty (propertyName: { toString (): string } | string) {
+    public getProperty (propertyName: { toString (): string } | string): string | number {
         return this._properties![propertyName.toString()];
     }
 
@@ -112,7 +113,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let object = tMXObjectGroup.getObject("Group");
      */
-    public getObject (objectName: string) {
+    public getObject (objectName: string): TMXObject | null {
         for (let i = 0, len = this._objects.length; i < len; i++) {
             const obj = this._objects[i];
             if (obj && obj.name === objectName) {
@@ -131,7 +132,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let objects = tMXObjectGroup.getObjects();
      */
-    public getObjects () {
+    public getObjects (): TMXObject[] {
         return this._objects;
     }
 
@@ -140,7 +141,7 @@ export class TiledObjectGroup extends Component {
     protected _mapInfo?: TMXMapInfo;
     protected _properties?: PropertiesInfo;
     protected _offset?: Vec2;
-    get offset () { return this._offset!; }
+    get offset (): Vec2 { return this._offset!; }
     protected _opacity?: number;
     protected _tintColor: Color | null = null;
 
@@ -157,7 +158,7 @@ export class TiledObjectGroup extends Component {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _init (groupInfo: TMXObjectGroupInfo, mapInfo: TMXMapInfo, texGrids: TiledTextureGrids) {
+    public _init (groupInfo: TMXObjectGroupInfo, mapInfo: TMXMapInfo, texGrids: TiledTextureGrids): void {
         const FLIPPED_MASK = TileFlag.FLIPPED_MASK;
         const FLAG_HORIZONTAL = TileFlag.HORIZONTAL;
         const FLAG_VERTICAL = TileFlag.VERTICAL;
@@ -246,6 +247,7 @@ export class TiledObjectGroup extends Component {
                 textNode.name = textName;
                 textNode.parent = this.node;
                 textNode.setSiblingIndex(i);
+                textNode.layer = this.node.layer;
 
                 let label = textNode.getComponent(Label);
                 if (!label) {
@@ -316,6 +318,7 @@ export class TiledObjectGroup extends Component {
                 imgNode.name = imgName;
                 imgNode.parent = this.node;
                 imgNode.setSiblingIndex(i);
+                imgNode.layer = this.node.layer;
 
                 let sprite = imgNode.getComponent(Sprite);
                 if (!sprite) {
@@ -385,7 +388,7 @@ export class TiledObjectGroup extends Component {
         }
     }
 
-    public update (dt: number) {
+    public update (dt: number): void {
         if (!this._hasAniObj) {
             return;
         }

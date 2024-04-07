@@ -23,9 +23,9 @@
 */
 
 /* eslint-disable new-cap */
+import { IVec3Like, Vec3 } from '@base/math';
 import { BulletConstraint } from './bullet-constraint';
 import { IPointToPointConstraint } from '../../spec/i-physics-constraint';
-import { IVec3Like, Vec3 } from '../../../core';
 import { PointToPointConstraint } from '../../framework';
 import { BulletRigidBody } from '../bullet-rigid-body';
 import { BulletCache, CC_V3_0 } from '../bullet-cache';
@@ -52,8 +52,8 @@ export class BulletP2PConstraint extends BulletConstraint implements IPointToPoi
             cocos2BulletVec3(pivotB, CC_V3_0);
         } else {
             Vec3.multiply(CC_V3_0, node.worldScale, cs.pivotA);
+            Vec3.transformQuat(CC_V3_0, CC_V3_0, node.worldRotation);
             Vec3.add(CC_V3_0, CC_V3_0, node.worldPosition);
-            Vec3.add(CC_V3_0, CC_V3_0, cs.pivotB);
             cocos2BulletVec3(pivotB, CC_V3_0);
         }
         bt.P2PConstraint_setPivotB(this._impl, pivotB);
@@ -74,11 +74,11 @@ export class BulletP2PConstraint extends BulletConstraint implements IPointToPoi
         this.setPivotB(this.constraint.pivotB);
     }
 
-    updateScale0 () {
+    updateScale0 (): void {
         this.setPivotA(this.constraint.pivotA);
     }
 
-    updateScale1 () {
+    updateScale1 (): void {
         this.setPivotB(this.constraint.pivotB);
     }
 }

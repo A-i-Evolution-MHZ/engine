@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { Vec3, Enum } from '../../core';
+import { Enum } from '@base/object';
+import { Vec3 } from '@base/math';
 
 export const PlaceMethod = Enum({
     UNIFORM: 0,
@@ -39,7 +40,7 @@ export interface PlacementInfo {
 }
 
 export class AutoPlacement {
-    public static generate (info: PlacementInfo) {
+    public static generate (info: PlacementInfo): Vec3[] {
         switch (info.method) {
         case PlaceMethod.UNIFORM:
             return this.doGenerateUniform(info);
@@ -50,7 +51,7 @@ export class AutoPlacement {
         }
     }
 
-    private static doGenerateUniform (info: PlacementInfo) {
+    private static doGenerateUniform (info: PlacementInfo): Vec3[] {
         if (info.nProbesX < 2 || info.nProbesY < 2 || info.nProbesZ < 2) {
             return [];
         }
@@ -79,7 +80,7 @@ export class AutoPlacement {
         return probes;
     }
 
-    private static doGenerateAdaptive (info: PlacementInfo) {
+    private static doGenerateAdaptive (info: PlacementInfo): Vec3[] {
         // TODO
         return this.doGenerateUniform(info);
     }

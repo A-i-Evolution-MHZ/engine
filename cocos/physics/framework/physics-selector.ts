@@ -26,22 +26,25 @@
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import { EDITOR, TEST } from 'internal:constants';
-import { IBaseConstraint, IPointToPointConstraint, IHingeConstraint, IConeTwistConstraint, IFixedConstraint } from '../spec/i-physics-constraint';
-import {
-    IBoxShape, ISphereShape, ICapsuleShape, ITrimeshShape, ICylinderShape,
-    IConeShape, ITerrainShape, ISimplexShape, IPlaneShape, IBaseShape,
-} from '../spec/i-physics-shape';
+import { errorID, warn, debug } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { IVec3Like } from '@base/math';
+import { IBaseConstraint, IPointToPointConstraint, IHingeConstraint, IConeTwistConstraint, IFixedConstraint, IConfigurableConstraint } from '../spec/i-physics-constraint';
+import { IBoxShape, ISphereShape, ICapsuleShape, ITrimeshShape, ICylinderShape, IConeShape, ITerrainShape, ISimplexShape, IPlaneShape, IBaseShape } from '../spec/i-physics-shape';
 import { IPhysicsWorld } from '../spec/i-physics-world';
 import { IRigidBody } from '../spec/i-rigid-body';
-import { errorID, IVec3Like, warn, cclegacy } from '../../core';
-import { EColliderType, EConstraintType } from './physics-enum';
+import { IBoxCharacterController, ICapsuleCharacterController } from '../spec/i-character-controller';
+import { EColliderType, EConstraintType, ECharacterControllerType } from './physics-enum';
 import { PhysicsMaterial } from '.';
 
-export type IPhysicsEngineId = 'builtin' | 'cannon.js' | 'ammo.js' | 'physx' | string;
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+export type IPhysicsEngineId = 'builtin' | 'cannon.js' | 'bullet' | 'physx' | string;
 
 interface IPhysicsWrapperObject {
     PhysicsWorld?: Constructor<IPhysicsWorld>,
     RigidBody?: Constructor<IRigidBody>,
+    BoxCharacterController?: Constructor<IBoxCharacterController>,
+    CapsuleCharacterController?: Constructor<ICapsuleCharacterController>,
     BoxShape?: Constructor<IBoxShape>,
     SphereShape?: Constructor<ISphereShape>,
     CapsuleShape?: Constructor<ICapsuleShape>,
@@ -53,13 +56,17 @@ interface IPhysicsWrapperObject {
     PlaneShape?: Constructor<IPlaneShape>,
     PointToPointConstraint?: Constructor<IPointToPointConstraint>,
     HingeConstraint?: Constructor<IHingeConstraint>,
+    /**
+     * @deprecated cone twist constraint is deprecated, please use configurable instead
+     */
     ConeTwistConstraint?: Constructor<IConeTwistConstraint>,
     FixedConstraint?: Constructor<IFixedConstraint>,
+    ConfigurableConstraint?: Constructor<IConfigurableConstraint>,
 }
 
-type IPhysicsBackend = { [key: string]: IPhysicsWrapperObject; }
+interface IPhysicsBackend { [key: string]: IPhysicsWrapperObject; }
 
-interface IPhysicsSelector {
+export interface IPhysicsSelector {
     /**
      * @en
      * The id of the physics engine being used by the physics system.
@@ -113,14 +120,14 @@ interface IPhysicsSelector {
     [x: string]: any,
 }
 
-function updateLegacyMacro (id: string) {
+function updateLegacyMacro (id: string): void {
     cclegacy._global.CC_PHYSICS_BUILTIN = id === 'builtin';
     cclegacy._global.CC_PHYSICS_CANNON = id === 'cannon.js';
     cclegacy._global.CC_PHYSICS_AMMO = id === 'bullet';
 }
 
 function register (id: IPhysicsEngineId, wrapper: IPhysicsWrapperObject): void {
-    if (!EDITOR && !TEST) console.info(`[PHYSICS]: register ${id}.`);
+    if (!EDITOR && !TEST) debug(`[PHYSICS]: register ${id}.`);
     selector.backend[id] = wrapper;
     if (!selector.physicsWorld || selector.id === id) {
         updateLegacyMacro(id);
@@ -137,18 +144,18 @@ export interface IWorldInitData {
 }
 let worldInitData: IWorldInitData | null;
 
-function switchTo (id: IPhysicsEngineId) {
+function switchTo (id: IPhysicsEngineId): void {
     if (!selector.runInEditor) return;
     const mutableSelector = selector as Mutable<IPhysicsSelector>;
     if (selector.physicsWorld && id !== selector.id && selector.backend[id] != null) {
         selector.physicsWorld.destroy();
-        if (!TEST) console.info(`[PHYSICS]: switch from ${selector.id} to ${id}.`);
+        if (!TEST) debug(`[PHYSICS]: switch from ${selector.id} to ${id}.`);
         updateLegacyMacro(id);
         mutableSelector.id = id;
         mutableSelector.wrapper = selector.backend[id];
         mutableSelector.physicsWorld = createPhysicsWorld();
     } else {
-        if (!EDITOR && !TEST) console.info(`[PHYSICS]: using ${id}.`);
+        if (!EDITOR && !TEST) debug(`[PHYSICS]: using ${id}.`);
         mutableSelector.physicsWorld = createPhysicsWorld();
     }
     if (worldInitData) {
@@ -176,11 +183,11 @@ export const selector: IPhysicsSelector = {
     runInEditor: !EDITOR,
 };
 
-export function constructDefaultWorld (data: IWorldInitData) {
+export function constructDefaultWorld (data: IWorldInitData): void {
     if (!worldInitData) worldInitData = data;
     if (!selector.runInEditor) return;
     if (!selector.physicsWorld) {
-        if (!TEST) console.info(`[PHYSICS]: using ${selector.id}.`);
+        if (!TEST) debug(`[PHYSICS]: using ${selector.id}.`);
         const mutableSelector = selector as Mutable<IPhysicsSelector>;
         const world = mutableSelector.physicsWorld = createPhysicsWorld();
         world.setGravity(worldInitData.gravity);
@@ -190,7 +197,7 @@ export function constructDefaultWorld (data: IWorldInitData) {
 
 /// Utility Function For Create Wrapper Entity ///
 
-const FUNC = (...v: any) => 0 as any;
+const FUNC = (...v: any): any => 0 as any;
 const ENTIRE_WORLD: IPhysicsWorld = {
     impl: null,
     setGravity: FUNC,
@@ -201,6 +208,12 @@ const ENTIRE_WORLD: IPhysicsWorld = {
     syncSceneToPhysics: FUNC,
     raycast: FUNC,
     raycastClosest: FUNC,
+    sweepBox: FUNC,
+    sweepBoxClosest: FUNC,
+    sweepSphere: FUNC,
+    sweepSphereClosest: FUNC,
+    sweepCapsule: FUNC,
+    sweepCapsuleClosest: FUNC,
     emitEvents: FUNC,
     destroy: FUNC,
 };
@@ -221,11 +234,18 @@ enum ECheckType {
     // JOINT //
     PointToPointConstraint,
     HingeConstraint,
+    /**
+     * @deprecated cone twist constraint is deprecated, please use configurable instead
+     */
     ConeTwistConstraint,
     FixedConstraint,
+    ConfigurableConstraint,
+    // CHARACTER CONTROLLER //
+    BoxCharacterController,
+    CapsuleCharacterController,
 }
 
-function check (obj: any, type: ECheckType) {
+function check (obj: any, type: ECheckType): boolean {
     if (obj == null) {
         if (selector.id) {
             warn(`${selector.id} physics does not support ${ECheckType[type]}`);
@@ -346,7 +366,7 @@ export function createShape (type: EColliderType): IBaseShape {
     return CREATE_COLLIDER_PROXY[type]();
 }
 
-function initColliderProxy () {
+function initColliderProxy (): void {
     if (CREATE_COLLIDER_PROXY.INITED) return;
     CREATE_COLLIDER_PROXY.INITED = true;
 
@@ -400,7 +420,7 @@ function initColliderProxy () {
 
 const CREATE_CONSTRAINT_PROXY = { INITED: false };
 
-interface IEntireConstraint extends IPointToPointConstraint, IHingeConstraint, IConeTwistConstraint, IFixedConstraint { }
+interface IEntireConstraint extends IPointToPointConstraint, IHingeConstraint, IConeTwistConstraint, IFixedConstraint, IConfigurableConstraint { }
 const ENTIRE_CONSTRAINT: IEntireConstraint = {
     impl: null,
     initialize: FUNC,
@@ -413,8 +433,38 @@ const ENTIRE_CONSTRAINT: IEntireConstraint = {
     setPivotA: FUNC,
     setPivotB: FUNC,
     setAxis: FUNC,
+    setSecondaryAxis: FUNC,
     setBreakForce: FUNC,
     setBreakTorque: FUNC,
+    setConstraintMode: FUNC,
+    setLinearLimit: FUNC,
+    setAngularExtent: FUNC,
+    setLinearSoftConstraint: FUNC,
+    setLinearStiffness: FUNC,
+    setLinearDamping: FUNC,
+    setLinearRestitution: FUNC,
+    setSwingSoftConstraint: FUNC,
+    setTwistSoftConstraint: FUNC,
+    setSwingStiffness: FUNC,
+    setSwingDamping: FUNC,
+    setSwingRestitution: FUNC,
+    setTwistStiffness: FUNC,
+    setTwistDamping: FUNC,
+    setTwistRestitution: FUNC,
+    setDriverMode: FUNC,
+    setLinearMotorTarget: FUNC,
+    setLinearMotorVelocity: FUNC,
+    setLinearMotorForceLimit: FUNC,
+    setAngularMotorTarget: FUNC,
+    setAngularMotorVelocity: FUNC,
+    setAngularMotorForceLimit: FUNC,
+    setAutoPivotB: FUNC,
+    setLimitEnabled: FUNC,
+    setLowerLimit: FUNC,
+    setUpperLimit: FUNC,
+    setMotorEnabled: FUNC,
+    setMotorVelocity: FUNC,
+    setMotorForceLimit: FUNC,
 };
 
 export function createConstraint (type: EConstraintType): IBaseConstraint {
@@ -422,7 +472,7 @@ export function createConstraint (type: EConstraintType): IBaseConstraint {
     return CREATE_CONSTRAINT_PROXY[type]();
 }
 
-function initConstraintProxy () {
+function initConstraintProxy (): void {
     if (CREATE_CONSTRAINT_PROXY.INITED) return;
     CREATE_CONSTRAINT_PROXY.INITED = true;
 
@@ -444,5 +494,68 @@ function initConstraintProxy () {
     CREATE_CONSTRAINT_PROXY[EConstraintType.FIXED] = function createFixedConstraint (): IFixedConstraint {
         if (check(selector.wrapper.FixedConstraint, ECheckType.FixedConstraint)) { return ENTIRE_CONSTRAINT; }
         return new selector.wrapper.FixedConstraint!();
+    };
+
+    CREATE_CONSTRAINT_PROXY[EConstraintType.CONFIGURABLE] = function createConfigurableConstraint (): IConfigurableConstraint {
+        if (check(selector.wrapper.ConfigurableConstraint, ECheckType.ConfigurableConstraint)) { return ENTIRE_CONSTRAINT; }
+        return new selector.wrapper.ConfigurableConstraint!();
+    };
+}
+
+/// CREATE CHARACTER CONTROLLER ///
+const CREATE_CHARACTER_CONTROLLER_PROXY = { INITED: false };
+
+interface IEntireCharacterController extends IBoxCharacterController, ICapsuleCharacterController { }
+const ENTIRE_CHARACTER_CONTROLLER: IEntireCharacterController = {
+    initialize: FUNC,
+    onLoad: FUNC,
+    onEnable: FUNC,
+    onDisable: FUNC,
+    onDestroy: FUNC,
+    onGround: FUNC,
+    getPosition: FUNC,
+    setPosition: FUNC,
+    setStepOffset: FUNC,
+    setSlopeLimit: FUNC,
+    setContactOffset: FUNC,
+    setDetectCollisions: FUNC,
+    setOverlapRecovery: FUNC,
+    setGroup: FUNC,
+    getGroup: FUNC,
+    addGroup: FUNC,
+    removeGroup: FUNC,
+    setMask: FUNC,
+    getMask: FUNC,
+    addMask: FUNC,
+    removeMask: FUNC,
+    move: FUNC,
+    syncPhysicsToScene: FUNC,
+    updateEventListener: FUNC,
+    //IBoxCharacterController
+    setHalfHeight: FUNC,
+    setHalfSideExtent: FUNC,
+    setHalfForwardExtent: FUNC,
+    //ICapsuleCharacterController
+    setRadius: FUNC,
+    setHeight: FUNC,
+};
+
+export function createCharacterController (type: ECharacterControllerType): IEntireCharacterController {
+    initCharacterControllerProxy();
+    return CREATE_CHARACTER_CONTROLLER_PROXY[type]();
+}
+
+function initCharacterControllerProxy (): void {
+    if (CREATE_CHARACTER_CONTROLLER_PROXY.INITED) return;
+    CREATE_CHARACTER_CONTROLLER_PROXY.INITED = true;
+
+    CREATE_CHARACTER_CONTROLLER_PROXY[ECharacterControllerType.BOX] = function createBoxCharacterController (): IBoxCharacterController {
+        if (check(selector.wrapper.BoxCharacterController, ECheckType.BoxCharacterController)) { return ENTIRE_CHARACTER_CONTROLLER; }
+        return new selector.wrapper.BoxCharacterController!();
+    };
+
+    CREATE_CHARACTER_CONTROLLER_PROXY[ECharacterControllerType.CAPSULE] = function createCapsuleCharacterController (): ICapsuleCharacterController {
+        if (check(selector.wrapper.CapsuleCharacterController, ECheckType.CapsuleCharacterController)) { return ENTIRE_CHARACTER_CONTROLLER; }
+        return new selector.wrapper.CapsuleCharacterController!();
     };
 }

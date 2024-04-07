@@ -24,15 +24,15 @@
 */
 
 import { ccclass, help, menu } from 'cc.decorator';
+import { Event } from '@base/event';
 import { Component } from '../scene-graph/component';
-import { Event } from '../input/types';
 import { NodeEventType } from '../scene-graph/node-event';
 
 const BlockEvents = [NodeEventType.TOUCH_START, NodeEventType.TOUCH_END, NodeEventType.TOUCH_MOVE,
     NodeEventType.MOUSE_DOWN, NodeEventType.MOUSE_MOVE, NodeEventType.MOUSE_UP,
     NodeEventType.MOUSE_ENTER, NodeEventType.MOUSE_LEAVE, NodeEventType.MOUSE_WHEEL];
 
-function stopPropagation (event: Event) {
+function stopPropagation (event: Event): void {
     event.propagationStopped = true;
 }
 
@@ -49,7 +49,7 @@ function stopPropagation (event: Event) {
 @help('i18n:cc.BlockInputEvents')
 @menu('Event/BlockInputEvents')
 export class BlockInputEvents extends Component {
-    onEnable () {
+    onEnable (): void {
         for (let i = 0; i < BlockEvents.length; i++) {
             // supply the 'this' parameter so that the callback could be added and removed correctly,
             // even if the same component is added more than once to a Node.
@@ -57,7 +57,7 @@ export class BlockInputEvents extends Component {
         }
     }
 
-    onDisable () {
+    onDisable (): void {
         for (let i = 0; i < BlockEvents.length; i++) {
             this.node.off(BlockEvents[i], stopPropagation, this);
         }

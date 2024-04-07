@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { warnID } from '../../core';
+import { warnID } from '@base/debug';
 import Task from './task';
 
 /**
@@ -206,7 +206,7 @@ export class Pipeline {
      * }]);
      *
      * var task = new Task({input: 'test'});
-     * console.log(pipeline.sync(task));
+     * log(pipeline.sync(task));
      *
      */
     public sync (task: Task): any {
@@ -245,7 +245,7 @@ export class Pipeline {
      *      task.output = doSomething(task.input);
      *      done();
      * }]);
-     * var task = new Task({input: 'test', onComplete: (err, result) => console.log(result)});
+     * var task = new Task({input: 'test', onComplete: (err, result) => log(result)});
      * pipeline.async(task);
      *
      */

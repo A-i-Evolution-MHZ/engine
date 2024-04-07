@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { assertsArrayIndex } from '../data/utils/asserts';
+import { assertsArrayIndex } from '@base/debug/internal';
 
 /**
  * @en Circle shift an array once in range [first, last]. If `first < last`, then will do left circle shift;
@@ -35,7 +35,7 @@ import { assertsArrayIndex } from '../data/utils/asserts';
  * @returns @en The input array. @zh 输入的数组。
  * @engineInternal
  */
-export function shift<T> (array: T[], first: number, last: number) {
+export function shift<T> (array: T[], first: number, last: number): T[] {
     assertsArrayIndex(array, first);
     assertsArrayIndex(array, last);
     if (first === last) {

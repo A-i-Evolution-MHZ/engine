@@ -23,21 +23,20 @@
 */
 
 import { ALIPAY, RUNTIME_BASED, BYTEDANCE, WECHAT, LINKSURE, QTT, COCOSPLAY, HUAWEI, EDITOR, VIVO, TAOBAO, TAOBAO_MINIGAME, WECHAT_MINI_PROGRAM } from 'internal:constants';
-import { systemInfo } from 'pal/system-info';
+import { systemInfo, BrowserType, OS } from '@pal/system-info';
+import { warnID, warn, debug } from '@base/debug';
 import { WebGLCommandAllocator } from './webgl-command-allocator';
 import { WebGLStateCache } from './webgl-state-cache';
 import { WebGLTexture } from './webgl-texture';
-import { Format, TextureInfo, TextureFlagBit, TextureType, TextureUsageBit,
-    BufferTextureCopy, SwapchainInfo, SurfaceTransform } from '../base/define';
+import { Format, TextureInfo, TextureFlagBit, TextureType, TextureUsageBit, BufferTextureCopy, SwapchainInfo, SurfaceTransform } from '../base/define';
 import { Swapchain } from '../base/swapchain';
 import { IWebGLExtensions, WebGLDeviceManager } from './webgl-define';
-import { macro, warnID, warn, debug } from '../../core';
-import { BrowserType, OS } from '../../../pal/system-info/enum-type';
+import { macro } from '../../core';
 import { IWebGLBlitManager } from './webgl-gpu-objects';
 
 const eventWebGLContextLost = 'webglcontextlost';
 
-function initStates (gl: WebGLRenderingContext) {
+function initStates (gl: WebGLRenderingContext): void {
     gl.activeTexture(gl.TEXTURE0);
     gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -88,7 +87,7 @@ function getExtension (gl: WebGLRenderingContext, ext: string): any {
     return null;
 }
 
-export function getExtensions (gl: WebGLRenderingContext) {
+export function getExtensions (gl: WebGLRenderingContext): IWebGLExtensions {
     const res: IWebGLExtensions = {
         EXT_texture_filter_anisotropic: getExtension(gl, 'EXT_texture_filter_anisotropic'),
         EXT_blend_minmax: getExtension(gl, 'EXT_blend_minmax'),
@@ -215,11 +214,11 @@ export function getContext (canvas: HTMLCanvasElement): WebGLRenderingContext | 
 }
 
 export class WebGLSwapchain extends Swapchain {
-    get extensions () {
+    get extensions (): IWebGLExtensions {
         return this._extensions as IWebGLExtensions;
     }
 
-    get blitManager () {
+    get blitManager (): IWebGLBlitManager {
         return this._blitManager!;
     }
 
@@ -233,7 +232,7 @@ export class WebGLSwapchain extends Swapchain {
     private _extensions: IWebGLExtensions | null = null;
     private _blitManager: IWebGLBlitManager | null = null;
 
-    public initialize (info: Readonly<SwapchainInfo>) {
+    public initialize (info: Readonly<SwapchainInfo>): void {
         this._canvas = info.windowHandle;
 
         this._webGLContextLostHandler = this._onWebGLContextLost.bind(this);
@@ -311,7 +310,8 @@ export class WebGLSwapchain extends Swapchain {
         nullTexRegion.texSubres.layerCount = 6;
         WebGLDeviceManager.instance.copyBuffersToTexture(
             [nullTexBuff, nullTexBuff, nullTexBuff, nullTexBuff, nullTexBuff, nullTexBuff],
-            this.nullTexCube, [nullTexRegion],
+            this.nullTexCube,
+            [nullTexRegion],
         );
         this._blitManager = new IWebGLBlitManager();
     }
@@ -341,7 +341,7 @@ export class WebGLSwapchain extends Swapchain {
         this._canvas = null;
     }
 
-    public resize (width: number, height: number, surfaceTransform: SurfaceTransform) {
+    public resize (width: number, height: number, surfaceTransform: SurfaceTransform): void {
         if (this._colorTexture.width !== width || this._colorTexture.height !== height) {
             debug(`Resizing swapchain: ${width}x${height}`);
             this._canvas!.width = width;
@@ -351,7 +351,7 @@ export class WebGLSwapchain extends Swapchain {
         }
     }
 
-    private _onWebGLContextLost (event: Event) {
+    private _onWebGLContextLost (event: Event): void {
         warnID(11000);
         warn(event);
         // 2020.9.3: `preventDefault` is not available on some platforms

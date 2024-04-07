@@ -29,7 +29,8 @@ vec4 vert () {
     vec4 pos = cc_matProj * (cc_matView * matWorld) * In.position;
   #endif
 
-  pos.z -= outlineParams.y * 0.002;
+  float scaleZ = cc_nearFar.z == 0.0 ? 0.5 : 1.0;
+  pos.z -= outlineParams.y * 0.002 * scaleZ;
 
   v_uv = a_texCoord;
 

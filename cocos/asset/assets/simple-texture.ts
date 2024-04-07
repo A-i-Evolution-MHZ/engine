@@ -24,8 +24,14 @@
 
 import { ccclass } from 'cc.decorator';
 import { DEV } from 'internal:constants';
+import { ImageData } from 'pal/image';
+import { assertID, error } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { js } from '@base/utils';
+import { IMemoryImageSource } from '../../../pal/image/types';
+
 import { TextureFlagBit, TextureUsageBit, API, Texture, TextureInfo, TextureViewInfo, Device, BufferTextureCopy } from '../../gfx';
-import { assertID, error, js, macro, cclegacy } from '../../core';
+import { macro } from '../../core';
 import { Filter } from './asset-enum';
 import { ImageAsset } from './image-asset';
 import { TextureBase } from './texture-base';
@@ -36,15 +42,15 @@ const _regions: BufferTextureCopy[] = [new BufferTextureCopy()];
 export type PresumedGFXTextureInfo = Pick<TextureInfo, 'usage' | 'flags' | 'format' | 'levelCount'>;
 export type PresumedGFXTextureViewInfo = Pick<TextureViewInfo, 'texture' | 'format' | 'baseLevel' | 'levelCount'>;
 
-function getMipLevel (width: number, height: number) {
+function getMipLevel (width: number, height: number): number {
     let size = Math.max(width, height);
     let level = 0;
     while (size) { size >>= 1; level++; }
     return level;
 }
 
-function isPOT (n: number) { return n && (n & (n - 1)) === 0; }
-function canGenerateMipmap (device: Device, w: number, h: number) {
+function isPOT (n: number): boolean | 0 { return n && (n & (n - 1)) === 0; }
+function canGenerateMipmap (device: Device, w: number, h: number): boolean | 0 {
     const needCheckPOT = device.gfxAPI === API.WEBGL;
     if (needCheckPOT) { return isPOT(w) && isPOT(h); }
     return true;
@@ -85,7 +91,7 @@ export class SimpleTexture extends TextureBase {
      * @en The mipmap level of the texture.
      * @zh 贴图中的 Mipmap 层级数量。
      */
-    get mipmapLevel () {
+    get mipmapLevel (): number {
         return this._mipmapLevel;
     }
 
@@ -94,11 +100,11 @@ export class SimpleTexture extends TextureBase {
      * @zh 获取此贴图底层的 GFX 贴图对象。
      * @return @en The low level gfx texture. @zh 底层的 GFX 贴图。
      */
-    public getGFXTexture () {
+    public getGFXTexture (): Texture | null {
         return this._gfxTextureView;
     }
 
-    public destroy () {
+    public destroy (): boolean {
         this._tryDestroyTextureView();
         this._tryDestroyTexture();
         return super.destroy();
@@ -108,7 +114,7 @@ export class SimpleTexture extends TextureBase {
      * @en Update the level 0 mipmap image.
      * @zh 更新 0 级 Mipmap。
      */
-    public updateImage () {
+    public updateImage (): void {
         this.updateMipmaps(0);
     }
 
@@ -119,7 +125,7 @@ export class SimpleTexture extends TextureBase {
      * @param firstLevel @en First level to be updated. @zh 更新指定层的 mipmap。
      * @param count @en Mipmap level count to be updated。 @zh 指定要更新层的数量。
      */
-    public updateMipmaps (firstLevel = 0, count?: number) {
+    public updateMipmaps (firstLevel = 0, count?: number): void {
 
     }
 
@@ -139,8 +145,28 @@ export class SimpleTexture extends TextureBase {
      * @param source @en The source image or image data. @zh 源图像或图像数据。
      * @param level @en Mipmap level to upload the image to. @zh 要上传的 mipmap 层级。
      * @param arrayIndex @en The array index. @zh 要上传的数组索引。
+     * @deprecated since v3.9, please use `uploadData (source: ImageAsset | IMemoryImageSource | ArrayBufferView, level, arrayIndex)` instead.
      */
-    public uploadData (source: HTMLCanvasElement | HTMLImageElement | ArrayBufferView | ImageBitmap, level = 0, arrayIndex = 0) {
+    public uploadData (source: HTMLCanvasElement | HTMLImageElement | ImageBitmap, level?: number, arrayIndex?: number): void;
+    /**
+     * @en Upload data to the given mipmap level.
+     * The size of the image will affect how the mipmap is updated.
+     * - When the image is an ArrayBuffer, the size of the image must match the mipmap size.
+     * - If the image size matches the mipmap size, the mipmap data will be updated entirely.
+     * - If the image size is smaller than the mipmap size, the mipmap will be updated from top left corner.
+     * - If the image size is larger, an error will be raised
+     * @zh 上传图像数据到指定层级的 Mipmap 中。
+     * 图像的尺寸影响 Mipmap 的更新范围：
+     * - 当图像是 `ArrayBuffer` 时，图像的尺寸必须和 Mipmap 的尺寸一致；否则，
+     * - 若图像的尺寸与 Mipmap 的尺寸相同，上传后整个 Mipmap 的数据将与图像数据一致；
+     * - 若图像的尺寸小于指定层级 Mipmap 的尺寸（不管是长或宽），则从贴图左上角开始，图像尺寸范围内的 Mipmap 会被更新；
+     * - 若图像的尺寸超出了指定层级 Mipmap 的尺寸（不管是长或宽），都将引起错误。
+     * @param source @en The ImageData,IMemoryImageSource or ArrayBufferView. @zh 图像管理对象、内存图像数据或ArrayBufferView。
+     * @param level @en Mipmap level to upload the image to. @zh 要上传的 mipmap 层级。
+     * @param arrayIndex @en The array index. @zh 要上传的数组索引。
+     */
+    public uploadData (source: ImageData | IMemoryImageSource | ArrayBufferView, level?: number, arrayIndex?: number): void;
+    public uploadData (source: ImageData | IMemoryImageSource | ArrayBufferView | HTMLCanvasElement | HTMLImageElement  | ImageBitmap, level: number = 0, arrayIndex: number  = 0): void {
         if (!this._gfxTexture || this._mipmapLevel <= level) {
             return;
         }
@@ -155,32 +181,24 @@ export class SimpleTexture extends TextureBase {
         region.texExtent.height = this._textureHeight >> level;
         region.texSubres.mipLevel = level;
         region.texSubres.baseArrayLayer = arrayIndex;
-
-        if (DEV) {
-            if (source instanceof HTMLElement) {
-                if (source.height > region.texExtent.height
-                    || source.width > region.texExtent.width) {
-                    error(`Image source(${this.name}) bounds override.`);
-                }
-            }
-        }
-
-        if (ArrayBuffer.isView(source)) {
-            gfxDevice.copyBuffersToTexture([source], this._gfxTexture, _regions);
+        let imageData;
+        if (source instanceof ImageData) {
+            imageData = source;
         } else {
-            gfxDevice.copyTexImagesToTexture([source], this._gfxTexture, _regions);
+            // This is a hack method, otherwise ts will just report an error.
+            imageData = new ImageData(source as IMemoryImageSource);
         }
+        gfxDevice.copyImageDatasToTexture([imageData], this._gfxTexture, _regions);
     }
 
     /**
      * @engineInternal
      */
-    protected _assignImage (image: ImageAsset, level: number, arrayIndex?: number) {
-        const data = image.data;
-        if (!data) {
+    protected _assignImage (image: ImageAsset, level: number, arrayIndex?: number): void {
+        if (!image.data) {
             return;
         }
-        this.uploadData(data, level, arrayIndex);
+        this.uploadData(image.imageData, level, arrayIndex);
         this._checkTextureLoaded();
 
         if (macro.CLEANUP_IMAGE_CACHE) {
@@ -196,14 +214,14 @@ export class SimpleTexture extends TextureBase {
     /**
      * @engineInternal
      */
-    protected _checkTextureLoaded () {
+    protected _checkTextureLoaded (): void {
         this._textureReady();
     }
 
     /**
      * @engineInternal
      */
-    protected _textureReady () {
+    protected _textureReady (): void {
         this.loaded = true;
         this.emit('load');
     }
@@ -218,14 +236,14 @@ export class SimpleTexture extends TextureBase {
      * @engineInternal
      *
      */
-    protected _setMipmapLevel (value: number) {
+    protected _setMipmapLevel (value: number): void {
         this._mipmapLevel = value < 1 ? 1 : value;
     }
 
     /**
      * @engineInternal
      */
-    protected _setMipRange (baseLevel: number, maxLevel: number) {
+    protected _setMipRange (baseLevel: number, maxLevel: number): void {
         this._baseLevel = baseLevel < 1 ? 0 : baseLevel;
         this._maxLevel = maxLevel < 1 ? 0 : maxLevel;
     }
@@ -236,7 +254,7 @@ export class SimpleTexture extends TextureBase {
      * @param baseLevel @en The base mipmap level. @zh 最低 mipmap 等级。
      * @param maxLevel @en The maximum mipmap level. @zh 最高 mipmap 等级。
      */
-    public setMipRange (baseLevel: number, maxLevel: number) {
+    public setMipRange (baseLevel: number, maxLevel: number): void {
         assertID(baseLevel <= maxLevel, 3124);
 
         this._setMipRange(baseLevel, maxLevel);
@@ -275,7 +293,7 @@ export class SimpleTexture extends TextureBase {
     /**
      * @engineInternal
      */
-    protected _tryReset () {
+    protected _tryReset (): void {
         this._tryDestroyTextureView();
         this._tryDestroyTexture();
         if (this._mipmapLevel === 0) {
@@ -300,17 +318,17 @@ export class SimpleTexture extends TextureBase {
     /**
      * @engineInternal
      */
-    protected _createTexture (device: Device) {
+    protected _createTexture (device: Device): void {
         if (this._width === 0 || this._height === 0) { return; }
         let flags = TextureFlagBit.NONE;
         if (this._mipFilter !== Filter.NONE && canGenerateMipmap(device, this._width, this._height)) {
-            this._mipmapLevel = getMipLevel(this._width, this._height);
             if (!this.isUsingOfflineMipmaps() && !this.isCompressed) {
                 flags = TextureFlagBit.GEN_MIPMAP;
+                this._mipmapLevel = getMipLevel(this._width, this._height);
             }
         }
         const textureCreateInfo = this._getGfxTextureCreateInfo({
-            usage: TextureUsageBit.SAMPLED | TextureUsageBit.TRANSFER_DST,
+            usage: TextureUsageBit.SAMPLED | TextureUsageBit.TRANSFER_DST | TextureUsageBit.COLOR_ATTACHMENT,
             format: this._getGFXFormat(),
             levelCount: this._mipmapLevel,
             flags,
@@ -350,7 +368,7 @@ export class SimpleTexture extends TextureBase {
     /**
      * @engineInternal
      */
-    protected _tryDestroyTexture () {
+    protected _tryDestroyTexture (): void {
         if (this._gfxTexture) {
             this._gfxTexture.destroy();
             this._gfxTexture = null;
@@ -360,7 +378,7 @@ export class SimpleTexture extends TextureBase {
     /**
      * @engineInternal
      */
-    protected _tryDestroyTextureView () {
+    protected _tryDestroyTextureView (): void {
         if (this._gfxTextureView) {
             this._gfxTextureView.destroy();
             this._gfxTextureView = null;

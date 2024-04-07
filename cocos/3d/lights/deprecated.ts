@@ -22,11 +22,12 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
+import { js, replaceProperty } from '@base/utils';
 import { Light } from './light-component';
 import { SpotLight } from './spot-light-component';
 import { SphereLight } from './sphere-light-component';
 import { DirectionalLight } from './directional-light-component';
-import { cclegacy, js, replaceProperty } from '../../core';
 
 /**
  * Alias of [[Light]]
@@ -61,10 +62,10 @@ replaceProperty(SpotLight.prototype, 'SpotLight.prototype', [
     {
         name: 'luminousPower',
         newName: 'luminousFlux',
-        customGetter (this: SpotLight) {
+        customGetter (this: SpotLight): number {
             return this.luminousFlux;
         },
-        customSetter (this: SpotLight, value: number) {
+        customSetter (this: SpotLight, value: number): void {
             this.luminousFlux = value;
         },
     },
@@ -74,10 +75,10 @@ replaceProperty(SphereLight.prototype, 'SphereLight.prototype', [
     {
         name: 'luminousPower',
         newName: 'luminousFlux',
-        customGetter (this: SpotLight) {
+        customGetter (this: SpotLight): number {
             return this.luminousFlux;
         },
-        customSetter (this: SpotLight, value: number) {
+        customSetter (this: SpotLight, value: number): void {
             this.luminousFlux = value;
         },
     },

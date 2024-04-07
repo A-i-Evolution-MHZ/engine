@@ -23,7 +23,8 @@
 */
 
 import { ccclass, serializable } from 'cc.decorator';
-import { RealCurve, Size } from '../../core';
+import { Size } from '@base/math';
+import { RealCurve } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM, createEvalSymbol } from '../define';
 import { Channel, RealChannel, RuntimeBinding, Track, TrackEval } from './track';
 import { maskIfEmpty } from './utils';
@@ -54,14 +55,14 @@ export class SizeTrack extends Track {
      * @returns An readonly array in which
      * the first element is the width channel and the second element is the height channel.
      */
-    public channels () {
+    public channels (): [RealChannel, RealChannel] {
         return this._channels;
     }
 
     /**
      * @internal
      */
-    public [createEvalSymbol] () {
+    public [createEvalSymbol] (): SizeTrackEval {
         return new SizeTrackEval(
             maskIfEmpty(this._channels[0].curve),
             maskIfEmpty(this._channels[1].curve),
@@ -80,11 +81,11 @@ export class SizeTrackEval implements TrackEval<Size> {
 
     }
 
-    public get requiresDefault () {
+    public get requiresDefault (): boolean {
         return !this._width || !this._height;
     }
 
-    public evaluate (time: number, defaultValue?: Readonly<Size>) {
+    public evaluate (time: number, defaultValue?: Readonly<Size>): Size {
         if (defaultValue) {
             this._result.x = defaultValue.x;
             this._result.y = defaultValue.y;

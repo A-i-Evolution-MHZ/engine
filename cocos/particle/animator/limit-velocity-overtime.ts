@@ -23,7 +23,7 @@
 */
 
 import { ccclass, tooltip, displayOrder, range, type, serializable, visible } from 'cc.decorator';
-import { lerp, pseudoRandom, Vec3, Mat4, Quat } from '../../core';
+import { lerp, pseudoRandom, Vec3, Mat4, Quat } from '@base/math';
 import { Space, ModuleRandSeed } from '../enum';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import CurveRange from './curve-range';
@@ -53,7 +53,7 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      * @zh 是否启用。
      */
     @displayOrder(0)
-    public get enable () {
+    public get enable (): boolean {
         return this._enable;
     }
 
@@ -166,7 +166,7 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      * @param worldTransform @en Particle system world transform @zh 粒子系统的世界变换矩阵
      * @internal
      */
-    public update (space: number, worldTransform: Mat4) {
+    public update (space: number, worldTransform: Mat4): void {
         this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
     }
 
@@ -177,7 +177,7 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      * @param dt @en Update interval time @zh 粒子系统更新的间隔时间
      * @internal
      */
-    public animate (p: Particle, dt: number) {
+    public animate (p: Particle, dt: number): void {
         const normalizedTime = 1 - p.remainingLifetime / p.startLifetime;
         const dampedVel = _temp_v3;
         if (this.separateAxes) {
@@ -206,7 +206,7 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
     }
 }
 
-function dampenBeyondLimit (vel: number, limit: number, dampen: number) {
+function dampenBeyondLimit (vel: number, limit: number, dampen: number): number {
     const sgn = Math.sign(vel);
     let abs = Math.abs(vel);
     if (abs > limit) {

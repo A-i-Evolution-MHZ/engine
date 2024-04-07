@@ -25,32 +25,17 @@
 declare const nr: any;
 declare const jsb: any;
 
-import { ccenum, CCString, js } from '../core';
+import { OPEN_HARMONY } from 'internal:constants';
+import { ccenum } from '@base/object';
+import { CCString } from '@base/object';
+import { js } from '@base/utils';
 import * as pipeline from './define';
 import { ccclass, serializable, editable, type } from '../core/data/class-decorator';
-import { legacyCC } from '../core/global-exports';
+import { cclegacy } from '@base/global';
 import * as decors from '../native-binding/decorators';
 import { RenderTexture } from '../asset/assets/render-texture';
-import type { 
-    RenderPipeline as NrRenderPipeline,
-    RenderFlow as NrRenderFlow,
-    RenderStage as NrRenderStage,
-    InstancedBuffer as NrInstancedBuffer,
-    PipelineStateManager as NrPipelineStateManager,
-    ForwardPipeline as NrForwardPipeline,
-    ForwardFlow as NrForwardFlow,
-    ShadowFlow as NrShadowFlow,
-    ForwardStage as NrForwardStage,
-    ShadowStage as NrShadowStage,
-    DeferredPipeline as NrDeferredPipeline,
-    MainFlow as NrMainFlow,
-    LightingStage as NrLightingStage,
-    PostProcessStage as NrPostProcessStage,
-    GbufferStage as NrGbufferStage,
-    BloomStage as NrBloomStage,
-    ReflectionProbeFlow as NrReflectionProbeFlow,
-    ReflectionProbeStage as NrReflectionProbeStage,
-} from './index';
+import { Skin } from '../render-scene/scene/skin';
+import { RenderPipeline as NrRenderPipeline, RenderFlow as NrRenderFlow, RenderStage as NrRenderStage, InstancedBuffer as NrInstancedBuffer, PipelineStateManager as NrPipelineStateManager, ForwardPipeline as NrForwardPipeline, ForwardFlow as NrForwardFlow, ShadowFlow as NrShadowFlow, ForwardStage as NrForwardStage, ShadowStage as NrShadowStage, DeferredPipeline as NrDeferredPipeline, MainFlow as NrMainFlow, LightingStage as NrLightingStage, PostProcessStage as NrPostProcessStage, GbufferStage as NrGbufferStage, BloomStage as NrBloomStage, ReflectionProbeFlow as NrReflectionProbeFlow, ReflectionProbeStage as NrReflectionProbeStage } from './index';
 
 export { pipeline };
 export * from './pass-phase';
@@ -114,6 +99,7 @@ let getOrCreatePipelineState = nr.PipelineStateManager.getOrCreatePipelineState;
 nr.PipelineStateManager.getOrCreatePipelineState = function (device, pass, shader, renderPass, ia) {
     return getOrCreatePipelineState(pass, shader, renderPass, ia); //cjh TODO: remove hacking. c++ API doesn't access device argument.
 };
+
 
 // ForwardPipeline
 // TODO: we mark it as type of any, because here we have many dynamic injected property @dumganhar
@@ -277,7 +263,7 @@ export class RenderQueueDesc {
         this.stages = [];
     }
 
-    public init() {
+    public init(): any {
         return new nr.RenderQueueDesc(this.isTransparent, this.sortMode, this.stages);
     }
 }
@@ -400,9 +386,9 @@ postProcessStageProto.init = function (pipeline) {
 }
 
 
-legacyCC.RenderFlow = RenderFlow;
-legacyCC.RenderStage = RenderStage;
-legacyCC.RenderPipeline = RenderPipeline;
+cclegacy.RenderFlow = RenderFlow;
+cclegacy.RenderStage = RenderStage;
+cclegacy.RenderPipeline = RenderPipeline;
 
 @ccclass('RenderTextureConfig')
 class RenderTextureConfig {
@@ -414,14 +400,14 @@ class RenderTextureConfig {
 }
 
 
-function proxyArrayAttributeImpl(proto: any, attr: string) {
+function proxyArrayAttributeImpl(proto: any, attr: string): void {
     const proxyTarget = `_${attr}_target`;
-    let arrayProxy = (self, targetArrayAttr: string) => {
+    let arrayProxy = (self, targetArrayAttr: string): any => {
         return new Proxy(self[targetArrayAttr], {
-            get(targetArray, prop, receiver) {
+            get(targetArray, prop, receiver): any {
                 return Reflect.get(targetArray, prop, receiver);
             },
-            set(targetArray, prop, receiver) {
+            set(targetArray, prop, receiver): boolean {
                 const ret = Reflect.set(targetArray, prop, receiver);
                 self[targetArrayAttr] = targetArray;
                 return ret;
@@ -445,9 +431,11 @@ function proxyArrayAttributeImpl(proto: any, attr: string) {
 
 let proxyArrayAttribute = proxyArrayAttributeImpl;
 
-proxyArrayAttribute(RenderFlow.prototype, '_stages');
-
-proxyArrayAttribute(RenderPipeline.prototype, '_flows');
+if (!OPEN_HARMONY) {
+    // WORKAROUND: the proxy array getLength crashed on OH platform
+    proxyArrayAttribute(RenderFlow.prototype, '_stages');
+    proxyArrayAttribute(RenderPipeline.prototype, '_flows');
+}
 
 //-------------------- register types -------------------- 
 

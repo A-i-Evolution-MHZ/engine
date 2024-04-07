@@ -23,16 +23,14 @@
 */
 
 import { EDITOR } from 'internal:constants';
-import { editorExtrasTag } from '../../core';
-
-import { AnimationBlend } from './animation-blend';
-import { ClipMotion } from './clip-motion';
+import { editorExtrasTag } from '@base/object';
+import { Motion } from './motion';
 
 export const RUNTIME_ID_ENABLED = EDITOR;
 
 export type RuntimeID = number;
 
-export function getMotionRuntimeID (motion: ClipMotion | AnimationBlend) {
+export function getMotionRuntimeID (motion: Motion): number | undefined {
     return (motion[editorExtrasTag] as undefined | { id?: RuntimeID })?.id;
 }
 

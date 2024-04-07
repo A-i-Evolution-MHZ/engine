@@ -23,12 +23,11 @@
 */
 
 import { KeyboardCallback } from 'pal/input';
-import { KeyboardEventData, minigame } from 'pal/minigame';
-import { systemInfo } from 'pal/system-info';
+import { KeyboardEventData, minigame } from '@pal/minigame';
+import { systemInfo, Feature } from '@pal/system-info';
+import { EventTarget } from '@base/event';
 import { KeyCode, EventKeyboard } from '../../../cocos/input/types';
-import { EventTarget } from '../../../cocos/core/event';
 import { InputEventType } from '../../../cocos/input/types/event-enum';
-import { Feature } from '../../system-info/enum-type';
 
 const code2KeyCode: Record<string, KeyCode> = {
     Backspace: KeyCode.BACKSPACE,
@@ -149,7 +148,7 @@ export class KeyboardInputSource {
         }
     }
 
-    private _registerEvent () {
+    private _registerEvent (): void {
         minigame.wx?.onKeyDown?.((res) => {
             const keyCode = getKeyCode(res.code);
             if (!this._keyStateMap[keyCode]) {
@@ -169,13 +168,13 @@ export class KeyboardInputSource {
         });
     }
 
-    private _getInputEvent (event: KeyboardEventData, eventType: InputEventType) {
+    private _getInputEvent (event: KeyboardEventData, eventType: InputEventType): EventKeyboard {
         const keyCode = getKeyCode(event.code);
         const eventKeyboard = new EventKeyboard(keyCode, eventType);
         return eventKeyboard;
     }
 
-    public on (eventType: InputEventType, callback: KeyboardCallback, target?: any) {
+    public on (eventType: InputEventType, callback: KeyboardCallback, target?: any): void {
         this._eventTarget.on(eventType, callback,  target);
     }
 }

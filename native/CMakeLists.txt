@@ -15,6 +15,7 @@ set(ENGINE_NAME cocos_engine)
 cc_set_if_undefined(CC_DEBUG_FORCE           OFF)
 cc_set_if_undefined(USE_SE_V8                ON)
 cc_set_if_undefined(USE_SE_SM                OFF)
+cc_set_if_undefined(USE_SE_NAPI              OFF)
 cc_set_if_undefined(USE_V8_DEBUGGER          ON)
 cc_set_if_undefined(USE_V8_DEBUGGER_FORCE    OFF)
 cc_set_if_undefined(USE_SOCKET               ON)
@@ -82,6 +83,13 @@ if(USE_SERVER_MODE)
     add_definitions(-DCC_SERVER_MODE)
 endif()
 
+# Fix the issue: https://github.com/cocos/cocos-engine/issues/16190
+# std::unary_function was removed since clang 15
+# The macro has already been defined in boost/config/stdlib/dinkumware.hpp(258,1),
+# so no need to define it again to avoid 'macro redefinition' error.
+if(NOT WINDOWS)
+    add_definitions(-DBOOST_NO_CXX98_FUNCTION_BASE)
+endif()
 
 add_definitions(-DCC_NETMODE_CLIENT=0)
 add_definitions(-DCC_NETMODE_LISTEN_SERVER=1)
@@ -111,11 +119,6 @@ endif()
 if(NOT ANDROID AND NOT IOS AND NOT OHOS AND NOT OPENHARMONY)
     set(USE_VIDEO OFF)
     set(USE_WEBVIEW OFF)
-endif()
-
-if(OPENHARMONY)
-    set(USE_SE_V8 OFF)
-    set(USE_SE_NAPI ON)
 endif()
 
 ## disable middleware when dragonbones and spine are disabled
@@ -459,6 +462,8 @@ cocos_source_files(
     cocos/base/ThreadPool.cpp
     cocos/base/ThreadPool.h
     cocos/base/TypeDef.h
+    cocos/base/BinaryArchive.cpp
+    cocos/base/BinaryArchive.h
     cocos/base/std/any.h
     cocos/base/std/optional.h
     cocos/base/std/variant.h
@@ -478,6 +483,7 @@ cocos_source_files(
     cocos/base/std/hash/extensions.hpp
     cocos/base/std/hash/hash_fwd.hpp
     cocos/base/std/hash/hash.h
+    cocos/base/VirtualInheritBase.h
 )
 
 ############ application
@@ -517,7 +523,7 @@ cocos_source_files(
 )
 
 ############ main
-if(NOT USE_SERVER_MODE AND (WINDOWS OR LINUX))
+if(NOT USE_SERVER_MODE AND (WINDOWS OR LINUX OR MACOSX))
 cocos_source_files(
     cocos/platform/SDLHelper.h
     cocos/platform/SDLHelper.cpp
@@ -530,11 +536,14 @@ cocos_source_files(
     cocos/platform/BasePlatform.h
     cocos/platform/UniversalPlatform.cpp
     cocos/platform/UniversalPlatform.h
+    cocos/platform/CountdownTrigger.h
 )
+
 if(WINDOWS)
     cocos_source_files(
         cocos/platform/win32/WindowsPlatform.cpp
         cocos/platform/win32/WindowsPlatform.h
+        cocos/platform/win32/WindowsCountdownTrigger.cpp
     )
 elseif(LINUX)
     cocos_source_files(
@@ -545,12 +554,13 @@ elseif(ANDROID)
     cocos_source_files(
         cocos/platform/android/AndroidPlatform.cpp
         cocos/platform/android/AndroidPlatform.h
+        cocos/platform/android/AndroidKeyCodes.cpp
+        cocos/platform/android/AndroidCountdownTrigger.cpp
     )
 elseif(OPENHARMONY)
     cocos_source_files(
         cocos/platform/openharmony/napi/NapiHelper.cpp
         cocos/platform/openharmony/napi/NapiHelper.h
-
         cocos/platform/openharmony/WorkerMessageQueue.cpp
         cocos/platform/openharmony/WorkerMessageQueue.h
         cocos/platform/openharmony/OpenHarmonyPlatform.cpp
@@ -565,10 +575,9 @@ elseif(MACOSX)
     cocos_source_files(
         cocos/platform/mac/MacPlatform.mm
         cocos/platform/mac/MacPlatform.h
-        cocos/platform/mac/ViewController.h
-        cocos/platform/mac/ViewController.mm
         cocos/platform/mac/AppDelegate.h
         cocos/platform/mac/AppDelegate.mm
+        cocos/platform/apple/AppleCountdownTrigger.cpp
     )
 elseif(IOS)
     cocos_source_files(
@@ -576,6 +585,7 @@ elseif(IOS)
         cocos/platform/ios/IOSPlatform.h
         cocos/platform/ios/AppDelegateBridge.mm
         cocos/platform/ios/AppDelegateBridge.h
+        cocos/platform/apple/AppleCountdownTrigger.cpp
     )
 endif()
 
@@ -1208,6 +1218,8 @@ cocos_source_files(
                  cocos/renderer/gfx-base/GFXTexture.cpp
                  cocos/renderer/gfx-base/GFXTexture.h
                  cocos/renderer/gfx-base/GFXDeviceObject.h
+                 cocos/renderer/gfx-base/GFXUtil.cpp
+                 cocos/renderer/gfx-base/GFXUtil.h
                  cocos/renderer/gfx-base/states/GFXGeneralBarrier.cpp
                  cocos/renderer/gfx-base/states/GFXGeneralBarrier.h
                  cocos/renderer/gfx-base/states/GFXSampler.cpp
@@ -1312,8 +1324,6 @@ cocos_source_files(
                  cocos/renderer/gfx-empty/EmptyTexture.h
                  cocos/renderer/gfx-empty/EmptyTexture.cpp
 
-                 cocos/renderer/pipeline/BatchedBuffer.cpp
-                 cocos/renderer/pipeline/BatchedBuffer.h
                  cocos/renderer/pipeline/ClusterLightCulling.cpp
                  cocos/renderer/pipeline/ClusterLightCulling.h
                  cocos/renderer/pipeline/Define.h
@@ -1326,8 +1336,6 @@ cocos_source_files(
                  cocos/renderer/pipeline/PipelineStateManager.h
                  cocos/renderer/pipeline/RenderAdditiveLightQueue.cpp
                  cocos/renderer/pipeline/RenderAdditiveLightQueue.h
-                 cocos/renderer/pipeline/RenderBatchedQueue.cpp
-                 cocos/renderer/pipeline/RenderBatchedQueue.h
                  cocos/renderer/pipeline/RenderFlow.cpp
                  cocos/renderer/pipeline/RenderFlow.h
                  cocos/renderer/pipeline/RenderInstancedQueue.cpp
@@ -1383,12 +1391,7 @@ cocos_source_files(
                  cocos/renderer/pipeline/DebugView.h
                  cocos/renderer/pipeline/helper/Utils.h
                  cocos/renderer/pipeline/helper/Utils.cpp
-                 cocos/renderer/pipeline/custom/BinaryArchive.h
-                 cocos/renderer/pipeline/custom/FrameGraphDispatcher.cpp
-                 cocos/renderer/pipeline/custom/details/SerializationUtils.h
                  cocos/renderer/pipeline/custom/test/test.h
-                 cocos/renderer/pipeline/custom/NativeDefaultScene.cpp
-                 cocos/renderer/pipeline/custom/NativeResourceGraph.cpp
                  cocos/renderer/pipeline/reflection-probe/ReflectionProbeFlow.cpp
                  cocos/renderer/pipeline/reflection-probe/ReflectionProbeFlow.h
                  cocos/renderer/pipeline/reflection-probe/ReflectionProbeStage.cpp
@@ -1398,9 +1401,14 @@ cocos_source_files(
                  cocos/renderer/pipeline/custom/ArchiveFwd.h
                  cocos/renderer/pipeline/custom/ArchiveTypes.cpp
                  cocos/renderer/pipeline/custom/ArchiveTypes.h
+                 cocos/renderer/pipeline/custom/BinaryArchive.h
+                 cocos/renderer/pipeline/custom/CustomFwd.h
+                 cocos/renderer/pipeline/custom/CustomTypes.cpp
+                 cocos/renderer/pipeline/custom/CustomTypes.h
                  cocos/renderer/pipeline/custom/FGDispatcherGraphs.h
                  cocos/renderer/pipeline/custom/FGDispatcherTypes.cpp
                  cocos/renderer/pipeline/custom/FGDispatcherTypes.h
+                 cocos/renderer/pipeline/custom/FrameGraphDispatcher.cpp
                  cocos/renderer/pipeline/custom/LayoutGraphFwd.h
                  cocos/renderer/pipeline/custom/LayoutGraphGraphs.h
                  cocos/renderer/pipeline/custom/LayoutGraphNames.h
@@ -1409,6 +1417,8 @@ cocos_source_files(
                  cocos/renderer/pipeline/custom/LayoutGraphTypes.h
                  cocos/renderer/pipeline/custom/LayoutGraphUtils.cpp
                  cocos/renderer/pipeline/custom/LayoutGraphUtils.h
+                 cocos/renderer/pipeline/custom/NativeBuiltinUtils.cpp
+                 cocos/renderer/pipeline/custom/NativeBuiltinUtils.h
                  cocos/renderer/pipeline/custom/NativeExecutor.cpp
                  cocos/renderer/pipeline/custom/NativeFactory.cpp
                  cocos/renderer/pipeline/custom/NativeFwd.h
@@ -1420,8 +1430,13 @@ cocos_source_files(
                  cocos/renderer/pipeline/custom/NativePools.cpp
                  cocos/renderer/pipeline/custom/NativeProgramLibrary.cpp
                  cocos/renderer/pipeline/custom/NativeRenderGraph.cpp
+                 cocos/renderer/pipeline/custom/NativeRenderGraphUtils.cpp
+                 cocos/renderer/pipeline/custom/NativeRenderGraphUtils.h
                  cocos/renderer/pipeline/custom/NativeRenderQueue.cpp
                  cocos/renderer/pipeline/custom/NativeRenderingModule.cpp
+                 cocos/renderer/pipeline/custom/NativeResourceGraph.cpp
+                 cocos/renderer/pipeline/custom/NativeSceneCulling.cpp
+                 cocos/renderer/pipeline/custom/NativeSetter.cpp
                  cocos/renderer/pipeline/custom/NativeTypes.cpp
                  cocos/renderer/pipeline/custom/NativeTypes.h
                  cocos/renderer/pipeline/custom/NativeUtils.cpp
@@ -1444,6 +1459,20 @@ cocos_source_files(
                  cocos/renderer/pipeline/custom/RenderInterfaceTypes.cpp
                  cocos/renderer/pipeline/custom/RenderInterfaceTypes.h
                  cocos/renderer/pipeline/custom/RenderingModule.h
+                 cocos/renderer/pipeline/custom/details/DebugUtils.h
+                 cocos/renderer/pipeline/custom/details/GraphImpl.h
+                 cocos/renderer/pipeline/custom/details/GraphTypes.h
+                 cocos/renderer/pipeline/custom/details/GraphView.h
+                 cocos/renderer/pipeline/custom/details/GslUtils.h
+                 cocos/renderer/pipeline/custom/details/JsbConversion.h
+                 cocos/renderer/pipeline/custom/details/Map.h
+                 cocos/renderer/pipeline/custom/details/Overload.h
+                 cocos/renderer/pipeline/custom/details/PathUtils.h
+                 cocos/renderer/pipeline/custom/details/Pmr.h
+                 cocos/renderer/pipeline/custom/details/Range.h
+                 cocos/renderer/pipeline/custom/details/SerializationUtils.h
+                 cocos/renderer/pipeline/custom/details/Set.h
+                 cocos/renderer/pipeline/custom/details/Utility.h
 )
 
 if (USE_GEOMETRY_RENDERER)
@@ -1512,6 +1541,19 @@ cocos_source_files(
                  cocos/scene/ReflectionProbe.cpp
                  cocos/scene/ReflectionProbeManager.cpp
                  cocos/scene/ReflectionProbeManager.h
+                 cocos/scene/Skin.h
+                 cocos/scene/Skin.cpp
+                 cocos/scene/gpu-scene/Const.h
+                 cocos/scene/gpu-scene/GPUBatchPool.cpp
+                 cocos/scene/gpu-scene/GPUBatchPool.h
+                 cocos/scene/gpu-scene/GPUObjectPool.cpp
+                 cocos/scene/gpu-scene/GPUObjectPool.h
+                 cocos/scene/gpu-scene/GPUMeshPool.cpp
+                 cocos/scene/gpu-scene/GPUMeshPool.h
+                 cocos/scene/gpu-scene/GPUScene.cpp
+                 cocos/scene/gpu-scene/GPUScene.h
+		         cocos/scene/PostSettings.h
+                 cocos/scene/PostSettings.cpp
 )
 
 ##### primitive
@@ -1685,6 +1727,8 @@ if(CC_USE_GLES3)
                      cocos/renderer/gfx-gles3/GLES3Texture.h
                      cocos/renderer/gfx-gles3/GLES3Wrangler.cpp
                      cocos/renderer/gfx-gles3/GLES3Wrangler.h
+                     cocos/renderer/gfx-gles3/GLES3PipelineCache.cpp
+                     cocos/renderer/gfx-gles3/GLES3PipelineCache.h
                      cocos/renderer/gfx-gles3/states/GLES3GeneralBarrier.cpp
                      cocos/renderer/gfx-gles3/states/GLES3GeneralBarrier.h
                      cocos/renderer/gfx-gles3/states/GLES3Sampler.cpp
@@ -1782,6 +1826,8 @@ if(CC_USE_VULKAN)
                      cocos/renderer/gfx-vulkan/volk.c
                      cocos/renderer/gfx-vulkan/volk.h
                      cocos/renderer/gfx-vulkan/VKGPURecycleBin.cpp
+                     cocos/renderer/gfx-vulkan/VKPipelineCache.cpp
+                     cocos/renderer/gfx-vulkan/VKPipelineCache.h
                      cocos/renderer/gfx-vulkan/states/VKGeneralBarrier.cpp
                      cocos/renderer/gfx-vulkan/states/VKGeneralBarrier.h
                      cocos/renderer/gfx-vulkan/states/VKSampler.cpp
@@ -1847,11 +1893,14 @@ if(USE_PHYSICS_PHYSX)
         cocos/physics/sdk/RigidBody.cpp
         cocos/physics/sdk/Joint.h
         cocos/physics/sdk/Joint.cpp
+        cocos/physics/sdk/CharacterController.h
+        cocos/physics/sdk/CharacterController.cpp
         cocos/physics/spec/IBody.h
         cocos/physics/spec/IJoint.h
         cocos/physics/spec/ILifecycle.h
         cocos/physics/spec/IShape.h
         cocos/physics/spec/IWorld.h
+        cocos/physics/spec/ICharacterController.h
         cocos/physics/physx/PhysX.h
         cocos/physics/physx/PhysXInc.h
         cocos/physics/physx/PhysXUtils.h
@@ -1892,6 +1941,14 @@ if(USE_PHYSICS_PHYSX)
         cocos/physics/physx/joints/PhysXFixedJoint.cpp
         cocos/physics/physx/joints/PhysXSpherical.h
         cocos/physics/physx/joints/PhysXSpherical.cpp
+        cocos/physics/physx/joints/PhysXGenericJoint.h
+        cocos/physics/physx/joints/PhysXGenericJoint.cpp
+        cocos/physics/physx/character-controllers/PhysXCharacterController.h
+        cocos/physics/physx/character-controllers/PhysXCharacterController.cpp
+        cocos/physics/physx/character-controllers/PhysXCapsuleCharacterController.h
+        cocos/physics/physx/character-controllers/PhysXCapsuleCharacterController.cpp
+        cocos/physics/physx/character-controllers/PhysXBoxCharacterController.h
+        cocos/physics/physx/character-controllers/PhysXBoxCharacterController.cpp
     )
     cocos_source_files(
         NO_WERROR NO_UBUILD ${SWIG_OUTPUT}/jsb_physics_auto.cpp
@@ -2078,6 +2135,7 @@ cocos_source_files(MODULE ccgeometry
 cocos_source_files(
     cocos/bindings/utils/BindingUtils.cpp
     cocos/bindings/utils/BindingUtils.h
+    cocos/bindings/utils/jsb_garbagecollect_callback.h
 )
 
 ######## dop
@@ -2334,6 +2392,9 @@ if(USE_MIDDLEWARE)
                                      cocos/editor-support/spine-creator-support/spine-cocos2dx.h
             NO_WERROR                cocos/editor-support/spine-creator-support/VertexEffectDelegate.cpp
                                      cocos/editor-support/spine-creator-support/VertexEffectDelegate.h
+                                     cocos/editor-support/spine-creator-support/VertexEffectDelegate.h
+            NO_WERROR                cocos/editor-support/spine-creator-support/Vector2.cpp
+                                     cocos/editor-support/spine-creator-support/Vector2.h
 
         )
         cocos_source_files(
@@ -3005,8 +3066,11 @@ function(cc_apply_definations target)
         $<IF:$<BOOL:${USE_GEOMETRY_RENDERER}>,CC_USE_GEOMETRY_RENDERER=1,CC_USE_GEOMETRY_RENDERER=0>
         $<IF:$<BOOL:${USE_WEBP}>,CC_USE_WEBP=1,CC_USE_WEBP=0>
         $<IF:$<BOOL:${CC_EDITOR}>,CC_EDITOR=1,CC_EDITOR=0>
+        $<IF:$<BOOL:${ENABLE_FLOAT_OUTPUT}>,ENABLE_FLOAT_OUTPUT=1,ENABLE_FLOAT_OUTPUT=0>
         $<$<BOOL:${USE_REMOTE_LOG}>:CC_REMOTE_LOG=1>
         $<$<BOOL:${USE_SE_SM}>:SCRIPT_ENGINE_TYPE=1>
+        $<$<BOOL:${USE_SE_V8}>:SCRIPT_ENGINE_TYPE=2>
+        $<$<BOOL:${USE_SE_NAPI}>:SCRIPT_ENGINE_TYPE=5>
         $<$<OR:$<CONFIG:Debug>,$<BOOL:${CC_DEBUG_FORCE}>>:CC_DEBUG=1>
     )
 endfunction()
@@ -3059,6 +3123,11 @@ if(MSVC)
         /wd4996 # deprecated
         /wd4098 # defaultlib conflicts
         /wd4099 # PDB 'filename' was not found with 'object/library' or at 'path'; linking object as if no debug info
+    )
+    target_link_options(${ENGINE_NAME} PUBLIC
+        /ignore:4099 # PDB 'filename' was not found with 'object/library' or at 'path'; linking object as if no debug info
+        /ignore:4098 # defaultlib 'library' conflicts with use of other libs; use /NODEFAULTLIB:library
+        /ignore:4204 # 'filename' is missing debugging information for referencing module; linking object as if no debug info
     )
 endif()
 

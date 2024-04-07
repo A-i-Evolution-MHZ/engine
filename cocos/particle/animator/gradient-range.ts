@@ -23,9 +23,10 @@
 */
 
 import { ccclass, type, serializable, editable } from 'cc.decorator';
-import { EDITOR } from 'internal:constants';
-import { Color, Enum, cclegacy } from '../../core';
-import Gradient, { AlphaKey, ColorKey } from './gradient';
+import { EDITOR, EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { Enum } from '@base/object';
+import { Color } from '@base/math';
+import { Gradient, AlphaKey, ColorKey } from '../../core';
 import { Texture2D } from '../../asset/assets';
 import { PixelFormat, Filter, WrapMode } from '../../asset/assets/asset-enum';
 
@@ -61,6 +62,9 @@ const Mode = Enum({
     RandomColor: 4,
 });
 
+const tempColor = new Color();
+const tempColor2 = new Color();
+
 /**
  * @en
  * GradientRange is a data structure which contains some constant colors or gradients.
@@ -77,12 +81,12 @@ export default class GradientRange {
      * @zh 使用的渐变色类型 参考 [[Mode]]。
      */
     @type(Mode)
-    get mode () {
+    get mode (): number {
         return this._mode;
     }
 
     set mode (m) {
-        if (EDITOR && !cclegacy.GAME_VIEW) {
+        if (EDITOR_NOT_IN_PREVIEW) {
             if (m === Mode.RandomColor) {
                 if (this.gradient.colorKeys.length === 0) {
                     this.gradient.colorKeys.push(new ColorKey());
@@ -160,7 +164,7 @@ export default class GradientRange {
      *                 @zh 当模式为双色或双渐变色时，使用的插值比例，通常粒子系统会传入一个随机数以获得一个随机结果。
      * @returns @en Gradient value. @zh 颜色渐变曲线的值。
      */
-    public evaluate (time: number, rndRatio: number) {
+    public evaluate (time: number, rndRatio: number): Color {
         switch (this._mode) {
         case Mode.Color:
             return this.color;
@@ -168,11 +172,11 @@ export default class GradientRange {
             Color.lerp(this._color, this.colorMin, this.colorMax, rndRatio);
             return this._color;
         case Mode.RandomColor:
-            return this.gradient.randomColor();
+            return this.gradient.getRandomColor(this._color);
         case Mode.Gradient:
-            return this.gradient.evaluate(time);
+            return this.gradient.evaluateFast(this._color, time);
         case Mode.TwoGradients:
-            Color.lerp(this._color, this.gradientMin.evaluate(time), this.gradientMax.evaluate(time), rndRatio);
+            Color.lerp(this._color, this.gradientMin.evaluateFast(tempColor, time), this.gradientMax.evaluateFast(tempColor2, time), rndRatio);
             return this._color;
         default:
             return this.color;
@@ -182,28 +186,28 @@ export default class GradientRange {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _onBeforeSerialize (props: any) {
+    public _onBeforeSerialize (props: any): any {
         return SerializableTable[this._mode];
     }
 }
 
-function evaluateGradient (gr: GradientRange, time: number, index: number) {
+function evaluateGradient (gr: GradientRange, time: number, index: number): Color {
     switch (gr.mode) {
     case Mode.Color:
         return gr.color;
     case Mode.TwoColors:
         return index === 0 ? gr.colorMin : gr.colorMax;
     case Mode.RandomColor:
-        return gr.gradient.randomColor();
+        return gr.gradient.getRandomColor(tempColor);
     case Mode.Gradient:
-        return gr.gradient.evaluate(time);
+        return gr.gradient.evaluateFast(tempColor, time);
     case Mode.TwoGradients:
-        return index === 0 ? gr.gradientMin.evaluate(time) : gr.gradientMax.evaluate(time);
+        return index === 0 ? gr.gradientMin.evaluateFast(tempColor, time) : gr.gradientMax.evaluateFast(tempColor, time);
     default:
         return gr.color;
     }
 }
-function evaluateHeight (gr: GradientRange) {
+function evaluateHeight (gr: GradientRange): number {
     switch (gr.mode) {
     case Mode.TwoColors:
         return 2;
@@ -213,13 +217,13 @@ function evaluateHeight (gr: GradientRange) {
         return 1;
     }
 }
-export function packGradientRange (tex: Texture2D | null, data: Uint8Array | null, samples: number, gr: GradientRange) {
+export function packGradientRange (tex: Texture2D | null, data: Uint8Array | null, samples: number, gr: GradientRange): { texture: Texture2D; texdata: Uint8Array; } {
     const height = evaluateHeight(gr);
     const len = samples * height * 4;
     if (data === null || data.length !== len) {
         data = new Uint8Array(samples * height * 4);
     }
-    const interval = 1.0 / (samples);
+    const interval = 1.0 / (samples - 1);
     let offset = 0;
 
     for (let h = 0; h < height; h++) {

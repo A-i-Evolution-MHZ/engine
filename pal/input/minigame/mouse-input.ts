@@ -23,14 +23,13 @@
 */
 
 import { MouseCallback } from 'pal/input';
-import { MouseEventData, MouseWheelEventData, minigame } from 'pal/minigame';
-import { screenAdapter } from 'pal/screen-adapter';
-import { systemInfo } from 'pal/system-info';
-import { Vec2 } from '../../../cocos/core/math';
-import { EventTarget } from '../../../cocos/core/event';
+import { MouseEventData, MouseWheelEventData, minigame } from '@pal/minigame';
+import { screenAdapter } from '@pal/screen-adapter';
+import { systemInfo, Feature } from '@pal/system-info';
+import { EventTarget } from '@base/event';
+import { Vec2 } from '@base/math';
 import { EventMouse } from '../../../cocos/input/types';
 import { InputEventType } from '../../../cocos/input/types/event-enum';
-import { Feature } from '../../system-info/enum-type';
 
 export class MouseInputSource {
     private _eventTarget: EventTarget = new EventTarget();
@@ -51,7 +50,7 @@ export class MouseInputSource {
         return new Vec2(x, y);
     }
 
-    private _registerEvent () {
+    private _registerEvent (): void {
         minigame.wx?.onMouseDown?.(this._createCallback(InputEventType.MOUSE_DOWN));
         minigame.wx?.onMouseMove?.(this._createCallback(InputEventType.MOUSE_MOVE));
         minigame.wx?.onMouseUp?.(this._createCallback(InputEventType.MOUSE_UP));
@@ -59,7 +58,7 @@ export class MouseInputSource {
     }
 
     private _createCallback (eventType: InputEventType) {
-        return (event: MouseEventData) => {
+        return (event: MouseEventData): void => {
             const location = this._getLocation(event);
             let button = event.button;
             switch (eventType) {
@@ -90,7 +89,7 @@ export class MouseInputSource {
         };
     }
 
-    private _handleMouseWheel (event: MouseWheelEventData) {
+    private _handleMouseWheel (event: MouseWheelEventData): void {
         const eventType = InputEventType.MOUSE_WHEEL;
         const location = this._getLocation(event);
         const button = event.button;
@@ -107,7 +106,7 @@ export class MouseInputSource {
         this._eventTarget.emit(InputEventType.MOUSE_WHEEL, eventMouse);
     }
 
-    public on (eventType: InputEventType, callback: MouseCallback, target?: any) {
+    public on (eventType: InputEventType, callback: MouseCallback, target?: any): void {
         this._eventTarget.on(eventType, callback, target);
     }
 }

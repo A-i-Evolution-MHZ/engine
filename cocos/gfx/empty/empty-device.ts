@@ -22,6 +22,9 @@
  THE SOFTWARE.
 */
 
+import { ImageData } from 'pal/image';
+import { debug } from '@base/debug';
+import { cclegacy } from '@base/global';
 import { DescriptorSet } from '../base/descriptor-set';
 import { DescriptorSetLayout } from '../base/descriptor-set-layout';
 import { PipelineLayout } from '../base/pipeline-layout';
@@ -36,12 +39,7 @@ import { RenderPass } from '../base/render-pass';
 import { Sampler } from '../base/states/sampler';
 import { Shader } from '../base/shader';
 import { Texture } from '../base/texture';
-import {
-    ShaderInfo,
-    QueueInfo, CommandBufferInfo, DescriptorSetInfo, DescriptorSetLayoutInfo, FramebufferInfo, InputAssemblerInfo, PipelineLayoutInfo,
-    RenderPassInfo, SamplerInfo, TextureInfo, TextureViewInfo, BufferInfo, BufferViewInfo, DeviceInfo, TextureBarrierInfo, GeneralBarrierInfo,
-    BufferBarrierInfo, QueueType, API, BufferTextureCopy, SwapchainInfo,
-} from '../base/define';
+import { ShaderInfo, QueueInfo, CommandBufferInfo, DescriptorSetInfo, DescriptorSetLayoutInfo, FramebufferInfo, InputAssemblerInfo, PipelineLayoutInfo, RenderPassInfo, SamplerInfo, TextureInfo, TextureViewInfo, BufferInfo, BufferViewInfo, DeviceInfo, TextureBarrierInfo, GeneralBarrierInfo, BufferBarrierInfo, QueueType, API, BufferTextureCopy, SwapchainInfo } from '../base/define';
 import { GeneralBarrier } from '../base/states/general-barrier';
 import { TextureBarrier } from '../base/states/texture-barrier';
 import { BufferBarrier } from '../base/states/buffer-barrier';
@@ -59,7 +57,7 @@ import { EmptyRenderPass } from './empty-render-pass';
 import { EmptyShader } from './empty-shader';
 import { EmptySwapchain } from './empty-swapchain';
 import { EmptyTexture } from './empty-texture';
-import { debug, cclegacy } from '../../core';
+import { ImageAsset } from '../../asset/assets';
 
 export class EmptyDevice extends Device {
     private _swapchain: EmptySwapchain | null = null;
@@ -91,9 +89,9 @@ export class EmptyDevice extends Device {
         this._swapchain = null;
     }
 
-    public flushCommands (cmdBuffs: Readonly<CommandBuffer[]>) {}
-    public acquire (swapchains: Readonly<Swapchain[]>) {}
-    public present () {}
+    public flushCommands (cmdBuffs: Readonly<CommandBuffer[]>): void {}
+    public acquire (swapchains: Readonly<Swapchain[]>): void {}
+    public present (): void {}
 
     public createCommandBuffer (info: Readonly<CommandBufferInfo>): CommandBuffer {
         const cmdBuff = new EmptyCommandBuffer();
@@ -186,7 +184,7 @@ export class EmptyDevice extends Device {
         return [this._swapchain as Swapchain];
     }
 
-    public getGeneralBarrier (info: Readonly<GeneralBarrierInfo>) {
+    public getGeneralBarrier (info: Readonly<GeneralBarrierInfo>): GeneralBarrier {
         const hash = GeneralBarrier.computeHash(info);
         if (!this._generalBarrierss.has(hash)) {
             this._generalBarrierss.set(hash, new GeneralBarrier(info, hash));
@@ -194,7 +192,7 @@ export class EmptyDevice extends Device {
         return this._generalBarrierss.get(hash)!;
     }
 
-    public getTextureBarrier (info: Readonly<TextureBarrierInfo>) {
+    public getTextureBarrier (info: Readonly<TextureBarrierInfo>): TextureBarrier {
         const hash = TextureBarrier.computeHash(info);
         if (!this._textureBarriers.has(hash)) {
             this._textureBarriers.set(hash, new TextureBarrier(info, hash));
@@ -202,7 +200,7 @@ export class EmptyDevice extends Device {
         return this._textureBarriers.get(hash)!;
     }
 
-    public getBufferBarrier (info: Readonly<BufferBarrierInfo>) {
+    public getBufferBarrier (info: Readonly<BufferBarrierInfo>): BufferBarrier {
         const hash = BufferBarrier.computeHash(info);
         if (!this._bufferBarriers.has(hash)) {
             this._bufferBarriers.set(hash, new BufferBarrier(info, hash));
@@ -210,9 +208,10 @@ export class EmptyDevice extends Device {
         return this._bufferBarriers.get(hash)!;
     }
 
-    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>) {}
-    public copyTextureToBuffers (texture: Readonly<Texture>, buffers: ArrayBufferView[], regions: Readonly<BufferTextureCopy[]>) {}
-    public copyTexImagesToTexture (texImages: Readonly<TexImageSource[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>) {}
+    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>): void {}
+    public copyTextureToBuffers (texture: Readonly<Texture>, buffers: ArrayBufferView[], regions: Readonly<BufferTextureCopy[]>): void {}
+    public copyTexImagesToTexture (texImages: Readonly<TexImageSource[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>): void {}
+    public copyImageDatasToTexture (imageAssets: Readonly<ImageData[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>): void {}
 }
 
 cclegacy.EmptyDevice = EmptyDevice;

@@ -23,7 +23,8 @@
 */
 
 import { ccclass, serializable } from 'cc.decorator';
-import { RealCurve, Color } from '../../core';
+import { Color } from '@base/math';
+import { RealCurve } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM, createEvalSymbol } from '../define';
 import { Channel, RealChannel, RuntimeBinding, Track, TrackEval } from './track';
 import { maskIfEmpty } from './utils';
@@ -54,14 +55,14 @@ export class ColorTrack extends Track {
      * @returns An readonly four length array in which
      * the element at n denotes the channel of n-th(in order of RGBA) color component(in form of integer within 0-255).
      */
-    public channels () {
+    public channels (): [RealChannel, RealChannel, RealChannel, RealChannel] {
         return this._channels;
     }
 
     /**
      * @internal
      */
-    public [createEvalSymbol] () {
+    public [createEvalSymbol] (): ColorTrackEval {
         return new ColorTrackEval(
             maskIfEmpty(this._channels[0].curve),
             maskIfEmpty(this._channels[1].curve),
@@ -84,11 +85,11 @@ export class ColorTrackEval implements TrackEval<Color> {
 
     }
 
-    public get requiresDefault () {
+    public get requiresDefault (): boolean {
         return !this._x || !this._y || !this._z || !this._w;
     }
 
-    public evaluate (time: number, defaultValue?: Color) {
+    public evaluate (time: number, defaultValue?: Color): Color {
         if (defaultValue) {
             Color.copy(this._result, defaultValue);
         }

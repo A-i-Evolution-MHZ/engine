@@ -1,0 +1,21 @@
+// Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
+#if CC_USE_GPU_DRIVEN
+
+struct ObjectData {
+  mat4 matWorld;
+  mat4 matWorldIT;
+  vec4 center;
+  vec4 halfExtents;
+  vec4 lightingMapUVParam;
+  vec4 localShadowBias;
+};
+
+#pragma rate CCObjectBuffer pass
+#pragma glBinding(0)
+layout(std430) readonly buffer CCObjectBuffer { ObjectData cc_objects[]; };
+
+#pragma rate CCDrawInstanceBuffer pass
+#pragma glBinding(1)
+layout(std430) readonly buffer CCDrawInstanceBuffer { uint cc_drawInstances[]; };
+
+#endif

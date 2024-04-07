@@ -22,10 +22,10 @@
  THE SOFTWARE.
 */
 
-import { cclegacy } from '../core';
+import { cclegacy } from '@base/global';
 import type { AnimationManager } from './animation-manager';
 
-export function getGlobalAnimationManager () {
+export function getGlobalAnimationManager (): AnimationManager {
     const animationManager = cclegacy.director.getAnimationManager() as AnimationManager;
     return animationManager;
 }

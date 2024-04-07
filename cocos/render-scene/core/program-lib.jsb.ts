@@ -22,8 +22,8 @@
  THE SOFTWARE.
 */
 
-import { API, } from '../../gfx';
-import { cclegacy } from '../../core';
+import { API } from '../../gfx';
+import { cclegacy } from '@base/global';
 import type { EffectAsset } from '../../asset/assets/effect-asset';
 import type { Attribute, ShaderInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, PipelineLayout } from '../../gfx';
 import type { IDefineRecord } from './program-lib';
@@ -48,7 +48,7 @@ export interface IProgramInfo extends EffectAsset.IShaderInfo {
     uber: boolean; // macro number exceeds default limits, will fallback to string hash
 }
 
-export function getDeviceShaderVersion (device) {
+export function getDeviceShaderVersion (device): string {
     switch (device.gfxAPI) {
     case API.GLES2:
     case API.WEBGL: return 'glsl1';

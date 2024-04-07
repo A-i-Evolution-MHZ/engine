@@ -22,14 +22,14 @@
  THE SOFTWARE.
 */
 
-import { legacyCC } from '../core/global-exports';
+import { cclegacy } from '@base/global';
 import { WebViewImplWeb } from './web-view-impl-web';
 
 export class WebViewImplManager {
     // default web
-    static getImpl (component) {
+    static getImpl (component): WebViewImplWeb {
         return new WebViewImplWeb(component);
     }
 }
 
-legacyCC.internal.WebViewImplManager = WebViewImplManager;
+cclegacy.internal.WebViewImplManager = WebViewImplManager;

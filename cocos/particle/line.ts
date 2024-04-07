@@ -23,8 +23,10 @@
 */
 
 import { ccclass, help, executeInEditMode, menu, tooltip, displayOrder, type, serializable, range, visible, override, displayName } from 'cc.decorator';
+import { cclegacy } from '@base/global';
+import { CCBoolean } from '@base/object';
+import { Vec3, Vec4, Vec2 } from '@base/math';
 import { Material, Texture2D } from '../asset/assets';
-import { Vec3, cclegacy, Vec4, Vec2, CCBoolean } from '../core';
 import { LineModel } from './models/line-model';
 import { builtinResMgr } from '../asset/asset-manager';
 import CurveRange from './animator/curve-range';
@@ -50,7 +52,7 @@ export class Line extends ModelRenderer {
     @type(Texture2D)
     @displayOrder(0)
     @tooltip('i18n:line.texture')
-    get texture () {
+    get texture (): null {
         return this._texture;
     }
 
@@ -68,18 +70,18 @@ export class Line extends ModelRenderer {
     @displayOrder(1)
     @tooltip('i18n:line.material')
     @displayName('Material')
-    get lineMaterial () {
-        return this.getMaterial(0);
+    get lineMaterial (): Material | null {
+        return this.getSharedMaterial(0);
     }
 
     set lineMaterial (val) {
-        this.setMaterial(val, 0);
+        this.setSharedMaterial(val, 0);
     }
 
     @override
     @visible(false)
     @serializable
-    get sharedMaterials () {
+    get sharedMaterials (): (Material | null)[] {
         return super.sharedMaterials;
     }
 
@@ -96,7 +98,7 @@ export class Line extends ModelRenderer {
      */
     @displayOrder(1)
     @tooltip('i18n:line.worldSpace')
-    get worldSpace () {
+    get worldSpace (): boolean {
         return this._worldSpace;
     }
 
@@ -113,7 +115,7 @@ export class Line extends ModelRenderer {
     }
 
     @type([Vec3])
-    private _positions = [];
+    private _positions: Vec3[] = [];
 
     /**
      * @en Inflection point positions of each polyline.
@@ -122,7 +124,7 @@ export class Line extends ModelRenderer {
     @type([Vec3])
     @displayOrder(2)
     @tooltip('i18n:line.positions')
-    get positions () {
+    get positions (): Vec3[] {
         return this._positions;
     }
 
@@ -142,7 +144,7 @@ export class Line extends ModelRenderer {
     @range([0, 1])
     @displayOrder(3)
     @tooltip('i18n:line.width')
-    get width () {
+    get width (): CurveRange {
         return this._width;
     }
 
@@ -164,7 +166,7 @@ export class Line extends ModelRenderer {
     @type(GradientRange)
     @displayOrder(6)
     @tooltip('i18n:line.color')
-    get color () {
+    get color (): GradientRange {
         return this._color;
     }
 
@@ -191,7 +193,7 @@ export class Line extends ModelRenderer {
     @type(Vec2)
     @displayOrder(4)
     @tooltip('i18n:line.tile')
-    get tile () {
+    get tile (): Vec2 {
         return this._tile;
     }
 
@@ -210,7 +212,7 @@ export class Line extends ModelRenderer {
     @type(Vec2)
     @displayOrder(5)
     @tooltip('i18n:line.offset')
-    get offset () {
+    get offset (): Vec2 {
         return this._offset;
     }
 
@@ -227,7 +229,7 @@ export class Line extends ModelRenderer {
         super();
     }
 
-    public onLoad () {
+    public onLoad (): void {
         const model = cclegacy.director.root.createModel(LineModel);
         if (this._models.length === 0) {
             this._models.push(model);
@@ -252,7 +254,7 @@ export class Line extends ModelRenderer {
         model.setCapacity(100);
     }
 
-    public onEnable () {
+    public onEnable (): void {
         super.onEnable();
         if (this._models.length === 0 || !this._models[0]) {
             return;
@@ -265,13 +267,13 @@ export class Line extends ModelRenderer {
         lineModel.addLineVertexData(this._positions, this.width, this.color);
     }
 
-    public onDisable () {
+    public onDisable (): void {
         if (this._models.length > 0 && this._models[0]) {
             this._detachFromScene();
         }
     }
 
-    protected _attachToScene () {
+    protected _attachToScene (): void {
         super._attachToScene();
         if (this._models.length > 0 && this._models[0] && this.node && this.node.scene) {
             const lineModel = this._models[0];
@@ -285,7 +287,7 @@ export class Line extends ModelRenderer {
     /**
      * @engineInternal
      */
-    public _detachFromScene () {
+    public _detachFromScene (): void {
         super._detachFromScene();
         if (this._models.length > 0 && this._models[0]) {
             const lineModel = this._models[0];
@@ -295,7 +297,7 @@ export class Line extends ModelRenderer {
         }
     }
 
-    protected _onMaterialModified (index: number, material: Material | null) {
+    protected _onMaterialModified (index: number, material: Material | null): void {
         super._onMaterialModified(index, material);
         const matIns = this.getMaterialInstance(0);
         if (matIns) {

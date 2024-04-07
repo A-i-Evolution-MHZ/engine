@@ -171,6 +171,9 @@ public:
     void setSkyboxMaterial(Material *val);
     inline Material *getSkyboxMaterial() const { return _editableMaterial; }
 
+    void setMaterialProperty(const ccstd::string &name, const MaterialPropertyVariant &val, index_t passIdx = CC_INVALID_INDEX) const;
+    void updateEnvMap(TextureCube *val);
+
     void activate(Skybox *resource);
 
     // cjh JSB need to bind the property, so need to make it public
@@ -284,6 +287,7 @@ public:
     TextureCube *getDiffuseMap() const;
     void setDiffuseMap(TextureCube *val);
     void setSkyboxMaterial(Material *skyboxMat);
+    inline Material *getSkyboxMaterial() const { return _material; }
     /**
      * @en Set skybox rotate angle
      * @zh 设置天空盒旋转角度

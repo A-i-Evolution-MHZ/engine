@@ -22,13 +22,14 @@
  THE SOFTWARE.
 */
 
-import { TEST, EDITOR } from 'internal:constants';
+import { TEST, EDITOR, EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
 import { SpriteFrame } from '../../2d/assets/sprite-frame';
-import type { ImageSource }  from '../assets/image-asset';
+import type { IMemoryImageSource } from '../../../pal/image/types';
 import assetManager from '../asset-manager/asset-manager';
 import { BuiltinBundleName } from '../asset-manager/shared';
 import Bundle from '../asset-manager/bundle';
-import { Settings, settings, cclegacy } from '../../core';
+import { Settings, settings } from '../../core';
+import { cclegacy } from '@base/global';
 import { releaseManager } from '../asset-manager/release-manager';
 import type { BuiltinResMgr as JsbBuiltinResMgr } from './builtin-res-mgr';
 
@@ -47,16 +48,16 @@ builtinResMgrProto.init = function () {
     const len = 2;
     const numChannels = 4;
 
-    const blackValueView   = new Uint8Array(len * len * numChannels);
-    let offset = 0;
+    const blackValueView = new Uint8Array(len * len * numChannels);
     for (let i = 0; i < len * len; i++) {
+        const offset = i * numChannels;
         blackValueView[offset] = 0;
         blackValueView[offset + 1] = 0;
         blackValueView[offset + 2] = 0;
         blackValueView[offset + 3] = 255;
     }
 
-    const blackMemImageSource: ImageSource = {
+    const blackMemImageSource: IMemoryImageSource = {
         width: len,
         height: len,
         _data: blackValueView,
@@ -123,34 +124,34 @@ builtinResMgrProto.compileBuiltinMaterial = function () {
 };
 
 builtinResMgrProto.loadBuiltinAssets = function () {
-   const builtinAssets = settings.querySettings<string[]>(Settings.Category.ENGINE, 'builtinAssets');
-   if (TEST || !builtinAssets) return Promise.resolve();
-   const resources = this._resources;
-   return new Promise<void>((resolve, reject) => {
-       assetManager.loadBundle(BuiltinBundleName.INTERNAL, (err, bundle) => {
-           if (err) {
-               reject(err);
-               return;
-           }
-           assetManager.loadAny(builtinAssets, (err, assets) => {
-               if (err) {
-                   reject(err);
-               } else {
+    const builtinAssets = settings.querySettings<string[]>(Settings.Category.ENGINE, 'builtinAssets');
+    if (TEST || !builtinAssets) return Promise.resolve();
+    const resources = this._resources;
+    return new Promise<void>((resolve, reject) => {
+        assetManager.loadBundle(BuiltinBundleName.INTERNAL, (err, bundle) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+            assetManager.loadAny(builtinAssets, (err, assets) => {
+                if (err) {
+                    reject(err);
+                } else {
                     assets.forEach((asset) => {
                         resources[asset.name] = asset;
                         const url = asset.nativeUrl;
                         // In Editor, no need to ignore asset destroy, we use auto gc to handle destroy
-                        if (!EDITOR || cclegacy.GAME_VIEW) releaseManager.addIgnoredAsset(asset);
+                        if (!EDITOR_NOT_IN_PREVIEW) releaseManager.addIgnoredAsset(asset);
                         this.addAsset(asset.name, asset);
                         if (asset instanceof cclegacy.Material) {
                             this._materialsToBeCompiled.push(asset);
                         }
                     });
-                   resolve();
-               }
-           });
-       });
-   });
+                    resolve();
+                }
+            });
+        });
+    });
 }
 
 const builtinResMgr = cclegacy.builtinResMgr = BuiltinResMgr.getInstance() as JsbBuiltinResMgr;

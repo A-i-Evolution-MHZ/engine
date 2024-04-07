@@ -44,7 +44,6 @@ class Root;
 struct IProgramInfo;
 namespace pipeline {
 class InstancedBuffer;
-class BatchedBuffer;
 } // namespace pipeline
 namespace scene {
 struct IMacroPatch;
@@ -58,7 +57,6 @@ using IPassDynamics = ccstd::unordered_map<uint32_t, PassDynamicsValue>;
 enum class BatchingSchemes {
     NONE = 0,
     INSTANCING = 1,
-    VB_MERGING = 2,
 };
 
 struct IBlockRef {
@@ -161,9 +159,8 @@ public:
      * @en Gets a uniform's value.
      * @zh 获取指定普通向量类 uniform 的值。
      * @param handle The handle for the target uniform
-     * @param out The output property to store the result
      */
-    MaterialProperty &getUniform(uint32_t handle, MaterialProperty &out) const;
+    MaterialProperty getUniform(uint32_t handle) const;
 
     /**
      * @en Sets an array type uniform value, if a uniform requires frequent update, please use this method.
@@ -208,7 +205,6 @@ public:
     void update();
 
     pipeline::InstancedBuffer *getInstancedBuffer(int32_t extraKey = 0);
-    pipeline::BatchedBuffer *getBatchedBuffer(int32_t extraKey = 0);
 
     /**
      * @en Destroy the current pass.
@@ -285,6 +281,7 @@ public:
     inline pipeline::RenderPassStage getStage() const { return _stage; }
     inline uint32_t getPhase() const { return _phase; }
     inline uint32_t getPassID() const { return _passID; }
+    inline uint32_t getSubpassOrPassID() const { return _subpassID == 0xFFFFFFFF ? _passID : _subpassID; }
     inline uint32_t getPhaseID() const { return _phaseID; }
     inline const gfx::RasterizerState *getRasterizerState() const { return &_rs; }
     inline const gfx::DepthStencilState *getDepthStencilState() const { return &_depthStencilState; }
@@ -294,6 +291,7 @@ public:
     inline gfx::DescriptorSet *getDescriptorSet() const { return _descriptorSet; }
     inline ccstd::hash_t getHash() const { return _hash; }
     inline gfx::PipelineLayout *getPipelineLayout() const { return _pipelineLayout; }
+    bool isBlend() const;
 
     // Only for UI
     void initPassFromTarget(Pass *target, const gfx::DepthStencilState &dss, ccstd::hash_t hashFactor);
@@ -318,6 +316,7 @@ private:
         gfx::BufferViewInfo &bufferViewInfo,
         ccstd::vector<uint32_t> &startOffsets,
         size_t &count);
+    bool isBlend();
 
 protected:
     void setState(const gfx::BlendState &bs, const gfx::DepthStencilState &dss, const gfx::RasterizerState &rs, gfx::DescriptorSet *ds);
@@ -349,13 +348,13 @@ protected:
     pipeline::RenderPassStage _stage{pipeline::RenderPassStage::DEFAULT};
     uint32_t _phase{0};
     uint32_t _passID{0xFFFFFFFF};
+    uint32_t _subpassID{0xFFFFFFFF};
     uint32_t _phaseID{0xFFFFFFFF};
     ccstd::string _phaseString;
     gfx::PrimitiveMode _primitive{gfx::PrimitiveMode::TRIANGLE_LIST};
     BatchingSchemes _batchingScheme{BatchingSchemes::NONE};
     gfx::DynamicStateFlagBit _dynamicStates{gfx::DynamicStateFlagBit::NONE};
     ccstd::unordered_map<int32_t, IntrusivePtr<pipeline::InstancedBuffer>> _instancedBuffers;
-    ccstd::unordered_map<int32_t, IntrusivePtr<pipeline::BatchedBuffer>> _batchedBuffers;
 
     ccstd::hash_t _hash{0U};
     // external references

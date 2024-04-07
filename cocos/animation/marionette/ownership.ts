@@ -23,7 +23,7 @@
 */
 
 import { DEBUG } from 'internal:constants';
-import { assertIsTrue } from '../../core';
+import { assertIsTrue } from '@base/debug/internal';
 
 export const ownerSymbol = Symbol('[[Owner]]');
 
@@ -31,17 +31,17 @@ export interface OwnedBy<T> {
     [ownerSymbol]: T | undefined;
 }
 
-export function assertsOwnedBy<T> (mastered: OwnedBy<T>, owner: T) {
+export function assertsOwnedBy<T> (mastered: OwnedBy<T>, owner: T): void {
     assertIsTrue(mastered[ownerSymbol] === owner);
 }
 
-export function own<T> (mastered: OwnedBy<T>, owner: T) {
+export function own<T> (mastered: OwnedBy<T>, owner: T): void {
     if (DEBUG) {
         mastered[ownerSymbol] = owner;
     }
 }
 
-export function markAsDangling<T> (mastered: OwnedBy<T>) {
+export function markAsDangling<T> (mastered: OwnedBy<T>): void {
     if (DEBUG) {
         mastered[ownerSymbol] = undefined;
     }

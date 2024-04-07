@@ -68,6 +68,7 @@ DEFINE_CMP_OP(SamplerInfo)
 DEFINE_CMP_OP(GeneralBarrierInfo)
 DEFINE_CMP_OP(TextureBarrierInfo)
 DEFINE_CMP_OP(BufferBarrierInfo)
+DEFINE_CMP_OP(ResourceRange)
 
 #undef DEFINE_CMP_OP
 
@@ -134,6 +135,8 @@ std::pair<uint32_t, uint32_t> formatAlignment(Format format);
 uint32_t formatSize(Format format, uint32_t width, uint32_t height, uint32_t depth);
 
 uint32_t formatSurfaceSize(Format format, uint32_t width, uint32_t height, uint32_t depth, uint32_t mips);
+
+ccstd::hash_t computeAttributesHash(const AttributeList &attributes);
 
 /**
  * @en Get the memory size of the specified type.

@@ -22,16 +22,19 @@
  THE SOFTWARE.
 */
 
-import { screenAdapter } from 'pal/screen-adapter';
-import { mat4, visibleRect } from '../core';
-import { sys, screen, warn } from '../core/platform';
+import { screenAdapter } from '@pal/screen-adapter';
+import { warn } from '@base/debug';
+import { ccwindow } from '@base/global';
+import { isDescendantElementOf } from '@pal/utils';
+import { BrowserType, OS } from '@pal/system-info';
+import { mat4 } from '@base/math';
+import { visibleRect } from '../core';
+import { sys, screen } from '../core/platform';
 import { game } from '../game';
-import { contains } from '../core/utils/misc';
 import { EventType, READY_STATE } from './video-player-enums';
 import { VideoPlayerImpl } from './video-player-impl';
 import { ClearFlagBit } from '../gfx';
-import { BrowserType, OS } from '../../pal/system-info/enum-type';
-import { ccwindow } from '../core/global-exports';
+import type { VideoClip } from './assets/video-clip';
 
 const ccdocument = ccwindow.document;
 
@@ -50,15 +53,15 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         super(component);
     }
 
-    protected addListener (type: string, handler: (e: Event) => void) {
+    protected addListener (type: string, handler: (e: Event) => void): void {
         if (!this._video) {
             return;
         }
         this._eventList.set(type, handler);
         this._video.addEventListener(type, handler);
     }
-    protected removeAllListeners () {
-        this._eventList.forEach((handler, type) => {
+    protected removeAllListeners (): void {
+        this._eventList.forEach((handler, type): void => {
             if (!this._video) {
                 return;
             }
@@ -67,7 +70,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._eventList.clear();
     }
 
-    public canPlay () {
+    public canPlay (): void {
         if (this.video) {
             const promise = this.video.play();
             // the play API can only be initiated by user gesture.
@@ -84,18 +87,18 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public pause () {
+    public pause (): void {
         if (this.video) {
             this.video.pause();
             this._cachedCurrentTime = this.video.currentTime;
         }
     }
 
-    public resume () {
+    public resume (): void {
         this.play();
     }
 
-    public stop () {
+    public stop (): void {
         if (this.video) {
             this._ignorePause = true;
             this.video.currentTime = 0;
@@ -108,19 +111,19 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncClip (clip: any) {
+    public syncClip (clip: VideoClip | null): void {
         this.removeVideoPlayer();
         if (!clip) { return; }
         this.createVideoPlayer(clip.nativeUrl);
     }
 
-    public syncURL (url: string) {
+    public syncURL (url: string): void {
         this.removeVideoPlayer();
         if (!url) { return; }
         this.createVideoPlayer(url);
     }
 
-    public syncPlaybackRate (val: number) {
+    public syncPlaybackRate (val: number): void {
         if (sys.browserType === BrowserType.UC) {
             warn('playbackRate is not supported by the uc mobile browser.');
             return;
@@ -130,45 +133,46 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncVolume (val: number) {
+    public syncVolume (val: number): void {
         if (this.video) {
             this.video.volume = val;
         }
     }
 
-    public syncMute (enabled: boolean) {
+    public syncMute (enabled: boolean): void {
         if (this.video) {
             this.video.muted = enabled;
         }
     }
 
-    public syncLoop (enabled: boolean) {
+    public syncLoop (enabled: boolean): void {
         if (this.video) {
             this.video.loop = enabled;
         }
     }
 
-    public getDuration () {
+    public getDuration (): number {
         if (!this.video) {
             return 0;
         }
         return this.video.duration;
     }
 
-    public getCurrentTime () {
+    public getCurrentTime (): number {
         if (this.video) {
             return this.video.currentTime;
         }
         return -1;
     }
 
-    public seekTo (val: number) {
+    public seekTo (val: number): void {
         if (this.video) {
             this.video.currentTime = val;
+            this._cachedCurrentTime = this.video.currentTime;
         }
     }
 
-    canFullScreen (enabled: boolean) {
+    canFullScreen (enabled: boolean): void {
         // NOTE: below we visited some non-standard web interfaces to complement browser compatibility
         // we need to mark video as any type.
         const video = this._video as any;
@@ -204,7 +208,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
             }
             // Monitor video entry and exit full-screen events
             video.setAttribute('x5-video-player-fullscreen', 'true');
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises, @typescript-eslint/no-unsafe-argument
             screen.requestFullScreen(video, (document) => {
                 const fullscreenElement = sys.browserType === BrowserType.IE ? document.msFullscreenElement : document.fullscreenElement;
                 this._fullScreenOnAwake = (fullscreenElement === video);
@@ -218,7 +222,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncStayOnBottom (enabled: boolean) {
+    public syncStayOnBottom (enabled: boolean): void {
         if (this._video) {
             this._video.style['z-index'] = enabled ? MIN_ZINDEX : 0;
             this._stayOnBottom = enabled;
@@ -226,17 +230,17 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._dirty = true;
     }
 
-    public syncKeepAspectRatio (enabled: boolean) {
+    public syncKeepAspectRatio (enabled: boolean): void {
         this._keepAspectRatio = enabled;
         if (enabled && this._loadedMeta && this._video) {
             this.syncUITransform(this._video.videoWidth, this._video.videoHeight);
         }
     }
 
-    public removeVideoPlayer () {
+    public removeVideoPlayer (): void {
         const video = this._video;
         if (video) {
-            if (contains(game.container, video)) {
+            if (isDescendantElementOf(game.container, video)) {
                 game.container!.removeChild(video);
                 this.removeAllListeners();
             }
@@ -248,7 +252,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._video = null;
     }
 
-    public createVideoPlayer (url: string) {
+    public createVideoPlayer (url: string): void {
         const video = this._video = ccdocument.createElement('video');
         video.className = 'cocosVideo';
         video.style.visibility = 'hidden';
@@ -270,7 +274,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         source.src = url;
     }
 
-    protected _bindDomEvent () {
+    protected _bindDomEvent (): void {
         const video = this._video;
         this.addListener('loadedmetadata', this.onLoadedMetadata.bind(this));
         this.addListener('canplay', this.onCanPlay.bind(this));
@@ -283,7 +287,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this.addListener('error', this.onError.bind(this));
     }
 
-    public onCanPlay (e: Event) {
+    public onCanPlay (e: Event): void {
         const video = e.target as HTMLVideoElement;
         if (this._loaded && video) {
             return;
@@ -298,7 +302,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public enable () {
+    public enable (): void {
         if (this._video) {
             this._visible = true;
             if (this._video.style.visibility === 'visible') {
@@ -308,7 +312,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public disable (noPause?: boolean) {
+    public disable (noPause?: boolean): void {
         if (this._video) {
             if (!noPause && this._playing) {
                 this._video.pause();
@@ -321,7 +325,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncMatrix () {
+    public syncMatrix (): void {
         if (!this._video || !this._visible || !this._component) return;
 
         const camera = this.UICamera;

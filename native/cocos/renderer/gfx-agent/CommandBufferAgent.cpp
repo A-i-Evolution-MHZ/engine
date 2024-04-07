@@ -199,6 +199,35 @@ void CommandBufferAgent::endRenderPass() {
         });
 }
 
+void CommandBufferAgent::insertMarker(const MarkerInfo &marker) {
+    ENQUEUE_MESSAGE_2(
+        _messageQueue, CommandBufferInsertMarker,
+        actor, getActor(),
+        marker, marker,
+        {
+            actor->insertMarker(marker);
+        });
+}
+
+void CommandBufferAgent::beginMarker(const MarkerInfo &marker) {
+    ENQUEUE_MESSAGE_2(
+        _messageQueue, CommandBufferBeginMarker,
+        actor, getActor(),
+        marker, marker,
+        {
+            actor->beginMarker(marker);
+        });
+}
+
+void CommandBufferAgent::endMarker() {
+    ENQUEUE_MESSAGE_1(
+        _messageQueue, CommandBufferEndMarker,
+        actor, getActor(),
+        {
+            actor->endMarker();
+        });
+}
+
 void CommandBufferAgent::execute(CommandBuffer *const *cmdBuffs, uint32_t count) {
     if (!count) return;
 
@@ -361,6 +390,36 @@ void CommandBufferAgent::draw(const DrawInfo &info) {
         });
 }
 
+void CommandBufferAgent::drawIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+    auto *bufferAgent = static_cast<BufferAgent *>(buffer);
+
+    ENQUEUE_MESSAGE_5(
+        _messageQueue, CommandBufferDrawIndirect,
+        actor, getActor(),
+        buff, bufferAgent->getActor(),
+        offset, offset,
+        count, count,
+        stride, stride,
+        {
+            actor->drawIndirect(buff, offset, count, stride);
+        });
+}
+
+void CommandBufferAgent::drawIndexedIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+    auto *bufferAgent = static_cast<BufferAgent *>(buffer);
+
+    ENQUEUE_MESSAGE_5(
+        _messageQueue, CommandBufferDrawIndexedIndirect,
+        actor, getActor(),
+        buff, bufferAgent->getActor(),
+        offset, offset,
+        count, count,
+        stride, stride,
+        {
+            actor->drawIndexedIndirect(buff, offset, count, stride);
+        });
+}
+
 void CommandBufferAgent::updateBuffer(Buffer *buff, const void *data, uint32_t size) {
     auto *bufferAgent = static_cast<BufferAgent *>(buff);
 
@@ -380,6 +439,69 @@ void CommandBufferAgent::updateBuffer(Buffer *buff, const void *data, uint32_t s
         {
             actor->updateBuffer(buff, data, size);
             if (needFreeing) free(data);
+        });
+}
+
+void CommandBufferAgent::resolveTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+    Texture *actorSrcTexture = nullptr;
+    Texture *actorDstTexture = nullptr;
+    if (srcTexture) actorSrcTexture = static_cast<TextureAgent *>(srcTexture)->getActor();
+    if (dstTexture) actorDstTexture = static_cast<TextureAgent *>(dstTexture)->getActor();
+
+    auto *actorRegions = _messageQueue->allocate<TextureCopy>(count);
+    memcpy(actorRegions, regions, count * sizeof(TextureCopy));
+
+    ENQUEUE_MESSAGE_5(
+        _messageQueue, CommandBufferBlitTexture,
+        actor, getActor(),
+        srcTexture, actorSrcTexture,
+        dstTexture, actorDstTexture,
+        regions, actorRegions,
+        count, count,
+        {
+            actor->resolveTexture(srcTexture, dstTexture, regions, count);
+        });
+}
+
+void CommandBufferAgent::copyTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+    Texture *actorSrcTexture = nullptr;
+    Texture *actorDstTexture = nullptr;
+    if (srcTexture) actorSrcTexture = static_cast<TextureAgent *>(srcTexture)->getActor();
+    if (dstTexture) actorDstTexture = static_cast<TextureAgent *>(dstTexture)->getActor();
+
+    auto *actorRegions = _messageQueue->allocate<TextureCopy>(count);
+    memcpy(actorRegions, regions, count * sizeof(TextureCopy));
+
+    ENQUEUE_MESSAGE_5(
+        _messageQueue, CommandBufferBlitTexture,
+        actor, getActor(),
+        srcTexture, actorSrcTexture,
+        dstTexture, actorDstTexture,
+        regions, actorRegions,
+        count, count,
+        {
+            actor->copyTexture(srcTexture, dstTexture, regions, count);
+        });
+}
+
+void CommandBufferAgent::copyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, const BufferCopy *regions, uint32_t count) {
+    Buffer *actorSrcBuffer = nullptr;
+    Buffer *actorDstBuffer = nullptr;
+    if (srcBuffer) actorSrcBuffer = static_cast<BufferAgent *>(srcBuffer)->getActor();
+    if (dstBuffer) actorDstBuffer = static_cast<BufferAgent *>(dstBuffer)->getActor();
+
+    auto *actorRegions = _messageQueue->allocate<BufferCopy>(count);
+    memcpy(actorRegions, regions, count * sizeof(BufferCopy));
+
+    ENQUEUE_MESSAGE_5(
+        _messageQueue, CommandBufferCopyBuffer,
+        actor, getActor(),
+        srcBuffer, actorSrcBuffer,
+        dstBuffer, actorDstBuffer,
+        regions, actorRegions,
+        count, count,
+        {
+            actor->copyBuffer(srcBuffer, dstBuffer, regions, count);
         });
 }
 
@@ -450,7 +572,7 @@ void CommandBufferAgent::pipelineBarrier(const GeneralBarrier *barrier, const Bu
         actor, getActor(),
         barrier, barrier,
         bufferBarriers, actorBufferBarriers,
-        buffers, buffers,
+        buffers, actorBuffers,
         bufferBarrierCount, bufferBarrierCount,
         textureBarriers, actorTextureBarriers,
         textures, actorTextures,
@@ -507,6 +629,16 @@ void CommandBufferAgent::completeQueryPool(QueryPool *queryPool) {
         queryPool, actorQueryPool,
         {
             actor->completeQueryPool(queryPool);
+        });
+}
+
+void CommandBufferAgent::customCommand(CustomCommand &&cmd) {
+    ENQUEUE_MESSAGE_2(
+        _messageQueue, CommandBufferCompleteQueryPool,
+        actor, getActor(),
+        cmd, cmd,
+        {
+            actor->customCommand(std::move(cmd));
         });
 }
 

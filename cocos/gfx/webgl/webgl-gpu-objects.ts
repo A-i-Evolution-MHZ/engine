@@ -22,20 +22,10 @@
  THE SOFTWARE.
 */
 
-import { nextPow2 } from '../../core';
-import {
-    DescriptorType, BufferUsage, Format, MemoryUsage, SampleCount, DynamicStateFlagBit,
-    ShaderStageFlagBit, TextureFlags, TextureType, TextureUsage, Type,
-    Attribute, ColorAttachment, DepthStencilAttachment,
-    UniformBlock, UniformSamplerTexture, DescriptorSetLayoutBinding,
-    DrawInfo, UniformInputAttachment, Uniform, BufferUsageBit, MemoryUsageBit,
-    TextureBlit, Filter, FormatInfos,
-} from '../base/define';
+import { nextPow2 } from '@base/math';
+import { DescriptorType, BufferUsage, Format, MemoryUsage, SampleCount, DynamicStateFlagBit, ShaderStageFlagBit, TextureFlags, TextureType, TextureUsage, Type, Attribute, ColorAttachment, DepthStencilAttachment, UniformBlock, UniformSamplerTexture, DescriptorSetLayoutBinding, DrawInfo, UniformInputAttachment, Uniform, BufferUsageBit, MemoryUsageBit, TextureBlit, Filter, FormatInfos } from '../base/define';
 import { BlendState, DepthStencilState, RasterizerState } from '../base/pipeline-state';
-import { WebGLCmdFuncBindStates, WebGLCmdFuncCreateBuffer, WebGLCmdFuncCreateInputAssember,
-    WebGLCmdFuncCreateShader, WebGLCmdFuncDestroyBuffer, WebGLCmdFuncDestroyInputAssembler,
-    WebGLCmdFuncDestroyShader, WebGLCmdFuncDraw, WebGLCmdFuncUpdateBuffer,
-} from './webgl-commands';
+import { WebGLCmdFuncBindStates, WebGLCmdFuncCreateBuffer, WebGLCmdFuncCreateInputAssember, WebGLCmdFuncCreateShader, WebGLCmdFuncDestroyBuffer, WebGLCmdFuncDestroyInputAssembler, WebGLCmdFuncDestroyShader, WebGLCmdFuncDraw, WebGLCmdFuncUpdateBuffer } from './webgl-commands';
 import { WebGLDeviceManager } from './webgl-define';
 
 export class WebGLIndirectDrawInfos {
@@ -58,13 +48,13 @@ export class WebGLIndirectDrawInfos {
         this.byteOffsets = new Int32Array(this._capacity);
     }
 
-    public clearDraws () {
+    public clearDraws (): void {
         this.drawCount = 0;
         this.drawByIndex = false;
         this.instancedDraw = false;
     }
 
-    public setDrawInfo (idx: number, info: Readonly<DrawInfo>) {
+    public setDrawInfo (idx: number, info: Readonly<DrawInfo>): void {
         this._ensureCapacity(idx);
         this.drawByIndex = info.indexCount > 0;
         this.instancedDraw = !!info.instanceCount;
@@ -80,7 +70,7 @@ export class WebGLIndirectDrawInfos {
         this.instances[idx] = Math.max(1, info.instanceCount);
     }
 
-    private _ensureCapacity (target: number) {
+    private _ensureCapacity (target: number): void {
         if (this._capacity > target) return;
         this._capacity = nextPow2(target);
 
@@ -131,7 +121,6 @@ export interface IWebGLGPUBuffer {
 
     buffer: ArrayBufferView | null;
     vf32: Float32Array | null;
-    indirects: WebGLIndirectDrawInfos;
 }
 
 export interface IWebGLGPUTexture {
@@ -309,7 +298,6 @@ export interface IWebGLGPUInputAssembler {
     attributes: Attribute[];
     gpuVertexBuffers: IWebGLGPUBuffer[];
     gpuIndexBuffer: IWebGLGPUBuffer | null;
-    gpuIndirectBuffer: IWebGLGPUBuffer | null;
 
     glAttribs: IWebGLAttrib[];
     glIndexType: GLenum;
@@ -430,7 +418,6 @@ export class IWebGLBlitManager {
             stride: 4 * Float32Array.BYTES_PER_ELEMENT,
             buffer: null,
             vf32: null,
-            indirects: new WebGLIndirectDrawInfos(),
             glTarget: 0,
             glBuffer: null,
         };
@@ -448,7 +435,6 @@ export class IWebGLBlitManager {
             attributes: [new Attribute(`a_position`, Format.RG32F), new Attribute(`a_texCoord`, Format.RG32F)],
             gpuVertexBuffers: [this._gpuVertexBuffer],
             gpuIndexBuffer: null,
-            gpuIndirectBuffer: null,
 
             glAttribs: [],
             glIndexType: 0,
@@ -480,7 +466,6 @@ export class IWebGLBlitManager {
             stride: 8 * Float32Array.BYTES_PER_ELEMENT,
             buffer: this._uniformBuffer,
             vf32: null,
-            indirects: new WebGLIndirectDrawInfos(),
             glTarget: 0,
             glBuffer: null,
         };
@@ -498,7 +483,7 @@ export class IWebGLBlitManager {
         this._glFramebuffer = WebGLDeviceManager.instance.gl.createFramebuffer();
     }
 
-    public destroy () {
+    public destroy (): void {
         if (this._glFramebuffer) {
             WebGLDeviceManager.instance.gl.deleteFramebuffer(this._glFramebuffer);
             this._glFramebuffer = null;
@@ -519,7 +504,7 @@ export class IWebGLBlitManager {
         }
     }
 
-    public draw (gpuTextureSrc: IWebGLGPUTexture, gpuTextureDst: IWebGLGPUTexture, regions: TextureBlit[], filter: Filter) {
+    public draw (gpuTextureSrc: IWebGLGPUTexture, gpuTextureDst: IWebGLGPUTexture, regions: TextureBlit[], filter: Filter): void {
         const device = WebGLDeviceManager.instance;
         const { gl } = device;
         const stateCache = device.stateCache;
@@ -545,8 +530,8 @@ export class IWebGLBlitManager {
             attachment = gl.DEPTH_ATTACHMENT;
         }
 
-        const regionIndices = regions.map((_, i) => i);
-        regionIndices.sort((a, b) => regions[a].srcSubres.mipLevel - regions[b].srcSubres.mipLevel);
+        const regionIndices = regions.map((_, i): number => i);
+        regionIndices.sort((a, b): number => regions[a].srcSubres.mipLevel - regions[b].srcSubres.mipLevel);
 
         if (stateCache.glFramebuffer !== this._glFramebuffer) {
             device.gl.bindFramebuffer(device.gl.FRAMEBUFFER, this._glFramebuffer);

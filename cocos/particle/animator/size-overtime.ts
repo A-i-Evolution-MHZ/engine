@@ -23,7 +23,7 @@
 */
 
 import { ccclass, tooltip, displayOrder, type, serializable, range, visible } from 'cc.decorator';
-import { pseudoRandom, Vec3 } from '../../core';
+import { pseudoRandom, Vec3 } from '@base/math';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import CurveRange from './curve-range';
 import { ModuleRandSeed } from '../enum';
@@ -50,7 +50,7 @@ export default class SizeOvertimeModule extends ParticleModuleBase {
      * @zh 是否启用。
      */
     @displayOrder(0)
-    public get enable () {
+    public get enable (): boolean {
         return this._enable;
     }
 
@@ -127,7 +127,7 @@ export default class SizeOvertimeModule extends ParticleModuleBase {
      * @param dt @en Update interval time @zh 粒子系统更新的间隔时间
      * @internal
      */
-    public animate (particle: Particle, dt: number) {
+    public animate (particle: Particle, dt: number): void {
         if (!this.separateAxes) {
             const rand = isCurveTwoValues(this.size) ? pseudoRandom(particle.randomSeed + SIZE_OVERTIME_RAND_OFFSET) : 0;
             Vec3.multiplyScalar(particle.size, particle.startSize,

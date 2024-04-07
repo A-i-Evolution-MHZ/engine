@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { IVec3Like, Vec3, Quat, Mat4 } from '../../../core';
+import { IVec3Like, Vec3, Quat, Mat4 } from '@base/math';
 import { FixedConstraint, PhysicsSystem } from '../../framework';
 import { IFixedConstraint } from '../../spec/i-physics-constraint';
 import { PX, _trans, getTempTransform, _pxtrans } from '../physx-adapter';
@@ -31,6 +31,10 @@ import { PhysXInstance } from '../physx-instance';
 import { PhysXRigidBody } from '../physx-rigid-body';
 import { PhysXWorld } from '../physx-world';
 import { PhysXJoint } from './physx-joint';
+
+const v3_0 = new Vec3();
+const quat_0 = new Quat();
+const mat_0 = new Mat4();
 
 export class PhysXFixedJoint extends PhysXJoint implements IFixedConstraint {
     setBreakForce (v: number): void {
@@ -57,33 +61,33 @@ export class PhysXFixedJoint extends PhysXJoint implements IFixedConstraint {
         this.updateFrame();
     }
 
-    updateFrame () {
+    updateFrame (): void {
         const bodyA = (this._rigidBody.body as PhysXRigidBody).sharedBody;
         const cb = this.constraint.connectedBody;
-        const bodyB = cb ? (cb.body as PhysXRigidBody).sharedBody : (PhysicsSystem.instance.physicsWorld as PhysXWorld).getSharedBody(bodyA.node);
 
-        const pos : Vec3 = new Vec3();
-        const rot : Quat = new Quat();
+        Mat4.fromRT(mat_0, bodyA.node.worldRotation, bodyA.node.worldPosition);
+        Mat4.invert(mat_0, mat_0);
+        Mat4.getRotation(quat_0, mat_0);
+        Mat4.getTranslation(v3_0, mat_0);
+        this._impl.setLocalPose(0, getTempTransform(v3_0, quat_0));
 
-        const trans = new Mat4();
-        Mat4.fromRT(trans, bodyA.node.worldRotation, bodyA.node.worldPosition);
-        Mat4.invert(trans, trans);
-        Mat4.getRotation(rot, trans);
-        Mat4.getTranslation(pos, trans);
-        this._impl.setLocalPose(0, getTempTransform(pos, rot));
-
-        Mat4.fromRT(trans, bodyB.node.worldRotation, bodyB.node.worldPosition);
-        Mat4.invert(trans, trans);
-        Mat4.getRotation(rot, trans);
-        Mat4.getTranslation(pos, trans);
-        this._impl.setLocalPose(1, getTempTransform(pos, rot));
+        if (cb) {
+            const bodyB = (cb.body as PhysXRigidBody).sharedBody;
+            Mat4.fromRT(mat_0, bodyB.node.worldRotation, bodyB.node.worldPosition);
+            Mat4.invert(mat_0, mat_0);
+            Mat4.getRotation(quat_0, mat_0);
+            Mat4.getTranslation(v3_0, mat_0);
+            this._impl.setLocalPose(1, getTempTransform(v3_0, quat_0));
+        } else {
+            this._impl.setLocalPose(1, getTempTransform(Vec3.ZERO, Quat.IDENTITY));
+        }
     }
 
-    updateScale0 () {
+    updateScale0 (): void {
         this.updateFrame();
     }
 
-    updateScale1 () {
+    updateScale1 (): void {
         this.updateFrame();
     }
 }

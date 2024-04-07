@@ -22,12 +22,12 @@
  THE SOFTWARE.
 */
 
+import { error } from '@base/debug';
 import { BuiltinShape2D } from './shapes/shape-2d';
 import Intersection2D from './intersection-2d';
 import { BuiltinBoxShape } from './shapes/box-shape-2d';
 import { BuiltinPolygonShape } from './shapes/polygon-shape-2d';
 import { BuiltinCircleShape } from './shapes/circle-shape-2d';
-import { error } from '../../core';
 import { Contact2DType } from '../framework';
 
 export class BuiltinContact {
@@ -65,7 +65,7 @@ export class BuiltinContact {
         }
     }
 
-    test () {
+    test (): boolean {
         const s1 = this.shape1!;
         const s2 = this.shape2!;
 
@@ -92,7 +92,7 @@ export class BuiltinContact {
         return false;
     }
 
-    updateState () {
+    updateState (): string {
         const result = this.test();
 
         let type = Contact2DType.None;

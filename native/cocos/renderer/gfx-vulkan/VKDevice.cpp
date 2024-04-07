@@ -31,6 +31,7 @@
 #include "VKFramebuffer.h"
 #include "VKGPUObjects.h"
 #include "VKInputAssembler.h"
+#include "VKPipelineCache.h"
 #include "VKPipelineLayout.h"
 #include "VKPipelineState.h"
 #include "VKQueryPool.h"
@@ -42,10 +43,10 @@
 #include "VKUtils.h"
 #include "base/Utils.h"
 #include "gfx-base/GFXDef-common.h"
+#include "states/VKBufferBarrier.h"
 #include "states/VKGeneralBarrier.h"
 #include "states/VKSampler.h"
 #include "states/VKTextureBarrier.h"
-#include "states/VKBufferBarrier.h"
 
 #include "application/ApplicationManager.h"
 #include "gfx-base/SPIRVUtils.h"
@@ -60,7 +61,8 @@ CC_DISABLE_WARNINGS()
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #define THSVS_ERROR_CHECK_MIXED_IMAGE_LAYOUT
-#define THSVS_ERROR_CHECK_POTENTIAL_HAZARD
+// remote potential hazard because of programmable blend
+//#define THSVS_ERROR_CHECK_POTENTIAL_HAZARD
 #define THSVS_SIMPLER_VULKAN_SYNCHRONIZATION_IMPLEMENTATION
 #include "thsvs_simpler_vulkan_synchronization.h"
 CC_ENABLE_WARNINGS()
@@ -120,6 +122,10 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     ccstd::vector<const char *> requestedExtensions{
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
+    requestedExtensions.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+#if CC_DEBUG
+    requestedExtensions.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+#endif
     if (_gpuDevice->minorVersion < 2) {
         requestedExtensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
     }
@@ -141,6 +147,14 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     requestedFeatures2.features.multiDrawIndirect = deviceFeatures.multiDrawIndirect;
     // requestedFeatures2.features.se
     requestedVulkan12Features.separateDepthStencilLayouts = _gpuContext->physicalDeviceVulkan12Features.separateDepthStencilLayouts;
+    requestedVulkan12Features.samplerFilterMinmax = _gpuContext->physicalDeviceVulkan12Features.samplerFilterMinmax;
+
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR shadingRateRequest = {};
+    shadingRateRequest.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    shadingRateRequest.attachmentFragmentShadingRate = _gpuContext->physicalDeviceFragmentShadingRateFeatures.attachmentFragmentShadingRate;
+    shadingRateRequest.pipelineFragmentShadingRate = _gpuContext->physicalDeviceFragmentShadingRateFeatures.pipelineFragmentShadingRate;
+
+    requestedVulkan12Features.pNext = &shadingRateRequest;
 
     if (_gpuContext->validationEnabled) {
         requestedLayers.push_back("VK_LAYER_KHRONOS_validation");
@@ -263,13 +277,7 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     };
     findPreferredDepthFormat(depthStencilFormatPriorityList, 3, &_gpuDevice->depthStencilFormat);
 
-    _features[toNumber(Feature::ELEMENT_INDEX_UINT)] = true;
-    _features[toNumber(Feature::INSTANCED_ARRAYS)] = true;
-    _features[toNumber(Feature::MULTIPLE_RENDER_TARGETS)] = true;
-    _features[toNumber(Feature::BLEND_MINMAX)] = true;
-    _features[toNumber(Feature::COMPUTE_SHADER)] = true;
-    _features[toNumber(Feature::INPUT_ATTACHMENT_BENEFIT)] = true;
-
+    initDeviceFeature();
     initFormatFeature();
 
     ccstd::string compressedFmts;
@@ -311,6 +319,7 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     _caps.maxShaderStorageBufferBindings = limits.maxDescriptorSetStorageBuffers;
     _caps.maxTextureUnits = limits.maxDescriptorSetSampledImages;
     _caps.maxVertexTextureUnits = limits.maxPerStageDescriptorSampledImages;
+    _caps.maxColorRenderTargets = limits.maxColorAttachments;
     _caps.maxTextureSize = limits.maxImageDimension2D;
     _caps.maxCubeMapTextureSize = limits.maxImageDimensionCube;
     _caps.maxArrayTextureLayers = limits.maxImageArrayLayers;
@@ -325,6 +334,7 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     // UNASSIGNED-BestPractices-vkCreateComputePipelines-compute-work-group-size
     _caps.maxComputeWorkGroupInvocations = std::min(_caps.maxComputeWorkGroupInvocations, 64U);
 #endif // defined(VK_USE_PLATFORM_ANDROID_KHR)
+    initExtensionCapability();
 
     ///////////////////// Resource Initialization /////////////////////
 
@@ -452,8 +462,8 @@ bool CCVKDevice::doInit(const DeviceInfo & /*info*/) {
     getAccessTypes(AccessFlagBit::DEPTH_STENCIL_ATTACHMENT_WRITE, _gpuDevice->defaultDepthStencilBarrier.nextAccesses);
     cmdFuncCCVKCreateGeneralBarrier(this, &_gpuDevice->defaultDepthStencilBarrier);
 
-    VkPipelineCacheCreateInfo pipelineCacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-    VK_CHECK(vkCreatePipelineCache(_gpuDevice->vkDevice, &pipelineCacheInfo, nullptr, &_gpuDevice->vkPipelineCache));
+    _pipelineCache = std::make_unique<CCVKPipelineCache>();
+    _pipelineCache->init(_gpuDevice->vkDevice);
 
     ///////////////////// Print Debug Info /////////////////////
 
@@ -536,10 +546,7 @@ void CCVKDevice::doDestroy() {
     _gpuFencePools.clear();
 
     if (_gpuDevice) {
-        if (_gpuDevice->vkPipelineCache) {
-            vkDestroyPipelineCache(_gpuDevice->vkDevice, _gpuDevice->vkPipelineCache, nullptr);
-            _gpuDevice->vkPipelineCache = VK_NULL_HANDLE;
-        }
+        _pipelineCache.reset();
 
         if (_gpuDevice->memoryAllocator != VK_NULL_HANDLE) {
             VmaStats stats;
@@ -665,8 +672,6 @@ void CCVKDevice::acquire(Swapchain *const *swapchains, uint32_t count) {
     }
 }
 
-static CCVKGPUStagingBufferPool *tmpPool = nullptr;
-
 void CCVKDevice::present() {
     CC_PROFILE(CCVKDevicePresent);
     bool isGFXDeviceNeedsPresent = _xr ? _xr->isGFXDeviceNeedsPresent(_api) : true;
@@ -707,20 +712,21 @@ void CCVKDevice::present() {
 
     _gpuDevice->curBackBufferIndex = (_gpuDevice->curBackBufferIndex + 1) % _gpuDevice->backBufferCount;
 
+    uint32_t fenceCount = gpuFencePool()->size();
+    if (fenceCount) {
+        VK_CHECK(vkWaitForFences(_gpuDevice->vkDevice, fenceCount,
+                                 gpuFencePool()->data(), VK_TRUE, DEFAULT_TIMEOUT));
+    }
+
+    gpuFencePool()->reset();
+    gpuRecycleBin()->clear();
+    gpuStagingBufferPool()->reset();
     if (_xr) {
         _xr->postGFXDevicePresent(_api);
     }
 }
 
 void CCVKDevice::frameSync() {
-    uint32_t fenceCount = gpuFencePool()->size();
-    if (fenceCount) {
-        VK_CHECK(vkWaitForFences(_gpuDevice->vkDevice, fenceCount,
-                                 gpuFencePool()->data(), VK_TRUE, DEFAULT_TIMEOUT));
-        gpuFencePool()->reset();
-        gpuRecycleBin()->clear();
-        gpuStagingBufferPool()->reset();
-    }
 }
 
 CCVKGPUFencePool *CCVKDevice::gpuFencePool() { return _gpuFencePools[_gpuDevice->curBackBufferIndex].get(); }
@@ -754,6 +760,29 @@ void CCVKDevice::updateBackBufferCount(uint32_t backBufferCount) {
     _gpuBufferHub->updateBackBufferCount(backBufferCount);
     _gpuDescriptorSetHub->updateBackBufferCount(backBufferCount);
     _gpuDevice->backBufferCount = backBufferCount;
+}
+
+void CCVKDevice::initDeviceFeature() {
+    _features[toNumber(Feature::ELEMENT_INDEX_UINT)] = true;
+    _features[toNumber(Feature::INSTANCED_ARRAYS)] = true;
+    _features[toNumber(Feature::MULTIPLE_RENDER_TARGETS)] = true;
+    _features[toNumber(Feature::BLEND_MINMAX)] = true;
+    _features[toNumber(Feature::COMPUTE_SHADER)] = true;
+    _features[toNumber(Feature::INPUT_ATTACHMENT_BENEFIT)] = true;
+    _features[toNumber(Feature::SUBPASS_COLOR_INPUT)] = true;
+    _features[toNumber(Feature::SUBPASS_DEPTH_STENCIL_INPUT)] = true;
+    _features[toNumber(Feature::RASTERIZATION_ORDER_NOCOHERENT)] = true;
+    _features[toNumber(Feature::MULTI_SAMPLE_RESOLVE_DEPTH_STENCIL)] = checkExtension("VK_KHR_depth_stencil_resolve");
+
+    _gpuContext->debugReport = _gpuContext->checkExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME) &&
+                               checkExtension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME) &&
+                               (vkCmdDebugMarkerBeginEXT != nullptr) &&
+                               (vkCmdDebugMarkerInsertEXT != nullptr) &&
+                               (vkCmdDebugMarkerEndEXT != nullptr);
+    _gpuContext->debugUtils = _gpuContext->checkExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME) &&
+                              (vkCmdBeginDebugUtilsLabelEXT != nullptr) &&
+                              (vkCmdInsertDebugUtilsLabelEXT != nullptr) &&
+                              (vkCmdEndDebugUtilsLabelEXT != nullptr);
 }
 
 void CCVKDevice::initFormatFeature() {
@@ -791,7 +820,23 @@ void CCVKDevice::initFormatFeature() {
         if (properties.bufferFeatures & formatFeature) {
             _formatFeatures[i] |= FormatFeature::VERTEX_ATTRIBUTE;
         }
+        // shading reate support
+        formatFeature = VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+        if (properties.optimalTilingFeatures & formatFeature) {
+            _formatFeatures[i] |= FormatFeature ::SHADING_RATE;
+        }
     }
+}
+
+void CCVKDevice::initExtensionCapability() {
+    _caps.supportVariableRateShading = checkExtension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    _caps.supportVariableRateShading &= _gpuContext->physicalDeviceFragmentShadingRateFeatures.pipelineFragmentShadingRate &&
+                                        _gpuContext->physicalDeviceFragmentShadingRateFeatures.attachmentFragmentShadingRate;
+    _caps.supportVariableRateShading &= hasFlag(_formatFeatures[static_cast<uint32_t>(Format::R8UI)], FormatFeatureBit::SHADING_RATE);
+    _caps.supportSubPassShading = checkExtension(VK_HUAWEI_SUBPASS_SHADING_EXTENSION_NAME);
+    _caps.supportFirstInstance = _gpuContext->physicalDeviceFeatures.drawIndirectFirstInstance;
+    _caps.supportFilterMinMax = _gpuContext->physicalDeviceVulkan12Features.samplerFilterMinmax;
+    _caps.supportGPUDriven = true;
 }
 
 CommandBuffer *CCVKDevice::createCommandBuffer(const CommandBufferInfo & /*info*/, bool /*hasAgent*/) {
@@ -920,7 +965,7 @@ void CCVKDevice::getQueryPoolResults(QueryPool *queryPool) {
     uint32_t width = bWait ? 1U : 2U;
     uint64_t stride = sizeof(uint64_t) * width;
     VkQueryResultFlagBits flag = bWait ? VK_QUERY_RESULT_WAIT_BIT : VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
-    ccstd::vector<uint64_t> results(queryCount * width, 0ULL);
+    ccstd::vector<uint64_t> results(queryCount * width, 0);
 
     if (queryCount > 0U) {
         VkResult result = vkGetQueryPoolResults(
@@ -1054,6 +1099,24 @@ static VkResult VKAPI_PTR vkCreateRenderPass2KHRFallback(
     renderPassCreateInfo.pDependencies = subpassDependencies.data();
 
     return vkCreateRenderPass(device, &renderPassCreateInfo, pAllocator, pRenderPass);
+}
+
+SampleCount CCVKDevice::getMaxSampleCount(Format format, TextureUsage usage, TextureFlags flags) const {
+    auto vkFormat = mapVkFormat(format, gpuDevice());
+    auto usages = mapVkImageUsageFlags(usage, flags);
+
+    VkImageFormatProperties imageFormatProperties = {};
+    vkGetPhysicalDeviceImageFormatProperties(_gpuContext->physicalDevice, vkFormat, VK_IMAGE_TYPE_2D,
+                                             VK_IMAGE_TILING_OPTIMAL, usages, 0, &imageFormatProperties);
+
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_64_BIT) return SampleCount::X64;
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_32_BIT) return SampleCount::X32;
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_16_BIT) return SampleCount::X16;
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_8_BIT) return SampleCount::X8;
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_4_BIT) return SampleCount::X4;
+    if (imageFormatProperties.sampleCounts & VK_SAMPLE_COUNT_2_BIT) return SampleCount::X2;
+
+    return SampleCount::X1;
 }
 
 } // namespace gfx

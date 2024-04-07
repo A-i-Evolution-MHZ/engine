@@ -23,9 +23,10 @@
 */
 
 import { BaseObject, TextureAtlasData, TextureData } from '@cocos/dragonbones-js';
+import { Rect } from '@base/math';
 import { SpriteFrame } from '../2d';
 import { TextureBase } from '../asset/assets/texture-base';
-import { Rect, _decorator } from '../core';
+import { _decorator } from '../core';
 
 const { ccclass } = _decorator;
 
@@ -39,7 +40,7 @@ export class CCTextureAtlasData extends TextureAtlasData {
      * @en The texture used for rendering.
      * @zh 实际用于渲染显示的纹理对象。
      */
-    get renderTexture () {
+    get renderTexture (): TextureBase | null {
         return this._renderTexture;
     }
 
@@ -78,21 +79,21 @@ export class CCTextureAtlasData extends TextureAtlasData {
     /**
      * @engineInternal Since v3.7.2 this is an engine private function.
      */
-    static toString () {
+    static toString (): string {
         return '[class dragonBones.CCTextureAtlasData]';
     }
     /**
      * @en Create texture data, get data from the object pool.
      * @zh 创建纹理数据，从对象池获取。
      */
-    createTexture () {
+    createTexture (): CCTextureData {
         return BaseObject.borrowObject(CCTextureData);
     }
     /**
      * @en Clear associated texture resources.
      * @zh 清除关联的纹理。
      */
-    _onClear () {
+    _onClear (): void {
         super._onClear();
         this.renderTexture = null;
     }
@@ -111,14 +112,14 @@ export class CCTextureData extends TextureData {
     /**
      * @engineInternal Since v3.7.2 this is an engine private function.
      */
-    static toString () {
+    static toString (): string {
         return '[class dragonBones.CCTextureData]';
     }
     /**
      * @en Clear SpriteFrame assets.
      * @zh 清除关联的SpriteFrame 资源。
      */
-    _onClear () {
+    _onClear (): void {
         super._onClear();
         this.spriteFrame = null;
     }

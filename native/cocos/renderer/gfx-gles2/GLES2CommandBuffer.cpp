@@ -138,6 +138,15 @@ void GLES2CommandBuffer::nextSubpass() {
     _curCmdPackage->cmds.push(GLESCmdType::BEGIN_RENDER_PASS);
 }
 
+void GLES2CommandBuffer::insertMarker(const MarkerInfo &marker) {
+    std::ignore = marker;
+}
+void GLES2CommandBuffer::beginMarker(const MarkerInfo &marker) {
+    std::ignore = marker;
+}
+void GLES2CommandBuffer::endMarker() {
+}
+
 void GLES2CommandBuffer::bindPipelineState(PipelineState *pso) {
     GLES2GPUPipelineState *gpuPipelineState = static_cast<GLES2PipelineState *>(pso)->gpuPipelineState();
     if (_curGPUPipelineState != gpuPipelineState) {
@@ -254,6 +263,22 @@ void GLES2CommandBuffer::setStencilCompareMask(StencilFace face, uint32_t ref, u
     if (hasFlag(face, StencilFace::BACK)) update(_curDynamicStates.stencilStatesBack);
 }
 
+void GLES2CommandBuffer::drawIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+    // not support
+    std::ignore = buffer;
+    std::ignore = offset;
+    std::ignore = count;
+    std::ignore = stride;
+}
+
+void GLES2CommandBuffer::drawIndexedIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+    // not support
+    std::ignore = buffer;
+    std::ignore = offset;
+    std::ignore = count;
+    std::ignore = stride;
+}
+
 void GLES2CommandBuffer::draw(const DrawInfo &info) {
     CC_PROFILE(GLES2CommandBufferDraw);
     if (_isStateInvalid) {
@@ -310,6 +335,18 @@ void GLES2CommandBuffer::copyBuffersToTexture(const uint8_t *const *buffers, Tex
         _curCmdPackage->copyBufferToTextureCmds.push(cmd);
         _curCmdPackage->cmds.push(GLESCmdType::COPY_BUFFER_TO_TEXTURE);
     }
+}
+
+void GLES2CommandBuffer::copyTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+    // should not copy texture in a secondary command buffer
+}
+
+void GLES2CommandBuffer::resolveTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+    // should not copy texture in a secondary command buffer
+}
+
+void GLES2CommandBuffer::copyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, const BufferCopy *regions, uint32_t count) {
+    // should not copy buffer in a secondary command buffer
 }
 
 void GLES2CommandBuffer::blitTexture(Texture *srcTexture, Texture *dstTexture, const TextureBlit *regions, uint32_t count, Filter filter) {

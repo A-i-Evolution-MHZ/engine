@@ -32,10 +32,14 @@
 #include "gi/light-probe/LightProbe.h"
 #include "scene/Ambient.h"
 #include "scene/Fog.h"
+#include "scene/Model.h"
 #include "scene/Octree.h"
 #include "scene/Pass.h"
 #include "scene/Shadow.h"
+#include "scene/Skin.h"
 #include "scene/Skybox.h"
+#include "scene/Model.h"
+#include "scene/PostSettings.h"
 
 namespace cc {
 namespace pipeline {
@@ -48,6 +52,8 @@ PipelineSceneData::PipelineSceneData() {
     _csmLayers = ccnew CSMLayers();
     _octree = ccnew scene::Octree();
     _lightProbes = ccnew gi::LightProbes();
+    _skin = ccnew scene::Skin();
+    _postSettings = ccnew scene ::PostSettings();
 }
 
 PipelineSceneData::~PipelineSceneData() {
@@ -58,6 +64,8 @@ PipelineSceneData::~PipelineSceneData() {
     CC_SAFE_DELETE(_octree);
     CC_SAFE_DELETE(_csmLayers);
     CC_SAFE_DELETE(_lightProbes);
+    CC_SAFE_DELETE(_skin);
+    CC_SAFE_DELETE(_postSettings);
 }
 
 void PipelineSceneData::activate(gfx::Device *device) {
@@ -74,6 +82,10 @@ void PipelineSceneData::activate(gfx::Device *device) {
 #if CC_USE_OCCLUSION_QUERY
     initOcclusionQuery();
 #endif
+
+    if (isGPUDrivenEnabled()) {
+        initGPUDrivenMaterial();
+    }
 }
 
 void PipelineSceneData::destroy() {
@@ -83,6 +95,8 @@ void PipelineSceneData::destroy() {
     _occlusionQueryInputAssembler = nullptr;
     _occlusionQueryVertexBuffer = nullptr;
     _occlusionQueryIndicesBuffer = nullptr;
+    _standardSkinModel = nullptr;
+    _skinMaterialModel = nullptr;
 }
 
 void PipelineSceneData::initOcclusionQuery() {
@@ -139,6 +153,60 @@ void PipelineSceneData::initDebugRenderer() {
     }
 }
 
+void PipelineSceneData::initGPUDrivenMaterial() {
+    struct CullMacros {
+        bool useOcclusion;
+        bool isMainPass;
+    };
+
+    CullMacros defines[3] = {
+        {true, true},
+        {true, false},
+        {false, true},
+    };
+
+    const auto &caps = _device->getCapabilities();
+    const auto firstInstance = caps.supportFirstInstance;
+    const auto filterMinMax = caps.supportFilterMinMax;
+    const auto frustumCulling = true;
+
+    for (auto i = 0; i < 3; i++) {
+        if (_gpuCullingMaterials[i]) {
+            continue;
+        }
+
+        _gpuCullingMaterials[i] = ccnew Material();
+        _gpuCullingMaterials[i]->setUuid("default-gpu-culling-material");
+
+        IMaterialInfo info;
+        MacroRecord macros{
+            {"CC_USE_SAMPLER_FILTER_MIN_MAX", filterMinMax},
+            {"CC_SUPPORT_FIRST_INSTANCE", firstInstance},
+            {"CC_USE_FRUSTUM_CULLING", frustumCulling},
+            {"CC_USE_OCCLUSION_CULLING", defines[i].useOcclusion},
+            {"CC_GPU_CULLING_MAIN_PASS", defines[i].isMainPass},
+        };
+
+        info.defines = macros;
+        info.effectName = "pipeline/gpu-driven/gpu-culling";
+        _gpuCullingMaterials[i]->initialize(info);
+    }
+
+    if (!_hizMaterial) {
+        _hizMaterial = ccnew Material();
+        _hizMaterial->setUuid("default-hiz-material");
+
+        IMaterialInfo info;
+        MacroRecord macros{
+            {"CC_USE_SAMPLER_FILTER_MIN_MAX", filterMinMax},
+        };
+
+        info.defines = macros;
+        info.effectName = "pipeline/gpu-driven/hierarchical-z";
+        _hizMaterial->initialize(info);
+    }
+}
+
 gfx::InputAssembler *PipelineSceneData::createOcclusionQueryIA() {
     // create vertex buffer
     const float vertices[] = {-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1};
@@ -164,6 +232,22 @@ gfx::InputAssembler *PipelineSceneData::createOcclusionQueryIA() {
     // create cube input assembler
     gfx::InputAssemblerInfo info{attributes, {_occlusionQueryVertexBuffer}, _occlusionQueryIndicesBuffer};
     return _device->createInputAssembler(info);
+}
+
+bool PipelineSceneData::isGPUDrivenEnabled() const {
+#if CC_EDITOR
+    return false;
+#else
+    return _gpuDrivenEnabled && _device->getCapabilities().supportGPUDriven;
+#endif
+}
+
+void PipelineSceneData::setStandardSkinModel(scene::Model *val) {
+    _standardSkinModel = val;
+}
+
+void PipelineSceneData::setSkinMaterialModel(scene::Model *val) {
+    _skinMaterialModel = val;
 }
 
 } // namespace pipeline

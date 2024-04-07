@@ -23,8 +23,9 @@
 */
 
 import { ccclass, serializable } from 'cc.decorator';
+import { warn } from '@base/debug';
+import { js } from '@base/utils';
 import type { ParticleSystem } from '../../particle';
-import { warn, js } from '../../core';
 import type { Node } from '../../scene-graph/node';
 import { CLASS_NAME_PREFIX_ANIM } from '../define';
 import { EmbeddedPlayableState, EmbeddedPlayable } from './embedded-player';
@@ -46,7 +47,7 @@ export class EmbeddedParticleSystemPlayable extends EmbeddedPlayable {
     @serializable
     public path = '';
 
-    public instantiate (root: Node) {
+    public instantiate (root: Node): EmbeddedParticleSystemPlayableState | null {
         const node = root.getChildByPath(this.path);
         if (!node) {
             warn(`Hierarchy path ${this.path} does not exists.`);

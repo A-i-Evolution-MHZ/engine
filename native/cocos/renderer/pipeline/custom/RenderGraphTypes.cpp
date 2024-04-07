@@ -34,17 +34,108 @@ namespace cc {
 
 namespace render {
 
+RasterView::RasterView(const allocator_type& alloc) noexcept
+: slotName(alloc),
+  slotName1(alloc) {}
+
+RasterView::RasterView(ccstd::pmr::string slotNameIn, AccessType accessTypeIn, AttachmentType attachmentTypeIn, gfx::LoadOp loadOpIn, gfx::StoreOp storeOpIn, gfx::ClearFlagBit clearFlagsIn, gfx::Color clearColorIn, gfx::ShaderStageFlagBit shaderStageFlagsIn, const allocator_type& alloc) noexcept // NOLINT
+: slotName(std::move(slotNameIn), alloc),
+  slotName1(alloc),
+  accessType(accessTypeIn),
+  attachmentType(attachmentTypeIn),
+  loadOp(loadOpIn),
+  storeOp(storeOpIn),
+  clearFlags(clearFlagsIn),
+  clearColor(clearColorIn),
+  shaderStageFlags(shaderStageFlagsIn) {}
+
+RasterView::RasterView(ccstd::pmr::string slotNameIn, ccstd::pmr::string slotName1In, AccessType accessTypeIn, AttachmentType attachmentTypeIn, gfx::LoadOp loadOpIn, gfx::StoreOp storeOpIn, gfx::ClearFlagBit clearFlagsIn, gfx::Color clearColorIn, gfx::ShaderStageFlagBit shaderStageFlagsIn, const allocator_type& alloc) noexcept // NOLINT
+: slotName(std::move(slotNameIn), alloc),
+  slotName1(std::move(slotName1In), alloc),
+  accessType(accessTypeIn),
+  attachmentType(attachmentTypeIn),
+  loadOp(loadOpIn),
+  storeOp(storeOpIn),
+  clearFlags(clearFlagsIn),
+  clearColor(clearColorIn),
+  shaderStageFlags(shaderStageFlagsIn) {}
+
+RasterView::RasterView(RasterView&& rhs, const allocator_type& alloc)
+: slotName(std::move(rhs.slotName), alloc),
+  slotName1(std::move(rhs.slotName1), alloc),
+  accessType(rhs.accessType),
+  attachmentType(rhs.attachmentType),
+  loadOp(rhs.loadOp),
+  storeOp(rhs.storeOp),
+  clearFlags(rhs.clearFlags),
+  clearColor(rhs.clearColor),
+  slotID(rhs.slotID),
+  shaderStageFlags(rhs.shaderStageFlags) {}
+
+RasterView::RasterView(RasterView const& rhs, const allocator_type& alloc)
+: slotName(rhs.slotName, alloc),
+  slotName1(rhs.slotName1, alloc),
+  accessType(rhs.accessType),
+  attachmentType(rhs.attachmentType),
+  loadOp(rhs.loadOp),
+  storeOp(rhs.storeOp),
+  clearFlags(rhs.clearFlags),
+  clearColor(rhs.clearColor),
+  slotID(rhs.slotID),
+  shaderStageFlags(rhs.shaderStageFlags) {}
+
+ComputeView::ComputeView(const allocator_type& alloc) noexcept
+: name(alloc) {}
+
+ComputeView::ComputeView(ccstd::pmr::string nameIn, AccessType accessTypeIn, gfx::ClearFlagBit clearFlagsIn, ClearValueType clearValueTypeIn, ClearValue clearValueIn, gfx::ShaderStageFlagBit shaderStageFlagsIn, const allocator_type& alloc) noexcept
+: name(std::move(nameIn), alloc),
+  accessType(accessTypeIn),
+  clearFlags(clearFlagsIn),
+  clearValueType(clearValueTypeIn),
+  clearValue(clearValueIn),
+  shaderStageFlags(shaderStageFlagsIn) {}
+
+ComputeView::ComputeView(ccstd::pmr::string nameIn, AccessType accessTypeIn, uint32_t planeIn, gfx::ClearFlagBit clearFlagsIn, ClearValueType clearValueTypeIn, ClearValue clearValueIn, gfx::ShaderStageFlagBit shaderStageFlagsIn, const allocator_type& alloc) noexcept
+: name(std::move(nameIn), alloc),
+  accessType(accessTypeIn),
+  plane(planeIn),
+  clearFlags(clearFlagsIn),
+  clearValueType(clearValueTypeIn),
+  clearValue(clearValueIn),
+  shaderStageFlags(shaderStageFlagsIn) {}
+
+ComputeView::ComputeView(ComputeView&& rhs, const allocator_type& alloc)
+: name(std::move(rhs.name), alloc),
+  accessType(rhs.accessType),
+  plane(rhs.plane),
+  clearFlags(rhs.clearFlags),
+  clearValueType(rhs.clearValueType),
+  clearValue(rhs.clearValue),
+  shaderStageFlags(rhs.shaderStageFlags) {}
+
+ComputeView::ComputeView(ComputeView const& rhs, const allocator_type& alloc)
+: name(rhs.name, alloc),
+  accessType(rhs.accessType),
+  plane(rhs.plane),
+  clearFlags(rhs.clearFlags),
+  clearValueType(rhs.clearValueType),
+  clearValue(rhs.clearValue),
+  shaderStageFlags(rhs.shaderStageFlags) {}
+
 Subpass::Subpass(const allocator_type& alloc) noexcept
 : rasterViews(alloc),
-  computeViews(alloc) {}
+  computeViews(alloc),
+  resolvePairs(alloc) {}
 
 Subpass::Subpass(Subpass&& rhs, const allocator_type& alloc)
 : rasterViews(std::move(rhs.rasterViews), alloc),
-  computeViews(std::move(rhs.computeViews), alloc) {}
+  computeViews(std::move(rhs.computeViews), alloc),
+  resolvePairs(std::move(rhs.resolvePairs), alloc) {}
 
 Subpass::Subpass(Subpass const& rhs, const allocator_type& alloc)
 : rasterViews(rhs.rasterViews, alloc),
-  computeViews(rhs.computeViews, alloc) {}
+  computeViews(rhs.computeViews, alloc),
+  resolvePairs(rhs.resolvePairs, alloc) {}
 
 SubpassGraph::SubpassGraph(const allocator_type& alloc) noexcept
 : _vertices(alloc),
@@ -80,23 +171,32 @@ SubpassGraph::Vertex::Vertex(Vertex const& rhs, const allocator_type& alloc)
 : outEdges(rhs.outEdges, alloc),
   inEdges(rhs.inEdges, alloc) {}
 
-RasterSubpass::RasterSubpass(uint32_t subpassIDIn, const allocator_type& alloc) noexcept
+RasterSubpass::RasterSubpass(uint32_t subpassIDIn, uint32_t countIn, uint32_t qualityIn, const allocator_type& alloc) noexcept
 : rasterViews(alloc),
   computeViews(alloc),
-  subpassID(subpassIDIn) {}
+  resolvePairs(alloc),
+  subpassID(subpassIDIn),
+  count(countIn),
+  quality(qualityIn) {}
 
 RasterSubpass::RasterSubpass(RasterSubpass&& rhs, const allocator_type& alloc)
 : rasterViews(std::move(rhs.rasterViews), alloc),
   computeViews(std::move(rhs.computeViews), alloc),
-  subpassID(rhs.subpassID),
+  resolvePairs(std::move(rhs.resolvePairs), alloc),
   viewport(rhs.viewport),
+  subpassID(rhs.subpassID),
+  count(rhs.count),
+  quality(rhs.quality),
   showStatistics(rhs.showStatistics) {}
 
 RasterSubpass::RasterSubpass(RasterSubpass const& rhs, const allocator_type& alloc)
 : rasterViews(rhs.rasterViews, alloc),
   computeViews(rhs.computeViews, alloc),
-  subpassID(rhs.subpassID),
+  resolvePairs(rhs.resolvePairs, alloc),
   viewport(rhs.viewport),
+  subpassID(rhs.subpassID),
+  count(rhs.count),
+  quality(rhs.quality),
   showStatistics(rhs.showStatistics) {}
 
 ComputeSubpass::ComputeSubpass(uint32_t subpassIDIn, const allocator_type& alloc) noexcept
@@ -117,29 +217,44 @@ ComputeSubpass::ComputeSubpass(ComputeSubpass const& rhs, const allocator_type& 
 RasterPass::RasterPass(const allocator_type& alloc) noexcept
 : rasterViews(alloc),
   computeViews(alloc),
+  attachmentIndexMap(alloc),
+  textures(alloc),
+  resources(alloc),
   subpassGraph(alloc),
   versionName(alloc) {}
 
 RasterPass::RasterPass(RasterPass&& rhs, const allocator_type& alloc)
 : rasterViews(std::move(rhs.rasterViews), alloc),
   computeViews(std::move(rhs.computeViews), alloc),
+  attachmentIndexMap(std::move(rhs.attachmentIndexMap), alloc),
+  textures(std::move(rhs.textures), alloc),
+  resources(std::move(rhs.resources), alloc),
   subpassGraph(std::move(rhs.subpassGraph), alloc),
   width(rhs.width),
   height(rhs.height),
+  count(rhs.count),
+  quality(rhs.quality),
   viewport(rhs.viewport),
   versionName(std::move(rhs.versionName), alloc),
   version(rhs.version),
+  hashValue(rhs.hashValue),
   showStatistics(rhs.showStatistics) {}
 
 RasterPass::RasterPass(RasterPass const& rhs, const allocator_type& alloc)
 : rasterViews(rhs.rasterViews, alloc),
   computeViews(rhs.computeViews, alloc),
+  attachmentIndexMap(rhs.attachmentIndexMap, alloc),
+  textures(rhs.textures, alloc),
+  resources(rhs.resources, alloc),
   subpassGraph(rhs.subpassGraph, alloc),
   width(rhs.width),
   height(rhs.height),
+  count(rhs.count),
+  quality(rhs.quality),
   viewport(rhs.viewport),
   versionName(rhs.versionName, alloc),
   version(rhs.version),
+  hashValue(rhs.hashValue),
   showStatistics(rhs.showStatistics) {}
 
 PersistentRenderPassAndFramebuffer::PersistentRenderPassAndFramebuffer(const allocator_type& alloc) noexcept
@@ -178,6 +293,8 @@ ResourceGraph::ResourceGraph(const allocator_type& alloc) noexcept
   textures(alloc),
   framebuffers(alloc),
   swapchains(alloc),
+  formatViews(alloc),
+  subresourceViews(alloc),
   valueIndex(alloc),
   renderPasses(alloc) {}
 
@@ -206,22 +323,33 @@ ResourceGraph::Vertex::Vertex(Vertex const& rhs, const allocator_type& alloc)
   handle(rhs.handle) {}
 
 ComputePass::ComputePass(const allocator_type& alloc) noexcept
-: computeViews(alloc) {}
+: computeViews(alloc),
+  textures(alloc) {}
 
 ComputePass::ComputePass(ComputePass&& rhs, const allocator_type& alloc)
-: computeViews(std::move(rhs.computeViews), alloc) {}
+: computeViews(std::move(rhs.computeViews), alloc),
+  textures(std::move(rhs.textures), alloc) {}
 
 ComputePass::ComputePass(ComputePass const& rhs, const allocator_type& alloc)
-: computeViews(rhs.computeViews, alloc) {}
+: computeViews(rhs.computeViews, alloc),
+  textures(rhs.textures, alloc) {}
+
+ResolvePass::ResolvePass(const allocator_type& alloc) noexcept
+: resolvePairs(alloc) {}
+
+ResolvePass::ResolvePass(ResolvePass&& rhs, const allocator_type& alloc)
+: resolvePairs(std::move(rhs.resolvePairs), alloc) {}
+
+ResolvePass::ResolvePass(ResolvePass const& rhs, const allocator_type& alloc)
+: resolvePairs(rhs.resolvePairs, alloc) {}
 
 CopyPass::CopyPass(const allocator_type& alloc) noexcept
-: copyPairs(alloc) {}
+: copyPairs(alloc),
+  uploadPairs(alloc) {}
 
 CopyPass::CopyPass(CopyPass&& rhs, const allocator_type& alloc)
-: copyPairs(std::move(rhs.copyPairs), alloc) {}
-
-CopyPass::CopyPass(CopyPass const& rhs, const allocator_type& alloc)
-: copyPairs(rhs.copyPairs, alloc) {}
+: copyPairs(std::move(rhs.copyPairs), alloc),
+  uploadPairs(std::move(rhs.uploadPairs), alloc) {}
 
 MovePass::MovePass(const allocator_type& alloc) noexcept
 : movePairs(alloc) {}
@@ -259,41 +387,21 @@ ClearView::ClearView(ClearView const& rhs, const allocator_type& alloc)
   clearFlags(rhs.clearFlags),
   clearColor(rhs.clearColor) {}
 
-SceneData::SceneData(const allocator_type& alloc) noexcept
-: name(alloc),
-  scenes(alloc) {}
-
-SceneData::SceneData(ccstd::pmr::string nameIn, SceneFlags flagsIn, LightInfo lightIn, const allocator_type& alloc) noexcept
-: name(std::move(nameIn), alloc),
-  light(std::move(lightIn)),
-  flags(flagsIn),
-  scenes(alloc) {}
-
-SceneData::SceneData(SceneData&& rhs, const allocator_type& alloc)
-: name(std::move(rhs.name), alloc),
-  camera(rhs.camera),
-  light(std::move(rhs.light)),
-  flags(rhs.flags),
-  scenes(std::move(rhs.scenes), alloc) {}
-
-SceneData::SceneData(SceneData const& rhs, const allocator_type& alloc)
-: name(rhs.name, alloc),
-  camera(rhs.camera),
-  light(rhs.light),
-  flags(rhs.flags),
-  scenes(rhs.scenes, alloc) {}
-
 RenderData::RenderData(const allocator_type& alloc) noexcept
 : constants(alloc),
   buffers(alloc),
   textures(alloc),
-  samplers(alloc) {}
+  samplers(alloc),
+  bufferNames(alloc),
+  custom(alloc) {}
 
 RenderData::RenderData(RenderData&& rhs, const allocator_type& alloc)
 : constants(std::move(rhs.constants), alloc),
   buffers(std::move(rhs.buffers), alloc),
   textures(std::move(rhs.textures), alloc),
-  samplers(std::move(rhs.samplers), alloc) {}
+  samplers(std::move(rhs.samplers), alloc),
+  bufferNames(std::move(rhs.bufferNames), alloc),
+  custom(std::move(rhs.custom), alloc) {}
 
 RenderGraph::RenderGraph(const allocator_type& alloc) noexcept
 : objects(alloc),
@@ -306,6 +414,7 @@ RenderGraph::RenderGraph(const allocator_type& alloc) noexcept
   rasterSubpasses(alloc),
   computeSubpasses(alloc),
   computePasses(alloc),
+  resolvePasses(alloc),
   copyPasses(alloc),
   movePasses(alloc),
   raytracePasses(alloc),
@@ -315,7 +424,8 @@ RenderGraph::RenderGraph(const allocator_type& alloc) noexcept
   dispatches(alloc),
   clearViews(alloc),
   viewports(alloc),
-  index(alloc) {}
+  index(alloc),
+  sortedVertices(alloc) {}
 
 RenderGraph::RenderGraph(RenderGraph&& rhs, const allocator_type& alloc)
 : objects(std::move(rhs.objects), alloc),
@@ -328,6 +438,7 @@ RenderGraph::RenderGraph(RenderGraph&& rhs, const allocator_type& alloc)
   rasterSubpasses(std::move(rhs.rasterSubpasses), alloc),
   computeSubpasses(std::move(rhs.computeSubpasses), alloc),
   computePasses(std::move(rhs.computePasses), alloc),
+  resolvePasses(std::move(rhs.resolvePasses), alloc),
   copyPasses(std::move(rhs.copyPasses), alloc),
   movePasses(std::move(rhs.movePasses), alloc),
   raytracePasses(std::move(rhs.raytracePasses), alloc),
@@ -337,7 +448,8 @@ RenderGraph::RenderGraph(RenderGraph&& rhs, const allocator_type& alloc)
   dispatches(std::move(rhs.dispatches), alloc),
   clearViews(std::move(rhs.clearViews), alloc),
   viewports(std::move(rhs.viewports), alloc),
-  index(std::move(rhs.index), alloc) {}
+  index(std::move(rhs.index), alloc),
+  sortedVertices(std::move(rhs.sortedVertices), alloc) {}
 
 // ContinuousContainer
 void RenderGraph::reserve(vertices_size_type sz) {

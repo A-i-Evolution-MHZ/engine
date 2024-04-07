@@ -22,8 +22,8 @@
  THE SOFTWARE.
 */
 
-import { getError } from '../../core';
-import { ccwindow } from '../../core/global-exports';
+import { getError } from '@base/debug';
+import { ccwindow } from '@base/global';
 
 const ccdocument = ccwindow.document;
 
@@ -48,7 +48,7 @@ export default function downloadScript (
 
     script.async = options.scriptAsyncLoading || false;
     script.src = url;
-    function loadHandler () {
+    function loadHandler (): void {
         script.parentNode!.removeChild(script);
         script.removeEventListener('load', loadHandler, false);
         script.removeEventListener('error', errorHandler, false);
@@ -56,7 +56,7 @@ export default function downloadScript (
         if (onComplete) { onComplete(null); }
     }
 
-    function errorHandler () {
+    function errorHandler (): void {
         script.parentNode!.removeChild(script);
         script.removeEventListener('load', loadHandler, false);
         script.removeEventListener('error', errorHandler, false);

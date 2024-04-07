@@ -1,38 +1,37 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { injectionStyle } = require('../utils/prop');
 const History = require('./asset-history/index');
 
-const showImage = ['image', 'texture', 'sprite-frame', 'gltf-mesh'];
 exports.listeners = {};
 
 exports.style = fs.readFileSync(path.join(__dirname, './asset.css'), 'utf8');
 
 exports.template = `
-<ui-section whole scrollable="false" class="container">
-    <header class="header" slot="header">
-        <ui-icon class="icon" color tooltip="i18n:ENGINE.assets.locate_asset"></ui-icon>
-        <ui-image class="image" tooltip="i18n:ENGINE.assets.locate_asset"></ui-image>
+<div class="container">
+    <header class="header">
+        <ui-asset-image class="image" tooltip="i18n:ENGINE.assets.locate_asset"></ui-asset-image>
         <ui-label class="name"></ui-label>
+        <ui-button class="save tiny green" tooltip="i18n:ENGINE.assets.save">
+            <ui-icon value="check"></ui-icon>
+        </ui-button>
+        <ui-button class="reset tiny" tooltip="i18n:ENGINE.assets.reset">
+            <ui-icon value="reset" color></ui-icon>
+        </ui-button>
+        <ui-button class="copy transparent" icon tooltip="i18n:ENGINE.inspector.cloneToEdit">
+            <ui-icon value="copy"></ui-icon>
+        </ui-button>
         <ui-link value="" class="help" tooltip="i18n:ENGINE.menu.help_url">
             <ui-icon value="help"></ui-icon>
         </ui-link>
-        <ui-button class="save tiny green transparent" tooltip="i18n:ENGINE.assets.save">
-            <ui-icon value="check"></ui-icon>
-        </ui-button>
-        <ui-button class="reset tiny red transparent" tooltip="i18n:ENGINE.assets.reset">
-            <ui-icon value="reset"></ui-icon>
-        </ui-button>
-        <ui-button type="icon" class="copy transparent" tooltip="i18n:ENGINE.inspector.cloneToEdit">
-            <ui-icon value="copy"></ui-icon>
-        </ui-button>
     </header>
     <section class="content">
         <section class="content-header"></section>
         <section class="content-section"></section>
         <section class="content-footer"></section>
     </section>
-</ui-section>
+</div>
 `;
 
 exports.$ = {
@@ -40,7 +39,6 @@ exports.$ = {
     header: '.header',
     content: '.content',
     copy: '.copy',
-    icon: '.icon',
     image: '.image',
     name: '.name',
     help: '.help',
@@ -68,6 +66,9 @@ const Elements = {
             };
 
             Editor.Message.addBroadcastListener('asset-db:asset-change', panel.__assetChanged__);
+
+            Elements.panel.i18nChangeBind = Elements.panel.i18nChange.bind(panel);
+            Editor.Message.addBroadcastListener('i18n:change', Elements.panel.i18nChangeBind);
 
             panel.history = new History();
         },
@@ -145,7 +146,7 @@ const Elements = {
                 return JSON.stringify(meta);
             });
 
-            panel.getHelpUrl(Editor.I18n.t(`ENGINE.help.assets.${panel.type}`));
+            panel.setHelpUrl(panel.$.help, { help: panel.type });
         },
         close() {
             const panel = this;
@@ -158,6 +159,12 @@ const Elements = {
             Editor.Message.removeBroadcastListener('asset-db:asset-change', panel.__assetChanged__);
 
             delete panel.history;
+        },
+        i18nChange() {
+            const panel = this;
+
+            const $links = panel.$.container.querySelectorAll('ui-link');
+            $links.forEach($link => panel.setHelpUrl($link));
         },
     },
     header: {
@@ -215,7 +222,7 @@ const Elements = {
                 }
             });
 
-            panel.$.icon.addEventListener('click', (event) => {
+            panel.$.image.addEventListener('click', (event) => {
                 event.stopPropagation();
                 panel.uuidList.forEach((uuid) => {
                     Editor.Message.request('assets', 'ui-kit:touch-asset', uuid);
@@ -235,8 +242,8 @@ const Elements = {
                 panel.$.name.setAttribute('tooltip', 'i18n:inspector.asset.prohibitEditInternalAsset');
                 panel.$.name.setAttribute('readonly', '');
 
-                if (panel.asset.source) {
-                    panel.$.copy.style.display = 'inline-block';
+                if (panel.asset.source && panel.asset.importer !== 'database') {
+                    panel.$.copy.style.display = 'inline-flex';
                 } else {
                     panel.$.copy.style.display = 'none';
                 }
@@ -246,19 +253,9 @@ const Elements = {
                 panel.$.copy.style.display = 'none';
             }
 
-            const isImage = showImage.includes(panel.asset.importer);
 
-            if (isImage) {
-                panel.$.image.value = panel.asset.uuid;
-                panel.$.header.prepend(panel.$.image);
-                panel.$.icon.remove();
-            } else {
-                panel.$.icon.value = panel.asset.importer === '*' ? 'file' : panel.asset.importer;
-                panel.$.header.prepend(panel.$.icon);
-
-                panel.$.image.value = ''; // 清空，避免缓存
-                panel.$.image.remove();
-            }
+            panel.$.image.value = panel.asset.uuid;
+            panel.$.image.importer = panel.asset.importer;
         },
         async isDirty() {
             const panel = this;
@@ -310,6 +307,7 @@ const Elements = {
                     const file = list[i];
                     if (!contentRender.__panels__[i]) {
                         contentRender.__panels__[i] = document.createElement('ui-panel');
+                        contentRender.__panels__[i].injectionStyle(injectionStyle);
                         contentRender.__panels__[i].addEventListener('change', () => {
                             Elements.header.isDirty.call(panel);
                         });
@@ -330,7 +328,6 @@ const Elements = {
                 try {
                     await Promise.all(
                         contentRender.__panels__.map(($panel) => {
-                            $panel.injectionStyle(`ui-prop { margin-top: 5px; }`);
                             return $panel.update(panel.assetList, panel.metaList);
                         }),
                     );
@@ -365,11 +362,16 @@ exports.methods = {
             renderData[renderName] = [];
 
             for (let i = 0; i < contentRender.__panels__.length; i++) {
-                if (contentRender.__panels__[i].panelObject.record) {
-                    const data = await contentRender.__panels__[i].callMethod('record');
-                    renderData[renderName].push(data);
-                } else {
+                try {
+                    if (contentRender.__panels__[i].panelObject.record) {
+                        const data = await contentRender.__panels__[i].callMethod('record');
+                        renderData[renderName].push(data);
+                    } else {
+                        renderData[renderName].push(null);
+                    }
+                } catch (error) {
                     renderData[renderName].push(null);
+                    console.debug(error);
                 }
             }
         }
@@ -566,15 +568,45 @@ exports.methods = {
 
         panel.$this.update(panel.uuidList, panel.renderMap);
     },
-    getHelpUrl(url) {
-        const panel = this;
+    setHelpUrl($link, data) {
+        if (data) {
+            $link.helpData = data;
+        } else {
+            if (!$link.helpData) {
+                return;
+            }
+            data = $link.helpData;
+        }
+
+        const url = this.getHelpUrl(data);
 
         if (url) {
-            panel.$.help.style.display = 'block';
-            panel.$.help.value = url;
+            $link.style.display = 'block';
+            $link.value = url;
         } else {
-            panel.$.help.style.display = 'none';
+            $link.style.display = 'none';
         }
+    },
+    getHelpUrl(data) {
+        return Editor.I18n.t(`ENGINE.help.assets.${data.help}`);
+    },
+    replaceContainerWithUISection(params) {
+        const panel = this;
+        const $containerDiv = panel.$.container;
+        const $header = panel.$.container.querySelector('.header');
+        $header.setAttribute('slot', 'header');
+
+        const $content = panel.$.container.querySelector('.content');
+
+        const $containerUISection = document.createElement('ui-section');
+        $containerUISection.setAttribute('class', 'container config no-padding');
+        $containerUISection.setAttribute('cache-expand', params.uuid);
+
+        $containerUISection.appendChild($header);
+        $containerUISection.appendChild($content);
+
+        $containerDiv.replaceWith($containerUISection);
+
     },
 };
 

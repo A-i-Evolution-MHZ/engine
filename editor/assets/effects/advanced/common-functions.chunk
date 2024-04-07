@@ -6,7 +6,7 @@
   vec4 SurfacesFragmentModifyBaseColorAndTransparency()
   {
     vec4 baseColor = albedo;
-    
+
     #if USE_VERTEX_COLOR
       baseColor.rgb *= SRGBToLinear(FSInput_vertexColor.rgb); // use linear
       baseColor.a *= FSInput_vertexColor.a;
@@ -39,7 +39,7 @@
       #if USE_ALBEDO_MAP
         alpha = texture(albedoMap, ALBEDO_UV).ALPHA_TEST_CHANNEL;
       #endif
-  
+
       if (alpha < albedoScaleAndCutoff.w) discard;
     #endif
   }
@@ -52,22 +52,10 @@
     vec3 normal = FSInput_worldNormal;
     #if USE_NORMAL_MAP
       vec3 nmmp = texture(normalMap, NORMAL_UV).xyz - vec3(0.5);
-      normal = CalculateNormalFromTangentSpace(nmmp, emissiveScaleParam.w, normal.xyz, FSInput_worldTangent, FSInput_mirrorNormal);
+      normal = CalculateNormalFromTangentSpace(nmmp, emissiveScaleParam.w, normalize(normal.xyz), normalize(FSInput_worldTangent), FSInput_mirrorNormal);
     #endif
 
     return normalize(normal);
-  }
-#endif
-
-#ifndef CC_SURFACES_FRAGMENT_MODIFY_EMISSIVE
-  #define CC_SURFACES_FRAGMENT_MODIFY_EMISSIVE
-  vec3 SurfacesFragmentModifyEmissive()
-  {
-    vec3 emissive = emissive.rgb;
-    #if USE_EMISSIVE_MAP
-      emissive = SRGBToLinear(texture(emissiveMap, EMISSIVE_UV).rgb);
-    #endif
-    return emissive * emissiveScaleParam.xyz;
   }
 #endif
 
@@ -79,7 +67,7 @@
     pbr.x = 1.0;
     #if USE_PBR_MAP
       vec4 res = texture(pbrMap, DEFAULT_UV);
-      pbr.x *= res.OCCLUSION_CHANNEL;
+      pbr.x = mix(1.0, res.OCCLUSION_CHANNEL, pbrParams.x);
       pbr.y *= res.ROUGHNESS_CHANNEL;
       pbr.z *= res.METALLIC_CHANNEL;
       pbr.w *= res.SPECULAR_INTENSITY_CHANNEL;

@@ -48,6 +48,7 @@
 #include "scene/Camera.h"
 #include "scene/DirectionalLight.h"
 #include "scene/SpotLight.h"
+#include "scene/Skybox.h"
 
 namespace cc {
 
@@ -63,7 +64,7 @@ Root::Root(gfx::Device *device)
 : _device(device) {
     instance = this;
     // TODO(minggo):
-    //    this._dataPoolMgr = legacyCC.internal.DataPoolManager && new legacyCC.internal.DataPoolManager(device) as DataPoolManager;
+    //    this._dataPoolMgr = cclegacy.internal.DataPoolManager && new cclegacy.internal.DataPoolManager(device) as DataPoolManager;
 
     _cameraList.reserve(6);
     _swapchains.reserve(2);
@@ -89,7 +90,7 @@ void Root::initialize(gfx::Swapchain * /*swapchain*/) {
     addWindowEventListener();
     // TODO(minggo):
     // return Promise.resolve(builtinResMgr.initBuiltinRes(this._device));
-    const uint32_t usedUBOVectorCount = (pipeline::UBOGlobal::COUNT + pipeline::UBOCamera::COUNT + pipeline::UBOShadow::COUNT + pipeline::UBOLocal::COUNT) / 4;
+    const uint32_t usedUBOVectorCount = (pipeline::UBOGlobal::COUNT + pipeline::UBOCamera::COUNT + pipeline::UBOShadow::COUNT + pipeline::UBOLocal::COUNT + pipeline::UBOWorldBound::COUNT) / 4;
     uint32_t maxJoints = (_device->getCapabilities().maxVertexUniformVectors - usedUBOVectorCount) / 3;
     maxJoints = maxJoints < 256 ? maxJoints : 256;
     pipeline::localDescriptorSetLayoutResizeMaxJoints(maxJoints);
@@ -322,7 +323,7 @@ bool Root::setRenderPipeline(pipeline::RenderPipeline *rppl /* = nullptr*/) {
         }
     } else {
         CC_ASSERT(!_pipelineRuntime);
-        _pipelineRuntime.reset(render::Factory::createPipeline());
+        _pipelineRuntime.reset(render::Factory::createPipeline(false));
         if (!_pipelineRuntime->activate(_mainRenderWindow->getSwapchain())) {
             _pipelineRuntime->destroy();
             _pipelineRuntime.reset();
@@ -356,6 +357,11 @@ bool Root::setRenderPipeline(pipeline::RenderPipeline *rppl /* = nullptr*/) {
 void Root::onGlobalPipelineStateChanged() {
     for (const auto &scene : _scenes) {
         scene->onGlobalPipelineStateChanged();
+    }
+
+    if (_pipelineRuntime->getPipelineSceneData()->getSkybox()->isEnabled())
+    {
+        _pipelineRuntime->getPipelineSceneData()->getSkybox()->getModel()->onGlobalPipelineStateChanged();
     }
 
     _pipelineRuntime->onGlobalPipelineStateChanged();
@@ -561,6 +567,9 @@ void Root::doXRFrameMove(int32_t totalFrames) {
     if (_xr->isRenderAllowable()) {
         bool isSceneUpdated = false;
         int viewCount = _xr->getXRConfig(xr::XRConfigKey::VIEW_COUNT).getInt();
+        // compatible native pipeline
+        static bool isNativePipeline = dynamic_cast<cc::render::NativePipeline*>(_pipelineRuntime.get()) != nullptr;
+        bool forceUpdateSceneTwice = isNativePipeline ? true : _xr->getXRConfig(xr::XRConfigKey::EYE_RENDER_JS_CALLBACK).getBool();
         for (int xrEye = 0; xrEye < viewCount; xrEye++) {
             _xr->beginRenderEyeFrame(xrEye);
 
@@ -594,6 +603,9 @@ void Root::doXRFrameMove(int32_t totalFrames) {
             }
 
             bool isNeedUpdateScene = xrEye == static_cast<uint32_t>(xr::XREye::LEFT) || (xrEye == static_cast<uint32_t>(xr::XREye::RIGHT) && !isSceneUpdated);
+            if (forceUpdateSceneTwice) {
+                isNeedUpdateScene = true;
+            }
             frameMoveProcess(isNeedUpdateScene, totalFrames);
             auto camIter = _cameraList.begin();
             while (camIter != _cameraList.end()) {

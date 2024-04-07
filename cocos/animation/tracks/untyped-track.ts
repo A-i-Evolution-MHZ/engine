@@ -23,7 +23,9 @@
 */
 
 import { ccclass, serializable } from 'cc.decorator';
-import { RealCurve, Color, Size, Vec2, Vec3, Vec4, getError } from '../../core';
+import { getError } from '@base/debug';
+import { Color, Size, Vec2, Vec3, Vec4 } from '@base/math';
+import { RealCurve } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM, createEvalSymbol } from '../define';
 import { IValueProxyFactory } from '../value-proxy';
 import { ColorTrack, ColorTrackEval } from './color-track';
@@ -46,7 +48,7 @@ export class UntypedTrack extends Track {
     @serializable
     private _channels: UntypedTrackChannel[] = [];
 
-    public channels () {
+    public channels (): UntypedTrackChannel[] {
         return this._channels;
     }
 
@@ -57,8 +59,8 @@ export class UntypedTrack extends Track {
     /**
      * @internal
      */
-    public createLegacyEval (hintValue?: unknown) {
-        const trySearchCurve = (property: string) => this._channels.find((channel) => channel.property === property)?.curve;
+    public createLegacyEval (hintValue?: unknown): Vec2TrackEval | Vec3TrackEval | Vec4TrackEval | ColorTrackEval | SizeTrackEval {
+        const trySearchCurve = (property: string): RealCurve | undefined => this._channels.find((channel): boolean => channel.property === property)?.curve;
         switch (true) {
         default:
             throw new Error(getError(3931));
@@ -104,8 +106,8 @@ export class UntypedTrack extends Track {
     }
 
     public upgrade (refine: UntypedTrackRefine): Track | null {
-        const trySearchChannel = (property: string, outChannel: RealChannel) => {
-            const untypedChannel = this.channels().find((channel) => channel.property === property);
+        const trySearchChannel = (property: string, outChannel: RealChannel): void => {
+            const untypedChannel = this.channels().find((channel): boolean => channel.property === property);
             if (untypedChannel) {
                 outChannel.name = untypedChannel.name;
                 outChannel.curve.assignSorted(

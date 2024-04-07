@@ -1,6 +1,8 @@
 'use strict';
 
 const { updateElementReadonly } = require('../../utils/assets');
+const { extname } = require('path');
+const { ParseAtlasFile } = require('./parse-atlas');
 
 exports.template = /* html */`
 <div class="asset-texture">
@@ -34,6 +36,11 @@ exports.template = /* html */`
                 </ui-prop>
             </section>
         </section>
+        <ui-prop class="filter-different">
+            <div slot="content">
+                <div class="atlas-file-name"></div>
+            </div>
+        </ui-prop>
         <ui-prop class="wrapMode-prop">
             <ui-label slot="label" value="i18n:ENGINE.assets.texture.wrapMode" tooltip="i18n:ENGINE.assets.texture.wrapModeTip"></ui-label>
             <ui-select slot="content" class="wrapMode-select"></ui-select>
@@ -60,13 +67,12 @@ exports.style = /* css */`
     display: flex;
     flex: 1;
     flex-direction: column;
+    padding-right: 4px;
 }
 .asset-texture > .content {
     flex: 1;
 }
-.asset-texture > .content ui-prop {
-    margin: 4px 0;
-}
+
 .asset-texture > .content .filter-advanced-section,
 .asset-texture > .content .wrap-advanced-section,
 .asset-texture > .content .generate-mipmaps-section {
@@ -81,9 +87,7 @@ exports.style = /* css */`
 }
 .asset-texture > .content > .warn-words {
     display: none;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    line-height: 1.7;
+    margin-top: 4px;
     color: var(--color-warn-fill);
 }
 .asset-texture > .preview {
@@ -99,6 +103,14 @@ exports.style = /* css */`
 }
 .asset-texture > .preview:hover {
     border-color: var(--color-warn-fill);
+}
+.filter-different {
+    color: var(--color-warn-fill);
+    display: none;
+}
+.filter-different .atlas-file-name span {
+    cursor: pointer;
+    text-decoration: underline;
 }
 `;
 
@@ -120,6 +132,8 @@ exports.$ = {
     wrapModeTProp: '.wrapModeT-prop',
     wrapModeTSelect: '.wrapModeT-select',
     warnWords: '.warn-words',
+    filterDifferent: '.filter-different',
+    atlasFileName: '.filter-different .atlas-file-name',
 };
 
 const ModeMap = {
@@ -160,7 +174,7 @@ const ModeMap = {
         },
     },
 };
-
+exports.ModeMap = ModeMap;
 const Elements = {
     anisotropy: {
         ready() {
@@ -321,15 +335,15 @@ const Elements = {
                 panel.userDataList.forEach((userData) => {
                     const value = event.target.value;
                     if (!value) {
-                        // 没勾选 生成 mipmaps，不显示 mipfilter 选项
+                        // Generate mipmaps is unchecked, and the mipfilter option is not displayed
                         userData.mipfilter = 'none';
                         panel.$.generateMipmapsSection.style.display = 'none';
                     } else {
                         panel.$.generateMipmapsSection.style.display = 'block';
-                        // 为空的话默认 nearest
+                        // Defaults to nearest if empty
                         if (panel.$.mipfilterSelect.value === 'none') {
                             panel.$.mipfilterSelect.value = 'nearest';
-                            // TODO: 目前 ui-select 通过 .value 修改组件值后没有触发 change 事件，需要手动提交
+                            // TODO: Currently, ui-select does not trigger the change event after modifying the component value via .value, so you need to submit it manually
                             panel.$.mipfilterSelect.dispatch('change');
                         }
                     }
@@ -346,7 +360,7 @@ const Elements = {
 
             panel.$.generateMipmapsCheckbox.value = panel.userData.mipfilter ? panel.userData.mipfilter !== 'none' : false;
 
-            // 更新时判断是否显示 mipfilter 选项
+            // Determine whether to display the mipfilter option on update
             panel.$.generateMipmapsCheckbox.value
                 ? (panel.$.generateMipmapsSection.style.display = 'block')
                 : (panel.$.generateMipmapsSection.style.display = 'none');
@@ -382,6 +396,11 @@ const Elements = {
 
             panel.$.mipfilterSelect.value = panel.userData.mipfilter || 'nearest';
 
+            // temporary logging of mipfilter
+            panel.metaList && panel.metaList.forEach((meta) => {
+                Editor.Profile.setConfig('inspector', `${meta.uuid}.texture.mipfilter`, panel.userData.mipfilter, 'default');
+            });
+
             panel.updateInvalid(panel.$.mipfilterSelect, 'mipfilter');
             updateElementReadonly.call(panel, panel.$.mipfilterSelect);
         },
@@ -391,8 +410,12 @@ const Elements = {
             const panel = this;
 
             panel.$.wrapModeSelect.addEventListener('change', (event) => {
-                // 根据 wrapModeSelect 组合值同步相应的 wrapModeS/wrapModeT 到 userData
+                // Synchronize the corresponding wrapModeS/wrapModeT to userData based on the wrapModeSelect combination
                 const value = event.target.value;
+                // temporary logging of wrapMode
+                this.metaList && this.metaList.forEach((meta) => {
+                    Editor.Profile.setConfig('inspector', `${meta.uuid}.texture.wrapMode`, value, 'default');
+                });
                 if (ModeMap.wrap[value]) {
                     panel.userDataList.forEach((userData) => {
                         const data = ModeMap.wrap[value];
@@ -402,10 +425,10 @@ const Elements = {
                     });
                     panel.$.wrapAdvancedSection.style.display = 'none';
                 } else {
-                    // 选择 advanced 显示自定义项
+                    // Select advanced to display customized items
                     panel.$.wrapAdvancedSection.style.display = 'block';
                 }
-                // 校验是否显示警告提示
+                // Calibrate whether to display a warning
                 Elements.warnWords.update.call(panel);
                 panel.dispatch('change');
             });
@@ -418,14 +441,13 @@ const Elements = {
             const panel = this;
 
             let optionsHtml = '';
-            // WrapMode 选项
             const types = Object.keys(ModeMap.wrap).concat('Advanced');
             types.forEach((type) => {
                 optionsHtml += `<option value="${type}">${type}</option>`;
             });
             panel.$.wrapModeSelect.innerHTML = optionsHtml;
 
-            // 匹配 wrapModeSelect 值，没有匹配到组合，则为自定义 Advanced
+            // Match wrapModeSelect value, no combination matched, then custom Advanced
             let value = 'Advanced';
             for (const wrapKey of Object.keys(ModeMap.wrap)) {
                 const wrapItem = ModeMap.wrap[wrapKey];
@@ -443,12 +465,12 @@ const Elements = {
             }
             panel.$.wrapModeSelect.value = value;
 
-            // 更新时需要判断是否显示自定义项
+            // Determine whether to display customized items when updating
             value === 'Advanced'
                 ? (panel.$.wrapAdvancedSection.style.display = 'block')
                 : (panel.$.wrapAdvancedSection.style.display = 'none');
 
-            // 校验是否显示警告提示
+            // Calibrate whether to display a warning
             panel.updateInvalid(panel.$.wrapModeSelect, 'wrapMode');
             updateElementReadonly.call(panel, panel.$.wrapModeSelect);
         },
@@ -566,6 +588,69 @@ const Elements = {
                 this.$.wrapModeSProp.classList.remove('warn');
                 this.$.wrapModeTProp.classList.remove('warn');
                 this.$.wrapModeProp.classList.remove('warn');
+            }
+        },
+    },
+    checkAtlasFileConfig: {
+        async ready() {
+            this.$.atlasFileName.addEventListener('click', () => {
+                Editor.Message.send('assets', 'twinkle', this.$.atlasFileName.getAttribute('data-uuid'));
+            }, false);
+        },
+        async update() {
+            try {
+                if (!Array.isArray(this.parentAssetList)) {
+                    this.$.filterDifferent.style.display = 'none';
+                    return;
+                }
+                const parentPath = this.parentAssetList[0].path.replace(/\/[^/]+$/, '/*');
+                let assets = await Editor.Message.request(
+                    'asset-db',
+                    'query-assets',
+                    { pattern: parentPath, ccType: "cc.Asset" }
+                );
+                assets = assets.filter(v => extname(v.file) === '.atlas');
+
+                let matchedAsset;
+                let matchedAtlasJson;
+                for (const asset of assets) {
+                    const json = await (new ParseAtlasFile()).parse(asset.file);
+
+                    // the asset.displayName is not a full name, miss the extname
+                    // so, we should use RegExp to get the extname
+                    const regStr = `${this.asset.displayName}(.*?)/`;
+                    const match = this.asset.url.match(new RegExp(regStr));
+                    const imageExtname = match ? match[1] : '.png';
+                    const imageFullName = this.asset.displayName + imageExtname;
+
+                    if (json[imageFullName]) {
+                        matchedAsset = asset;
+                        matchedAtlasJson = json[imageFullName];
+                        break;
+                    }
+                }
+                if (matchedAsset) {
+
+                    let atlasFileFilter = matchedAtlasJson.filter;
+                    if (Array.isArray(atlasFileFilter)) {
+                        atlasFileFilter = atlasFileFilter.join();
+                    } else if (atlasFileFilter) {
+                        atlasFileFilter = `${atlasFileFilter},${atlasFileFilter}`;
+                    }
+                    const userDataFilter = `${this.meta.userData.minfilter},${this.meta.userData.magfilter}`;
+
+                    if (atlasFileFilter.toLowerCase() !== userDataFilter.toLowerCase()) {
+                        this.$.filterDifferent.style.display = 'block';
+                        const tipHtml = Editor.I18n.t('ENGINE.assets.texture.filterDiffenent').replace('{atlasFile}', `<span>${matchedAsset.name}</span>`);
+                        this.$.atlasFileName.innerHTML = tipHtml;
+                        this.$.atlasFileName.setAttribute('data-uuid', matchedAsset.uuid);
+                    } else {
+                        this.$.filterDifferent.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                this.$.filterDifferent.style.display = 'none';
+                console.warn('parse atlas file error:', error);
             }
         },
     },

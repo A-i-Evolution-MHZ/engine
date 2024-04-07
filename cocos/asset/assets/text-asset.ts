@@ -24,8 +24,8 @@
 */
 
 import { ccclass, serializable, editable } from 'cc.decorator';
+import { cclegacy } from '@base/global';
 import { Asset } from './asset';
-import { cclegacy } from '../../core';
 
 /**
  * @en The asset for text file.
@@ -41,7 +41,7 @@ export class TextAsset extends Asset {
     @editable
     public text = '';
 
-    public toString () {
+    public toString (): string {
         return this.text;
     }
 }

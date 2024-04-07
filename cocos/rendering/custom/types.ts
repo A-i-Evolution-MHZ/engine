@@ -28,10 +28,10 @@
  * ========================= !DO NOT CHANGE THE FOLLOWING SECTION MANUALLY! =========================
  */
 /* eslint-disable max-len */
-import { ClearFlagBit, Color, LoadOp, ShaderStageFlagBit, StoreOp, Type, UniformBlock } from '../../gfx';
+import { ResolveMode, ShaderStageFlagBit, Type, UniformBlock, AccessFlags, AccessFlagBit } from '../../gfx';
 import { Light } from '../../render-scene/scene';
 import { OutputArchive, InputArchive } from './archive';
-import { saveColor, loadColor, saveUniformBlock, loadUniformBlock } from './serialization';
+import { saveUniformBlock, loadUniformBlock } from './serialization';
 
 export enum UpdateFrequency {
     PER_INSTANCE,
@@ -113,21 +113,24 @@ export function getResourceResidencyName (e: ResourceResidency): string {
 
 export enum QueueHint {
     NONE,
-    RENDER_OPAQUE,
-    RENDER_CUTOUT,
-    RENDER_TRANSPARENT,
+    OPAQUE,
+    MASK,
+    BLEND,
+    RENDER_OPAQUE = OPAQUE,
+    RENDER_CUTOUT = MASK,
+    RENDER_TRANSPARENT = BLEND,
 }
 
 export function getQueueHintName (e: QueueHint): string {
     switch (e) {
     case QueueHint.NONE:
         return 'NONE';
-    case QueueHint.RENDER_OPAQUE:
-        return 'RENDER_OPAQUE';
-    case QueueHint.RENDER_CUTOUT:
-        return 'RENDER_CUTOUT';
-    case QueueHint.RENDER_TRANSPARENT:
-        return 'RENDER_TRANSPARENT';
+    case QueueHint.OPAQUE:
+        return 'OPAQUE';
+    case QueueHint.MASK:
+        return 'MASK';
+    case QueueHint.BLEND:
+        return 'BLEND';
     default:
         return '';
     }
@@ -165,6 +168,8 @@ export enum ResourceFlags {
     DEPTH_STENCIL_ATTACHMENT = 0x20,
     INPUT_ATTACHMENT = 0x40,
     SHADING_RATE = 0x80,
+    TRANSFER_SRC = 0x100,
+    TRANSFER_DST = 0x200,
 }
 
 export enum TaskType {
@@ -185,9 +190,12 @@ export function getTaskTypeName (e: TaskType): string {
 
 export enum SceneFlags {
     NONE = 0,
-    OPAQUE_OBJECT = 0x1,
-    CUTOUT_OBJECT = 0x2,
-    TRANSPARENT_OBJECT = 0x4,
+    OPAQUE = 0x1,
+    MASK = 0x2,
+    BLEND = 0x4,
+    OPAQUE_OBJECT = OPAQUE,
+    CUTOUT_OBJECT = MASK,
+    TRANSPARENT_OBJECT = BLEND,
     SHADOW_CASTER = 0x8,
     UI = 0x10,
     DEFAULT_LIGHTING = 0x20,
@@ -199,6 +207,7 @@ export enum SceneFlags {
     DRAW_INSTANCING = 0x800,
     DRAW_NON_INSTANCING = 0x1000,
     REFLECTION_PROBE = 0x2000,
+    GPU_DRIVEN = 0x4000,
     ALL = 0xFFFFFFFF,
 }
 
@@ -259,41 +268,16 @@ export function getAccessTypeName (e: AccessType): string {
     }
 }
 
-export class RasterView {
-    constructor (
-        slotName = '',
-        accessType: AccessType = AccessType.WRITE,
-        attachmentType: AttachmentType = AttachmentType.RENDER_TARGET,
-        loadOp: LoadOp = LoadOp.LOAD,
-        storeOp: StoreOp = StoreOp.STORE,
-        clearFlags: ClearFlagBit = ClearFlagBit.ALL,
-        clearColor: Color = new Color(),
-    ) {
-        this.slotName = slotName;
-        this.accessType = accessType;
-        this.attachmentType = attachmentType;
-        this.loadOp = loadOp;
-        this.storeOp = storeOp;
-        this.clearFlags = clearFlags;
-        this.clearColor = clearColor;
-    }
-    slotName: string;
-    accessType: AccessType;
-    attachmentType: AttachmentType;
-    loadOp: LoadOp;
-    storeOp: StoreOp;
-    clearFlags: ClearFlagBit;
-    readonly clearColor: Color;
-    slotID = 0;
-}
-
 export enum ClearValueType {
+    NONE,
     FLOAT_TYPE,
     INT_TYPE,
 }
 
 export function getClearValueTypeName (e: ClearValueType): string {
     switch (e) {
+    case ClearValueType.NONE:
+        return 'NONE';
     case ClearValueType.FLOAT_TYPE:
         return 'FLOAT_TYPE';
     case ClearValueType.INT_TYPE:
@@ -303,34 +287,15 @@ export function getClearValueTypeName (e: ClearValueType): string {
     }
 }
 
-export class ComputeView {
-    constructor (
-        name = '',
-        accessType: AccessType = AccessType.READ,
-        clearFlags: ClearFlagBit = ClearFlagBit.NONE,
-        clearColor: Color = new Color(),
-        clearValueType: ClearValueType = ClearValueType.FLOAT_TYPE,
-    ) {
-        this.name = name;
-        this.accessType = accessType;
-        this.clearFlags = clearFlags;
-        this.clearColor = clearColor;
-        this.clearValueType = clearValueType;
-    }
-    name: string;
-    accessType: AccessType;
-    clearFlags: ClearFlagBit;
-    readonly clearColor: Color;
-    clearValueType: ClearValueType;
-}
-
 export class LightInfo {
-    constructor (light: Light | null = null, level = 0) {
+    constructor (light: Light | null = null, level = 0, culledByLight = false) {
         this.light = light;
         this.level = level;
+        this.culledByLight = culledByLight;
     }
     /*refcount*/ light: Light | null;
     level: number;
+    culledByLight: boolean;
 }
 
 export enum DescriptorTypeOrder {
@@ -407,6 +372,34 @@ export class DescriptorBlockIndex {
     visibility: ShaderStageFlagBit;
 }
 
+export enum ResolveFlags {
+    NONE = 0,
+    COLOR = 1 << 0,
+    DEPTH = 1 << 1,
+    STENCIL = 1 << 2,
+}
+
+export class ResolvePair {
+    constructor (
+        source = '',
+        target = '',
+        resolveFlags: ResolveFlags = ResolveFlags.NONE,
+        mode: ResolveMode = ResolveMode.SAMPLE_ZERO,
+        mode1: ResolveMode = ResolveMode.SAMPLE_ZERO,
+    ) {
+        this.source = source;
+        this.target = target;
+        this.resolveFlags = resolveFlags;
+        this.mode = mode;
+        this.mode1 = mode1;
+    }
+    source: string;
+    target: string;
+    resolveFlags: ResolveFlags;
+    mode: ResolveMode;
+    mode1: ResolveMode;
+}
+
 export class CopyPair {
     constructor (
         source = '',
@@ -441,11 +434,14 @@ export class CopyPair {
     targetMostDetailedMip: number;
     targetFirstSlice: number;
     targetPlaneSlice: number;
+    sourceOffset = 0;
+    targetOffset = 0;
+    bufferSize = 0;
 }
 
-export class MovePair {
+export class UploadPair {
     constructor (
-        source = '',
+        source: Uint8Array = new Uint8Array(0),
         target = '',
         mipLevels = 0xFFFFFFFF,
         numSlices = 0xFFFFFFFF,
@@ -461,6 +457,35 @@ export class MovePair {
         this.targetFirstSlice = targetFirstSlice;
         this.targetPlaneSlice = targetPlaneSlice;
     }
+    readonly source: Uint8Array;
+    target: string;
+    mipLevels: number;
+    numSlices: number;
+    targetMostDetailedMip: number;
+    targetFirstSlice: number;
+    targetPlaneSlice: number;
+}
+
+export class MovePair {
+    constructor (
+        source = '',
+        target = '',
+        mipLevels = 0xFFFFFFFF,
+        numSlices = 0xFFFFFFFF,
+        targetMostDetailedMip = 0,
+        targetFirstSlice = 0,
+        targetPlaneSlice = 0,
+        possibleUsage = AccessFlagBit.NONE,
+    ) {
+        this.source = source;
+        this.target = target;
+        this.mipLevels = mipLevels;
+        this.numSlices = numSlices;
+        this.targetMostDetailedMip = targetMostDetailedMip;
+        this.targetFirstSlice = targetFirstSlice;
+        this.targetPlaneSlice = targetPlaneSlice;
+        this.possibleUsage = possibleUsage;
+    }
     source: string;
     target: string;
     mipLevels: number;
@@ -468,6 +493,7 @@ export class MovePair {
     targetMostDetailedMip: number;
     targetFirstSlice: number;
     targetPlaneSlice: number;
+    possibleUsage: AccessFlagBit;
 }
 
 export class PipelineStatistics {
@@ -484,65 +510,29 @@ export class PipelineStatistics {
     numInstancingUniformBlocks = 0;
 }
 
-export function saveRasterView (ar: OutputArchive, v: RasterView) {
-    ar.writeString(v.slotName);
-    ar.writeNumber(v.accessType);
-    ar.writeNumber(v.attachmentType);
-    ar.writeNumber(v.loadOp);
-    ar.writeNumber(v.storeOp);
-    ar.writeNumber(v.clearFlags);
-    saveColor(ar, v.clearColor);
-    ar.writeNumber(v.slotID);
-}
-
-export function loadRasterView (ar: InputArchive, v: RasterView) {
-    v.slotName = ar.readString();
-    v.accessType = ar.readNumber();
-    v.attachmentType = ar.readNumber();
-    v.loadOp = ar.readNumber();
-    v.storeOp = ar.readNumber();
-    v.clearFlags = ar.readNumber();
-    loadColor(ar, v.clearColor);
-    v.slotID = ar.readNumber();
-}
-
-export function saveComputeView (ar: OutputArchive, v: ComputeView) {
-    ar.writeString(v.name);
-    ar.writeNumber(v.accessType);
-    ar.writeNumber(v.clearFlags);
-    saveColor(ar, v.clearColor);
-    ar.writeNumber(v.clearValueType);
-}
-
-export function loadComputeView (ar: InputArchive, v: ComputeView) {
-    v.name = ar.readString();
-    v.accessType = ar.readNumber();
-    v.clearFlags = ar.readNumber();
-    loadColor(ar, v.clearColor);
-    v.clearValueType = ar.readNumber();
-}
-
-export function saveLightInfo (ar: OutputArchive, v: LightInfo) {
+export function saveLightInfo (ar: OutputArchive, v: LightInfo): void {
     // skip, v.light: Light
     ar.writeNumber(v.level);
+    ar.writeBool(v.culledByLight);
 }
 
-export function loadLightInfo (ar: InputArchive, v: LightInfo) {
+export function loadLightInfo (ar: InputArchive, v: LightInfo): void {
     // skip, v.light: Light
     v.level = ar.readNumber();
+    v.culledByLight = ar.readBool();
 }
 
-export function saveDescriptor (ar: OutputArchive, v: Descriptor) {
+export function saveDescriptor (ar: OutputArchive, v: Descriptor): void {
     ar.writeNumber(v.type);
     ar.writeNumber(v.count);
 }
 
-export function loadDescriptor (ar: InputArchive, v: Descriptor) {
+export function loadDescriptor (ar: InputArchive, v: Descriptor): void {
     v.type = ar.readNumber();
     v.count = ar.readNumber();
 }
 
-export function saveDescriptorBlock (ar: OutputArchive, v: DescriptorBlock) {
+export function saveDescriptorBlock (ar: OutputArchive, v: DescriptorBlock): void {
     ar.writeNumber(v.descriptors.size); // Map<string, Descriptor>
     for (const [k1, v1] of v.descriptors) {
         ar.writeString(k1);
@@ -557,7 +547,7 @@ export function saveDescriptorBlock (ar: OutputArchive, v: DescriptorBlock) {
     ar.writeNumber(v.count);
 }
 
-export function loadDescriptorBlock (ar: InputArchive, v: DescriptorBlock) {
+export function loadDescriptorBlock (ar: InputArchive, v: DescriptorBlock): void {
     let sz = 0;
     sz = ar.readNumber(); // Map<string, Descriptor>
     for (let i1 = 0; i1 !== sz; ++i1) {
@@ -577,7 +567,7 @@ export function loadDescriptorBlock (ar: InputArchive, v: DescriptorBlock) {
     v.count = ar.readNumber();
 }
 
-export function saveDescriptorBlockFlattened (ar: OutputArchive, v: DescriptorBlockFlattened) {
+export function saveDescriptorBlockFlattened (ar: OutputArchive, v: DescriptorBlockFlattened): void {
     ar.writeNumber(v.descriptorNames.length); // string[]
     for (const v1 of v.descriptorNames) {
         ar.writeString(v1);
@@ -598,7 +588,7 @@ export function saveDescriptorBlockFlattened (ar: OutputArchive, v: DescriptorBl
     ar.writeNumber(v.count);
 }
 
-export function loadDescriptorBlockFlattened (ar: InputArchive, v: DescriptorBlockFlattened) {
+export function loadDescriptorBlockFlattened (ar: InputArchive, v: DescriptorBlockFlattened): void {
     let sz = 0;
     sz = ar.readNumber(); // string[]
     v.descriptorNames.length = sz;
@@ -628,21 +618,37 @@ export function loadDescriptorBlockFlattened (ar: InputArchive, v: DescriptorBlo
     v.count = ar.readNumber();
 }
 
-export function saveDescriptorBlockIndex (ar: OutputArchive, v: DescriptorBlockIndex) {
+export function saveDescriptorBlockIndex (ar: OutputArchive, v: DescriptorBlockIndex): void {
     ar.writeNumber(v.updateFrequency);
     ar.writeNumber(v.parameterType);
     ar.writeNumber(v.descriptorType);
     ar.writeNumber(v.visibility);
 }
 
-export function loadDescriptorBlockIndex (ar: InputArchive, v: DescriptorBlockIndex) {
+export function loadDescriptorBlockIndex (ar: InputArchive, v: DescriptorBlockIndex): void {
     v.updateFrequency = ar.readNumber();
     v.parameterType = ar.readNumber();
     v.descriptorType = ar.readNumber();
     v.visibility = ar.readNumber();
 }
 
-export function saveCopyPair (ar: OutputArchive, v: CopyPair) {
+export function saveResolvePair (ar: OutputArchive, v: ResolvePair): void {
+    ar.writeString(v.source);
+    ar.writeString(v.target);
+    ar.writeNumber(v.resolveFlags);
+    ar.writeNumber(v.mode);
+    ar.writeNumber(v.mode1);
+}
+
+export function loadResolvePair (ar: InputArchive, v: ResolvePair): void {
+    v.source = ar.readString();
+    v.target = ar.readString();
+    v.resolveFlags = ar.readNumber();
+    v.mode = ar.readNumber();
+    v.mode1 = ar.readNumber();
+}
+
+export function saveCopyPair (ar: OutputArchive, v: CopyPair): void {
     ar.writeString(v.source);
     ar.writeString(v.target);
     ar.writeNumber(v.mipLevels);
@@ -653,9 +659,12 @@ export function saveCopyPair (ar: OutputArchive, v: CopyPair) {
     ar.writeNumber(v.targetMostDetailedMip);
     ar.writeNumber(v.targetFirstSlice);
     ar.writeNumber(v.targetPlaneSlice);
+    ar.writeNumber(v.sourceOffset);
+    ar.writeNumber(v.targetOffset);
+    ar.writeNumber(v.bufferSize);
 }
 
-export function loadCopyPair (ar: InputArchive, v: CopyPair) {
+export function loadCopyPair (ar: InputArchive, v: CopyPair): void {
     v.source = ar.readString();
     v.target = ar.readString();
     v.mipLevels = ar.readNumber();
@@ -666,9 +675,12 @@ export function loadCopyPair (ar: InputArchive, v: CopyPair) {
     v.targetMostDetailedMip = ar.readNumber();
     v.targetFirstSlice = ar.readNumber();
     v.targetPlaneSlice = ar.readNumber();
+    v.sourceOffset = ar.readNumber();
+    v.targetOffset = ar.readNumber();
+    v.bufferSize = ar.readNumber();
 }
 
-export function saveMovePair (ar: OutputArchive, v: MovePair) {
+export function saveMovePair (ar: OutputArchive, v: MovePair): void {
     ar.writeString(v.source);
     ar.writeString(v.target);
     ar.writeNumber(v.mipLevels);
@@ -678,7 +690,7 @@ export function saveMovePair (ar: OutputArchive, v: MovePair) {
     ar.writeNumber(v.targetPlaneSlice);
 }
 
-export function loadMovePair (ar: InputArchive, v: MovePair) {
+export function loadMovePair (ar: InputArchive, v: MovePair): void {
     v.source = ar.readString();
     v.target = ar.readString();
     v.mipLevels = ar.readNumber();
@@ -688,7 +700,7 @@ export function loadMovePair (ar: InputArchive, v: MovePair) {
     v.targetPlaneSlice = ar.readNumber();
 }
 
-export function savePipelineStatistics (ar: OutputArchive, v: PipelineStatistics) {
+export function savePipelineStatistics (ar: OutputArchive, v: PipelineStatistics): void {
     ar.writeNumber(v.numRenderPasses);
     ar.writeNumber(v.numManagedTextures);
     ar.writeNumber(v.totalManagedTextures);
@@ -702,7 +714,7 @@ export function savePipelineStatistics (ar: OutputArchive, v: PipelineStatistics
     ar.writeNumber(v.numInstancingUniformBlocks);
 }
 
-export function loadPipelineStatistics (ar: InputArchive, v: PipelineStatistics) {
+export function loadPipelineStatistics (ar: InputArchive, v: PipelineStatistics): void {
     v.numRenderPasses = ar.readNumber();
     v.numManagedTextures = ar.readNumber();
     v.totalManagedTextures = ar.readNumber();

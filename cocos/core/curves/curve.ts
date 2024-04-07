@@ -22,18 +22,21 @@
  THE SOFTWARE.
 */
 
-import { assertIsTrue } from '../data/utils/asserts';
-import { approx, lerp, pingPong, repeat } from '../math';
+import { DEBUG } from 'internal:constants';
+import { assertIsTrue } from '@base/debug/internal';
+import { CCClass, editorExtrasTag } from '@base/object';
+import { approx, lerp, pingPong, repeat , bits } from '@base/math';
 import { KeyframeCurve } from './keyframe-curve';
 import { RealInterpolationMode, ExtrapolationMode, TangentWeightMode } from './real-curve-param';
 import { binarySearchEpsilon } from '../algorithm/binary-search';
 import { solveCubic } from './solve-cubic';
 import { EditorExtendable } from '../data/editor-extendable';
-import { CCClass, deserializeTag, editorExtrasTag, SerializationContext, SerializationInput, SerializationOutput, serializeTag } from '../data';
+import { deserializeTag, SerializationContext, SerializationInput, SerializationOutput, serializeTag } from '../data';
 import { DeserializationContext } from '../data/custom-serializable';
 import { EasingMethod, getEasingFn } from './easing-method';
 import { getOrCreateSerializationMetadata } from '../data/serialization-metadata';
-import { popCount } from '../math/bits';
+
+const { popCount } = bits;
 
 export { RealInterpolationMode, ExtrapolationMode, TangentWeightMode, EasingMethod };
 
@@ -206,7 +209,7 @@ export type { RealKeyframeValue };
  */
 type RealKeyframeValueParameters = number | Partial<RealKeyframeValue>;
 
-function createRealKeyframeValue (params: RealKeyframeValueParameters) {
+function createRealKeyframeValue (params: RealKeyframeValueParameters): RealKeyframeValue {
     const realKeyframeValue = new RealKeyframeValue();
     if (typeof params === 'number') {
         realKeyframeValue.value = params;
@@ -401,14 +404,18 @@ export class RealCurve extends KeyframeCurve<RealKeyframeValue> {
         }
 
         const iNext = ~index;
-        assertIsTrue(iNext !== 0 && iNext !== nFrames && nFrames > 1);
+        if (DEBUG) {
+            assertIsTrue(iNext !== 0 && iNext !== nFrames && nFrames > 1);
+        }
 
         const iPre = iNext - 1;
         const preTime = times[iPre];
         const preValue = values[iPre];
         const nextTime = times[iNext];
         const nextValue = values[iNext];
-        assertIsTrue(nextTime > time && time > preTime);
+        if (DEBUG) {
+            assertIsTrue(nextTime > time && time > preTime);
+        }
         const dt = nextTime - preTime;
 
         const ratio = (time - preTime) / dt;
@@ -447,7 +454,7 @@ export class RealCurve extends KeyframeCurve<RealKeyframeValue> {
     public assignSorted (
         times: Iterable<[number, RealKeyframeValueParameters]> | readonly number[],
         values?: readonly RealKeyframeValueParameters[],
-    ) {
+    ): void {
         if (values !== undefined) {
             assertIsTrue(Array.isArray(times));
             this.setKeyframes(
@@ -471,18 +478,18 @@ export class RealCurve extends KeyframeCurve<RealKeyframeValue> {
      * @param tolerance The tolerance.
      * @returns Whether it is constant.
      */
-    public isConstant (tolerance: number) {
+    public isConstant (tolerance: number): boolean {
         if (this._values.length <= 1) {
             return true;
         }
         const firstVal = this._values[0].value;
-        return this._values.every((frame) => approx(frame.value, firstVal, tolerance));
+        return this._values.every((frame): boolean => approx(frame.value, firstVal, tolerance));
     }
 
     /**
      * @internal
      */
-    public [serializeTag] (output: SerializationOutput, context: SerializationContext) {
+    public [serializeTag] (output: SerializationOutput, context: SerializationContext): void {
         if (!context.toCCON) {
             output.writeThis();
             return;
@@ -532,7 +539,7 @@ export class RealCurve extends KeyframeCurve<RealKeyframeValue> {
     /**
      * @internal
      */
-    public [deserializeTag] (input: SerializationInput, context: DeserializationContext) {
+    public [deserializeTag] (input: SerializationInput, context: DeserializationContext): void {
         if (!context.fromCCON) {
             input.readThis();
             return;
@@ -629,7 +636,7 @@ const REAL_KEY_FRAME_VALUE_MAX_SIZE = KEY_FRAME_VALUE_FLAGS_BYTES
     + RIGHT_TANGENT_WEIGHT_BYTES
     + 0;
 
-function saveRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeValue, offset: number) {
+function saveRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeValue, offset: number): number {
     let flags = 0;
 
     let currentOffset = offset;
@@ -694,7 +701,7 @@ function saveRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeV
     return currentOffset;
 }
 
-function loadRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeValue, offset: number) {
+function loadRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeValue, offset: number): number {
     let currentOffset = offset;
 
     const flags = dataView.getUint32(currentOffset, true);
@@ -739,11 +746,11 @@ function loadRealKeyFrameValue (dataView: DataView, keyframeValue: RealKeyframeV
     return currentOffset;
 }
 
-function wrapRepeat (time: number, prevTime: number, nextTime: number) {
+function wrapRepeat (time: number, prevTime: number, nextTime: number): number {
     return prevTime + repeat(time - prevTime, nextTime - prevTime);
 }
 
-function wrapPingPong (time: number, prevTime: number, nextTime: number) {
+function wrapPingPong (time: number, prevTime: number, nextTime: number): number {
     return prevTime + pingPong(time - prevTime, nextTime - prevTime);
 }
 
@@ -753,7 +760,7 @@ function linearTrend (
     nextTime: number,
     nextValue: number,
     time: number,
-) {
+): number {
     const slope = (nextValue - prevValue) / (nextTime - prevTime);
     return prevValue + (time - prevTime) * slope;
 }
@@ -764,7 +771,7 @@ function evalBetweenTwoKeyFrames (
     nextTime: number,
     nextValue: RealKeyframeValue,
     ratio: number,
-) {
+): number {
     const dt = nextTime - prevTime;
     switch (prevValue.interpolationMode) {
     default:
@@ -855,15 +862,15 @@ function evalBetweenTwoKeyFrames (
     }
 }
 
-function isLeftTangentWeightEnabled (tangentWeightMode: TangentWeightMode) {
+function isLeftTangentWeightEnabled (tangentWeightMode: TangentWeightMode): boolean {
     return (tangentWeightMode & TangentWeightMode.LEFT) !== 0;
 }
 
-function isRightTangentWeightEnabled (tangentWeightMode: TangentWeightMode) {
+function isRightTangentWeightEnabled (tangentWeightMode: TangentWeightMode): boolean {
     return (tangentWeightMode & TangentWeightMode.RIGHT) !== 0;
 }
 
-function bezierInterpolate (p0: number, p1: number, p2: number, p3: number, t: number) {
+function bezierInterpolate (p0: number, p1: number, p2: number, p3: number, t: number): number {
     const u = 1 - t;
     const coeff0 = u * u * u;
     const coeff1 = 3 * u * u * t;
@@ -872,7 +879,7 @@ function bezierInterpolate (p0: number, p1: number, p2: number, p3: number, t: n
     return coeff0 * p0 + coeff1 * p1 + coeff2 * p2 + coeff3 * p3;
 }
 
-function getParamFromCubicSolution (solutions: readonly [number, number, number], solutionsCount: number, x: number) {
+function getParamFromCubicSolution (solutions: readonly [number, number, number], solutionsCount: number, x: number): number {
     let param = x;
     if (solutionsCount === 1) {
         param = solutions[0];

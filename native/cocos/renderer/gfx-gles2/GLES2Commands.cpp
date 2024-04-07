@@ -371,6 +371,12 @@ const GLenum GLES2_WRAPS[] = {
     GL_CLAMP_TO_EDGE,
 };
 
+const GLenum GLES2_REDUCTIONS[] = {
+    GL_WEIGHTED_AVERAGE_EXT,
+    GL_MIN,
+    GL_MAX,
+};
+
 const GLenum GLES2_CMP_FUNCS[] = {
     GL_NEVER,
     GL_LESS,
@@ -554,7 +560,6 @@ void cmdFuncGLES2ResizeBuffer(GLES2Device *device, GLES2GPUBuffer *gpuBuffer) {
             device->stateCache()->glElementArrayBuffer = 0;
         }
     } else if (hasFlag(gpuBuffer->usage, BufferUsageBit::INDIRECT)) {
-        gpuBuffer->indirects.resize(gpuBuffer->count);
         gpuBuffer->glTarget = GL_NONE;
     } else if ((hasFlag(gpuBuffer->usage, BufferUsageBit::UNIFORM)) ||
                (hasFlag(gpuBuffer->usage, BufferUsageBit::TRANSFER_DST)) ||
@@ -573,23 +578,14 @@ void cmdFuncGLES2ResizeBuffer(GLES2Device *device, GLES2GPUBuffer *gpuBuffer) {
 void cmdFuncGLES2CreateTexture(GLES2Device *device, GLES2GPUTexture *gpuTexture) {
     gpuTexture->glFormat = mapGLFormat(gpuTexture->format);
     gpuTexture->glType = formatToGLType(gpuTexture->format);
-    gpuTexture->glInternalFmt = gpuTexture->glFormat;
+    gpuTexture->glInternalFmt = mapGLInternalFormat(gpuTexture->format);
+    gpuTexture->glSamples = static_cast<GLint>(gpuTexture->samples);
 
-    if (gpuTexture->samples > SampleCount::ONE) {
-        if (device->constantRegistry()->mMSRT != MSRTSupportLevel::NONE) {
-            GLint maxSamples;
-            glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxSamples);
-
-            auto requestedSampleCount = static_cast<GLint>(gpuTexture->samples);
-            gpuTexture->glSamples = std::min(maxSamples, requestedSampleCount);
-
-            // skip multi-sampled attachment resources if we can use auto resolve
-            if (gpuTexture->usage == TextureUsageBit::COLOR_ATTACHMENT) {
-                gpuTexture->memoryless = true;
-                return;
-            }
-        } else {
-            gpuTexture->glSamples = 1; // fallback to single sample if the extensions is not available
+    if (gpuTexture->samples > SampleCount::X1) {
+        if (device->constantRegistry()->mMSRT != MSRTSupportLevel::NONE &&
+            hasFlag(gpuTexture->flags, TextureFlagBit::LAZILY_ALLOCATED)) {
+            gpuTexture->memoryAllocated = false;
+            return;
         }
     }
 
@@ -810,7 +806,7 @@ void cmdFuncGLES2DestroyTexture(GLES2Device *device, GLES2GPUTexture *gpuTexture
 }
 
 void cmdFuncGLES2ResizeTexture(GLES2Device *device, GLES2GPUTexture *gpuTexture) {
-    if (gpuTexture->memoryless || gpuTexture->glTarget == GL_TEXTURE_EXTERNAL_OES) return;
+    if (!gpuTexture->memoryAllocated || gpuTexture->glTarget == GL_TEXTURE_EXTERNAL_OES) return;
 
     if (gpuTexture->glSamples <= 1) {
         switch (gpuTexture->type) {
@@ -1006,6 +1002,7 @@ void cmdFuncGLES2CreateSampler(GLES2Device * /*device*/, GLES2GPUSampler *gpuSam
     gpuSampler->glWrapS = GLES2_WRAPS[static_cast<int>(gpuSampler->addressU)];
     gpuSampler->glWrapT = GLES2_WRAPS[static_cast<int>(gpuSampler->addressV)];
     gpuSampler->glWrapR = GLES2_WRAPS[static_cast<int>(gpuSampler->addressW)];
+    gpuSampler->glReduction = GLES2_REDUCTIONS[toNumber(gpuSampler->reduction)];
 }
 
 void cmdFuncGLES2DestroySampler(GLES2Device *device, GLES2GPUSampler *gpuSampler) {
@@ -2414,6 +2411,17 @@ void cmdFuncGLES2BindState(GLES2Device *device, GLES2GPUPipelineState *gpuPipeli
                     GL_CHECK(glTexParameteri(gpuTexture->glTarget, GL_TEXTURE_MAG_FILTER, gpuDescriptor->gpuSampler->glMagFilter));
                     gpuTexture->glMagFilter = gpuDescriptor->gpuSampler->glMagFilter;
                 }
+
+                if (gpuTexture->glReduction != gpuDescriptor->gpuSampler->glReduction) {
+                    if (cache->texUint != unit) {
+                        GL_CHECK(glActiveTexture(GL_TEXTURE0 + unit));
+                        cache->texUint = unit;
+                    }
+                    if (device->getCapabilities().supportFilterMinMax) {
+                        GL_CHECK(glTexParameteri(gpuTexture->glTarget, GL_TEXTURE_REDUCTION_MODE_EXT, gpuDescriptor->gpuSampler->glReduction));
+                    }
+                    gpuTexture->glReduction = gpuDescriptor->gpuSampler->glReduction;
+                }
             }
         }
     } // if
@@ -2605,51 +2613,24 @@ void cmdFuncGLES2Draw(GLES2Device *device, const DrawInfo &drawInfo) {
     GLenum glPrimitive = gfxStateCache.glPrimitive;
 
     if (gpuInputAssembler && gpuPipelineState) {
-        if (!gpuInputAssembler->gpuIndirectBuffer) {
-            if (gpuInputAssembler->gpuIndexBuffer) {
-                if (drawInfo.indexCount > 0) {
-                    uint8_t *offset = nullptr;
-                    offset += drawInfo.firstIndex * gpuInputAssembler->gpuIndexBuffer->stride;
-                    if (drawInfo.instanceCount == 0) {
-                        GL_CHECK(glDrawElements(glPrimitive, drawInfo.indexCount, gpuInputAssembler->glIndexType, offset));
-                    } else {
-                        if (device->constantRegistry()->useDrawInstanced) {
-                            GL_CHECK(glDrawElementsInstancedEXT(glPrimitive, drawInfo.indexCount, gpuInputAssembler->glIndexType, offset, drawInfo.instanceCount));
-                        }
-                    }
-                }
-            } else if (drawInfo.vertexCount > 0) {
+        if (gpuInputAssembler->gpuIndexBuffer) {
+            if (drawInfo.indexCount > 0) {
+                uint8_t *offset = nullptr;
+                offset += drawInfo.firstIndex * gpuInputAssembler->gpuIndexBuffer->stride;
                 if (drawInfo.instanceCount == 0) {
-                    GL_CHECK(glDrawArrays(glPrimitive, drawInfo.firstVertex, drawInfo.vertexCount));
+                    GL_CHECK(glDrawElements(glPrimitive, drawInfo.indexCount, gpuInputAssembler->glIndexType, offset));
                 } else {
                     if (device->constantRegistry()->useDrawInstanced) {
-                        GL_CHECK(glDrawArraysInstancedEXT(glPrimitive, drawInfo.firstVertex, drawInfo.vertexCount, drawInfo.instanceCount));
+                        GL_CHECK(glDrawElementsInstancedEXT(glPrimitive, drawInfo.indexCount, gpuInputAssembler->glIndexType, offset, drawInfo.instanceCount));
                     }
                 }
             }
-        } else {
-            for (size_t j = 0; j < gpuInputAssembler->gpuIndirectBuffer->indirects.size(); ++j) {
-                const DrawInfo &draw = gpuInputAssembler->gpuIndirectBuffer->indirects[j];
-                if (gpuInputAssembler->gpuIndexBuffer) {
-                    if (draw.indexCount > 0) {
-                        uint8_t *offset = nullptr;
-                        offset += draw.firstIndex * gpuInputAssembler->gpuIndexBuffer->stride;
-                        if (drawInfo.instanceCount == 0) {
-                            GL_CHECK(glDrawElements(glPrimitive, draw.indexCount, gpuInputAssembler->glIndexType, offset));
-                        } else {
-                            if (device->constantRegistry()->useDrawInstanced) {
-                                GL_CHECK(glDrawElementsInstancedEXT(glPrimitive, draw.indexCount, gpuInputAssembler->glIndexType, offset, draw.instanceCount));
-                            }
-                        }
-                    }
-                } else if (draw.vertexCount > 0) {
-                    if (draw.instanceCount == 0) {
-                        GL_CHECK(glDrawArrays(glPrimitive, draw.firstVertex, draw.vertexCount));
-                    } else {
-                        if (device->constantRegistry()->useDrawInstanced) {
-                            GL_CHECK(glDrawArraysInstancedEXT(glPrimitive, draw.firstVertex, draw.vertexCount, draw.instanceCount));
-                        }
-                    }
+        } else if (drawInfo.vertexCount > 0) {
+            if (drawInfo.instanceCount == 0) {
+                GL_CHECK(glDrawArrays(glPrimitive, drawInfo.firstVertex, drawInfo.vertexCount));
+            } else {
+                if (device->constantRegistry()->useDrawInstanced) {
+                    GL_CHECK(glDrawArraysInstancedEXT(glPrimitive, drawInfo.firstVertex, drawInfo.vertexCount, drawInfo.instanceCount));
                 }
             }
         }
@@ -2662,8 +2643,6 @@ void cmdFuncGLES2UpdateBuffer(GLES2Device *device, GLES2GPUBuffer *gpuBuffer, co
     if ((hasFlag(gpuBuffer->usage, BufferUsageBit::UNIFORM)) ||
         (hasFlag(gpuBuffer->usage, BufferUsageBit::TRANSFER_SRC))) {
         memcpy(gpuBuffer->buffer + offset, buffer, size);
-    } else if (hasFlag(gpuBuffer->usage, BufferUsageBit::INDIRECT)) {
-        memcpy(reinterpret_cast<uint8_t *>(gpuBuffer->indirects.data()) + offset, buffer, size);
     } else {
         switch (gpuBuffer->glTarget) {
             case GL_ARRAY_BUFFER: {
@@ -2968,6 +2947,9 @@ void cmdFuncGLES2CopyTextureToBuffers(GLES2Device *device, GLES2GPUTexture *gpuT
     }
 }
 
+void cmdFuncGLES2CopyTexture(GLES2Device *device, GLES2GPUTexture *gpuTextureSrc, GLES2GPUTexture *gpuTextureDst, const TextureCopy *regions, uint32_t count) {
+}
+
 void cmdFuncGLES2BlitTexture(GLES2Device *device, GLES2GPUTexture *gpuTextureSrc, GLES2GPUTexture *gpuTextureDst, const TextureBlit *regions, uint32_t count, Filter filter) {
     GLES2GPUStateCache *cache = device->stateCache();
 
@@ -3036,6 +3018,30 @@ void cmdFuncGLES2ExecuteCmds(GLES2Device *device, GLES2CmdPackage *cmdPackage) {
                 break;
         }
         cmdIdx++;
+    }
+}
+
+GLint cmdFuncGLES2GetMaxSampleCount() {
+    GLint maxSamples = 1;
+    GL_CHECK(glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxSamples));
+    return maxSamples;
+}
+
+void cmdFuncGLES2InsertMarker(GLES2Device *device, GLsizei length, const char *marker) {
+    if (device->constantRegistry()->debugMarker) {
+        glInsertEventMarkerEXT(length, marker);
+    }
+}
+
+void cmdFuncGLES2PushGroupMarker(GLES2Device *device, GLsizei length, const char *marker) {
+    if (device->constantRegistry()->debugMarker) {
+        glPushGroupMarkerEXT(length, marker);
+    }
+}
+
+void cmdFuncGLES2PopGroupMarker(GLES2Device *device) {
+    if (device->constantRegistry()->debugMarker) {
+        glPopGroupMarkerEXT();
     }
 }
 

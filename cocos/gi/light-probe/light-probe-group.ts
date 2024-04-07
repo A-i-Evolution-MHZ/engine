@@ -22,23 +22,12 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    disallowMultiple,
-    displayName,
-    editable,
-    executeInEditMode,
-    menu,
-    range,
-    serializable,
-    tooltip,
-    type,
-    visible,
-} from 'cc.decorator';
+import { ccclass, disallowMultiple, displayName, editable, executeInEditMode, help, menu, range, serializable, tooltip, type, visible } from 'cc.decorator';
 import { EDITOR } from 'internal:constants';
+import { CCInteger } from '@base/object';
+import { Vec3 } from '@base/math';
 import { NodeEventType } from '../../scene-graph/node-event';
 import { Component } from '../../scene-graph/component';
-import { Vec3, CCInteger } from '../../core';
 import { AutoPlacement, PlaceMethod } from './auto-placement';
 
 /**
@@ -46,6 +35,7 @@ import { AutoPlacement, PlaceMethod } from './auto-placement';
  * @zh 光照探针组组件。
  */
 @ccclass('cc.LightProbeGroup')
+@help('i18n:cc.LightProbeGroup')
 @menu('Rendering/LightProbeGroup')
 @disallowMultiple
 @executeInEditMode
@@ -85,7 +75,7 @@ export class LightProbeGroup extends Component {
     @type(PlaceMethod)
     @tooltip('i18n:light_probe_group.method')
     @displayName('Generating Method')
-    get method () {
+    get method (): number {
         return this._method;
     }
     // Support this feature later.
@@ -157,7 +147,7 @@ export class LightProbeGroup extends Component {
         this._nProbesZ = val;
     }
 
-    public onLoad () {
+    public onLoad (): void {
         if (!EDITOR) {
             return;
         }
@@ -172,7 +162,7 @@ export class LightProbeGroup extends Component {
         }
     }
 
-    public onEnable () {
+    public onEnable (): void {
         if (!EDITOR) {
             return;
         }
@@ -187,7 +177,7 @@ export class LightProbeGroup extends Component {
         }
     }
 
-    public onDisable () {
+    public onDisable (): void {
         if (!EDITOR) {
             return;
         }
@@ -202,7 +192,7 @@ export class LightProbeGroup extends Component {
         }
     }
 
-    public generateLightProbes () {
+    public generateLightProbes (): void {
         if (!this.node) {
             return;
         }
@@ -219,7 +209,7 @@ export class LightProbeGroup extends Component {
         this.onProbeChanged();
     }
 
-    public onProbeChanged (updateTet = true, emitEvent = true) {
+    public onProbeChanged (updateTet = true, emitEvent = true): void {
         this.node.scene.globals.lightProbeInfo.syncData(this.node, this.probes);
         this.node.scene.globals.lightProbeInfo.update(updateTet);
 

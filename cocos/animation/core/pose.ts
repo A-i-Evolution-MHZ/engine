@@ -1,25 +1,42 @@
 import { DEBUG } from 'internal:constants';
-import { lerp } from '../../core';
-import { assertIsTrue } from '../../core/data/utils/asserts';
+import { assertIsTrue } from '@base/debug/internal';
+import { lerp } from '@base/math';
 import { Transform, __applyDeltaTransform, __calculateDeltaTransform } from './transform';
 import { TransformArray } from './transform-array';
 
 export class Pose {
     readonly transforms: TransformArray;
 
-    readonly metaValues: Float64Array;
+    readonly auxiliaryCurves: Float64Array;
 
-    private constructor (transforms: TransformArray, metaValues: Float64Array) {
+    private constructor (transforms: TransformArray, auxiliaryCurves: Float64Array) {
         this.transforms = transforms;
-        this.metaValues = metaValues;
+        this.auxiliaryCurves = auxiliaryCurves;
     }
 
     /**
      * @internal
      */
-    public static _create (transforms: TransformArray, metaValues: Float64Array) {
-        return new Pose(transforms, metaValues);
+    public _poseTransformSpace = PoseTransformSpace.LOCAL;
+
+    /**
+     * @internal
+     */
+    public static _create (transforms: TransformArray, auxiliaryCurves: Float64Array): Pose {
+        return new Pose(transforms, auxiliaryCurves);
     }
+}
+
+export enum PoseTransformSpace {
+    /**
+     * Transforms are stored relative to their parent nodes.
+     */
+    LOCAL,
+
+    /**
+     * Transforms are stored relative to the belonging animation controller's node's space.
+     */
+    COMPONENT,
 }
 
 export class TransformFilter {
@@ -33,7 +50,7 @@ export class TransformFilter {
         this._involvedTransforms = new Uint16Array(involvedTransforms);
     }
 
-    get involvedTransforms () {
+    get involvedTransforms (): Readonly<Uint16Array> {
         return this._involvedTransforms as Readonly<Uint16Array>;
     }
 
@@ -75,9 +92,9 @@ export class TransformFilter {
     private declare _involvedTransforms: Uint16Array;
 }
 
-export function blendPoseInto (target: Pose, source: Readonly<Pose>, alpha: number, transformFilter: TransformFilter | undefined = undefined) {
+export function blendPoseInto (target: Pose, source: Readonly<Pose>, alpha: number, transformFilter: TransformFilter | undefined = undefined): void {
     blendTransformsInto(target.transforms, source.transforms, alpha, transformFilter);
-    blendMetaValuesInto(target.metaValues, source.metaValues, alpha);
+    blendAuxiliaryCurvesInto(target.auxiliaryCurves, source.auxiliaryCurves, alpha);
 }
 
 export function blendTransformsInto (
@@ -85,7 +102,7 @@ export function blendTransformsInto (
     source: Readonly<TransformArray>,
     alpha: number,
     transformFilter: TransformFilter | undefined = undefined,
-) {
+): void {
     const nTransforms = target.length;
     assertIsTrue(nTransforms === target.length);
     if (alpha === 0) {
@@ -104,24 +121,31 @@ export function blendTransformsInto (
             blendIntoTransformArrayAt(target, source, alpha, iTransform);
         }
     } else {
-        for (const involvedTransformIndex of transformFilter.involvedTransforms) {
+        // TODO: cannot use for-of statement for Readonly ArrayBuffer on TS 4.2 for OH platform, wait for they upgrade TS version.
+        // issue: https://github.com/cocos/cocos-engine/issues/14715
+        for (let index = 0; index < transformFilter.involvedTransforms.length; ++index) {
+            const involvedTransformIndex = transformFilter.involvedTransforms[index];
             blendIntoTransformArrayAt(target, source, alpha, involvedTransformIndex);
         }
     }
 }
 
-function copyTransformsWithFilter (target: TransformArray, source: Readonly<TransformArray>, filter: TransformFilter) {
+function copyTransformsWithFilter (target: TransformArray, source: Readonly<TransformArray>, filter: TransformFilter): void {
     const nTransforms = target.length;
     assertIsTrue(nTransforms === target.length);
-    for (const involvedTransformIndex of filter.involvedTransforms) {
+    // TODO: cannot use for-of statement for Readonly ArrayBuffer on TS 4.2 for OH platform, wait for they upgrade TS version.
+    // issue: https://github.com/cocos/cocos-engine/issues/14715
+    for (let index = 0; index < filter.involvedTransforms.length; ++index) {
+        const involvedTransformIndex = filter.involvedTransforms[index];
         target.copyRange(involvedTransformIndex, source, involvedTransformIndex, 1);
     }
 }
 
-const blendIntoTransformArrayAt = (() => {
+type BlendIntoTransformArrayAtFunc = (target: TransformArray, source: Readonly<TransformArray>, alpha: number, transformIndex: number) => void;
+const blendIntoTransformArrayAt = ((): BlendIntoTransformArrayAtFunc => {
     const cacheTransformSource = new Transform();
     const cacheTransformTarget = new Transform();
-    return (target: TransformArray, source: Readonly<TransformArray>, alpha: number, transformIndex: number) => {
+    return (target: TransformArray, source: Readonly<TransformArray>, alpha: number, transformIndex: number): void => {
         const transformTarget = target.getTransform(transformIndex, cacheTransformTarget);
         const transformSource = source.getTransform(transformIndex, cacheTransformSource);
         Transform.lerp(transformTarget, transformTarget, transformSource, alpha);
@@ -129,7 +153,7 @@ const blendIntoTransformArrayAt = (() => {
     };
 })();
 
-export function blendMetaValuesInto (target: Float64Array, source: Readonly<Float64Array>, alpha: number) {
+export function blendAuxiliaryCurvesInto (target: Float64Array, source: Readonly<Float64Array>, alpha: number): void {
     const nValues = source.length;
     assertIsTrue(nValues === target.length);
     for (let iValue = 0; iValue < nValues; ++iValue) {
@@ -137,15 +161,16 @@ export function blendMetaValuesInto (target: Float64Array, source: Readonly<Floa
     }
 }
 
-export function calculateDeltaPose (target: Pose, base: Pose) {
+export function calculateDeltaPose (target: Pose, base: Pose): void {
     calculateDeltaTransforms(target.transforms, base.transforms);
-    calculateDeltaMetaValues(target.metaValues, base.metaValues);
+    calculateDeltaAuxiliaryCurves(target.auxiliaryCurves, base.auxiliaryCurves);
 }
 
-const calculateDeltaTransformArrayAt = (() => {
+type CalculateDeltaTransformArrayAtFunc = (target: TransformArray, base: Readonly<TransformArray>, transformIndex: number) => void;
+const calculateDeltaTransformArrayAt = ((): CalculateDeltaTransformArrayAtFunc => {
     const cacheTransformBase = new Transform();
     const cacheTransformTarget = new Transform();
-    return (target: TransformArray, base: Readonly<TransformArray>, transformIndex: number) => {
+    return (target: TransformArray, base: Readonly<TransformArray>, transformIndex: number): void => {
         const baseTransform = base.getTransform(transformIndex, cacheTransformBase);
         const targetTransform = target.getTransform(transformIndex, cacheTransformTarget);
         __calculateDeltaTransform(targetTransform, targetTransform, baseTransform);
@@ -153,7 +178,7 @@ const calculateDeltaTransformArrayAt = (() => {
     };
 })();
 
-export function calculateDeltaTransforms (target: TransformArray, base: TransformArray) {
+export function calculateDeltaTransforms (target: TransformArray, base: TransformArray): void {
     const nTransforms = target.length;
     assertIsTrue(nTransforms === base.length);
     for (let iTransform = 0; iTransform < nTransforms; ++iTransform) {
@@ -161,23 +186,24 @@ export function calculateDeltaTransforms (target: TransformArray, base: Transfor
     }
 }
 
-export function calculateDeltaMetaValues (target: Float64Array, base: Float64Array) {
-    const nMetaValues = target.length;
-    assertIsTrue(nMetaValues === base.length);
+export function calculateDeltaAuxiliaryCurves (target: Float64Array, base: Float64Array): void {
+    const nAuxiliaryCurves = target.length;
+    assertIsTrue(nAuxiliaryCurves === base.length);
     for (let i = 0; i < target.length; ++i) {
         target[i] -= base[i];
     }
 }
 
-export function applyDeltaPose (target: Pose, base: Pose, alpha: number, transformFilter: TransformFilter | undefined = undefined) {
+export function applyDeltaPose (target: Pose, base: Pose, alpha: number, transformFilter: TransformFilter | undefined = undefined): void {
     applyDeltaTransforms(target.transforms, base.transforms, alpha, transformFilter);
-    applyDeltaMetaValues(target.metaValues, base.metaValues, alpha);
+    applyDeltaAuxiliaryCurves(target.auxiliaryCurves, base.auxiliaryCurves, alpha);
 }
 
-const applyDeltaTransformArrayAt = (() => {
+type ApplyDeltaTransformArrayAtFunc = (target: TransformArray, delta: Readonly<TransformArray>, alpha: number, transformIndex: number) => void;
+const applyDeltaTransformArrayAt = ((): ApplyDeltaTransformArrayAtFunc => {
     const cacheTransformDelta = new Transform();
     const cacheTransformTarget = new Transform();
-    return (target: TransformArray, delta: Readonly<TransformArray>, alpha: number, transformIndex: number) => {
+    return (target: TransformArray, delta: Readonly<TransformArray>, alpha: number, transformIndex: number): void => {
         const deltaTransform = delta.getTransform(transformIndex, cacheTransformDelta);
         const targetTransform = target.getTransform(transformIndex, cacheTransformTarget);
         __applyDeltaTransform(targetTransform, targetTransform, deltaTransform, alpha);
@@ -187,7 +213,7 @@ const applyDeltaTransformArrayAt = (() => {
 
 export function applyDeltaTransforms (
     target: TransformArray, delta: TransformArray, alpha: number, transformFilter: TransformFilter | undefined = undefined,
-) {
+): void {
     const nTransforms = target.length;
     assertIsTrue(nTransforms === delta.length);
     if (!transformFilter) {
@@ -195,15 +221,18 @@ export function applyDeltaTransforms (
             applyDeltaTransformArrayAt(target, delta, alpha, iTransform);
         }
     } else {
-        for (const transformIndex of transformFilter.involvedTransforms) {
+        // TODO: cannot use for-of statement for Readonly ArrayBuffer on TS 4.2 for OH platform, wait for they upgrade TS version.
+        // issue: https://github.com/cocos/cocos-engine/issues/14715
+        for (let index = 0; index < transformFilter.involvedTransforms.length; ++index) {
+            const transformIndex = transformFilter.involvedTransforms[index];
             applyDeltaTransformArrayAt(target, delta, alpha, transformIndex);
         }
     }
 }
 
-export function applyDeltaMetaValues (target: Float64Array, delta: Float64Array, alpha: number) {
-    const nMetaValues = target.length;
-    assertIsTrue(nMetaValues === delta.length);
+export function applyDeltaAuxiliaryCurves (target: Float64Array, delta: Float64Array, alpha: number): void {
+    const nAuxiliaryCurves = target.length;
+    assertIsTrue(nAuxiliaryCurves === delta.length);
     for (let i = 0; i < target.length; ++i) {
         target[i] += delta[i] * alpha;
     }

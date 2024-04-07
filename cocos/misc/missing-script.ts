@@ -24,8 +24,10 @@
 */
 
 import { ccclass, inspector, editorOnly, serializable } from 'cc.decorator';
+import { warnID, error } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { js } from '@base/utils';
 import { Component } from '../scene-graph/component';
-import { warnID, error, js, cclegacy  } from '../core';
 
 /**
  * @en
@@ -50,7 +52,7 @@ export class MissingScript extends Component {
      * @param {string} id
      * @return {function} constructor
      */
-    public static safeFindClass (id: string) {
+    public static safeFindClass (id: string): Constructor<unknown> | undefined {
         const cls = js.getClassById(id);
         if (cls) {
             return cls;
@@ -72,7 +74,7 @@ export class MissingScript extends Component {
         super();
     }
 
-    public onLoad () {
+    public onLoad (): void {
         warnID(4600, this.node.name);
     }
 }

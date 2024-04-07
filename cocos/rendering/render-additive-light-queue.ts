@@ -22,13 +22,14 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
+import { memop } from '@base/utils';
+import { Vec3, nextPow2, Mat4, Color } from '@base/math';
 import { BatchingSchemes, Pass } from '../render-scene/core/pass';
 import { Model } from '../render-scene/scene/model';
 import { PipelineStateManager } from './pipeline-state-manager';
-import { Vec3, nextPow2, Mat4, Color, Pool, geometry, cclegacy } from '../core';
-import { Device, RenderPass, Buffer, BufferUsageBit, MemoryUsageBit,
-    BufferInfo, BufferViewInfo, CommandBuffer } from '../gfx';
-import { RenderBatchedQueue } from './render-batched-queue';
+import { geometry } from '../core';
+import { Device, RenderPass, Buffer, BufferUsageBit, MemoryUsageBit, BufferInfo, BufferViewInfo, CommandBuffer, deviceManager } from '../gfx';
 import { RenderInstancedQueue } from './render-instanced-queue';
 import { SphereLight } from '../render-scene/scene/sphere-light';
 import { SpotLight } from '../render-scene/scene/spot-light';
@@ -37,9 +38,9 @@ import { RangedDirectionalLight } from '../render-scene/scene/ranged-directional
 import { SubModel } from '../render-scene/scene/submodel';
 import { getPhaseID } from './pass-phase';
 import { Light, LightType } from '../render-scene/scene/light';
-import { SetIndex, UBOForwardLight, UBOShadow, UNIFORM_SHADOWMAP_BINDING,
-    UNIFORM_SPOT_SHADOW_MAP_TEXTURE_BINDING, supportsR32FloatTexture, isEnableEffect } from './define';
-import { Camera, ShadowType } from '../render-scene/scene';
+import { SetIndex, UBOForwardLight, UBOShadow, UNIFORM_SHADOWMAP_BINDING, UNIFORM_SPOT_SHADOW_MAP_TEXTURE_BINDING, supportsR32FloatTexture, isEnableEffect } from './define';
+import { Camera } from '../render-scene/scene/camera';
+import { ShadowType } from '../render-scene/scene/shadows';
 import { GlobalDSManager } from './global-descriptor-set-manager';
 import { PipelineUBO } from './pipeline-ubo';
 import { PipelineRuntime } from './custom/pipeline';
@@ -53,7 +54,7 @@ interface IAdditiveLightPass {
     lights: Light[];
 }
 
-const _lightPassPool = new Pool<IAdditiveLightPass>(() => ({ subModel: null!, passIdx: -1, dynamicOffsets: [], lights: [] }), 16);
+const _lightPassPool = new memop.Pool<IAdditiveLightPass>(() => ({ subModel: null!, passIdx: -1, dynamicOffsets: [], lights: [] }), 16);
 
 const _v3 = new Vec3();
 const _vec4Array = new Float32Array(4);
@@ -64,20 +65,20 @@ const _matShadowViewProj = new Mat4();
 const _rangedDirLightBoundingBox = new AABB(0.0, 0.0, 0.0, 0.5, 0.5, 0.5);
 const _tmpBoundingBox = new AABB();
 
-function cullSphereLight (light: SphereLight, model: Model) {
+function cullSphereLight (light: SphereLight, model: Model): boolean {
     return !!(model.worldBounds && !geometry.intersect.aabbWithAABB(model.worldBounds, light.aabb));
 }
 
-function cullSpotLight (light: SpotLight, model: Model) {
+function cullSpotLight (light: SpotLight, model: Model): boolean {
     return !!(model.worldBounds
         && (!geometry.intersect.aabbWithAABB(model.worldBounds, light.aabb) || !geometry.intersect.aabbFrustum(model.worldBounds, light.frustum)));
 }
 
-function cullPointLight (light: PointLight, model: Model) {
+function cullPointLight (light: PointLight, model: Model): boolean {
     return !!(model.worldBounds && !geometry.intersect.aabbWithAABB(model.worldBounds, light.aabb));
 }
 
-function cullRangedDirLight (light: RangedDirectionalLight, model: Model) {
+function cullRangedDirLight (light: RangedDirectionalLight, model: Model): boolean {
     AABB.transform(_tmpBoundingBox, _rangedDirLightBoundingBox, light.node!.getWorldMatrix());
     return !!(model.worldBounds
         && (!geometry.intersect.aabbWithAABB(model.worldBounds, _tmpBoundingBox)));
@@ -86,10 +87,10 @@ function cullRangedDirLight (light: RangedDirectionalLight, model: Model) {
 const phaseName = 'forward-add';
 let _phaseID = getPhaseID(phaseName);
 const _lightPassIndices: number[] = [];
-function getLightPassIndices (subModels: SubModel[], lightPassIndices: number[]) {
+function getLightPassIndices (subModels: SubModel[], lightPassIndices: number[], passLayout = 'default'): boolean {
     const r = cclegacy.rendering;
     if (isEnableEffect()) {
-        _phaseID = r.getPhaseID(r.getPassID('default'), phaseName);
+        _phaseID = r.getPhaseID(r.getPassID(passLayout), phaseName);
     }
     lightPassIndices.length = 0;
     let hasValidLightPass = false;
@@ -117,7 +118,6 @@ export class RenderAdditiveLightQueue {
     private _device: Device;
     private _lightPasses: IAdditiveLightPass[] = [];
     private _instancedLightPassPool = _lightPassPool.alloc();
-    private _batchedLightPassPool = _lightPassPool.alloc();
     private _shadowUBO = new Float32Array(UBOShadow.COUNT);
     private _lightBufferCount = 16;
     private _lightBufferStride: number;
@@ -126,7 +126,6 @@ export class RenderAdditiveLightQueue {
     private _firstLightBufferView: Buffer;
     private _lightBufferData: Float32Array;
     private _instancedQueues: RenderInstancedQueue[] = [];
-    private _batchedQueues: RenderBatchedQueue[] = [];
     private _lightMeterScale = 10000.0;
 
     constructor (pipeline: PipelineRuntime) {
@@ -149,15 +148,11 @@ export class RenderAdditiveLightQueue {
         this._lightBufferData = new Float32Array(this._lightBufferElementCount * this._lightBufferCount);
     }
 
-    public clear () {
+    public clear (): void {
         this._instancedQueues.forEach((instancedQueue) => {
             instancedQueue.clear();
         });
         this._instancedQueues.length = 0;
-        this._batchedQueues.forEach((batchedQueue) => {
-            batchedQueue.clear();
-        });
-        this._batchedQueues.length = 0;
 
         for (let i = 0; i < this._lightPasses.length; i++) {
             const lp = this._lightPasses[i];
@@ -169,16 +164,14 @@ export class RenderAdditiveLightQueue {
 
         this._instancedLightPassPool.dynamicOffsets.length = 0;
         this._instancedLightPassPool.lights.length = 0;
-        this._batchedLightPassPool.dynamicOffsets.length = 0;
-        this._batchedLightPassPool.lights.length = 0;
     }
 
-    public destroy () {
+    public destroy (): void {
         const descriptorSetMap = this._pipeline.globalDSManager.descriptorSetMap;
         const keys = descriptorSetMap.keys;
 
         for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
+            const key = keys[i] as Light;
             const descriptorSet = descriptorSetMap.get(key)!;
             if (descriptorSet) {
                 const binding = isEnableEffect() ? getDescBindingFromName('CCShadow') : UBOShadow.BINDING;
@@ -191,26 +184,19 @@ export class RenderAdditiveLightQueue {
         }
     }
 
-    public gatherLightPasses (camera: Camera, cmdBuff: CommandBuffer) {
-        this.clear();
-
-        const validPunctualLights = this._pipeline.pipelineSceneData.validPunctualLights;
-        if (!validPunctualLights.length) { return; }
-
-        this._updateUBOs(camera, cmdBuff);
-        this._updateLightDescriptorSet(camera, cmdBuff);
+    private _bindForwardAddLight (validPunctualLights: Light[], passLayout = 'default'): void {
         const renderObjects = this._pipeline.pipelineSceneData.renderObjects;
         for (let i = 0; i < renderObjects.length; i++) {
             const ro = renderObjects[i];
             const { model } = ro;
             const { subModels } = model;
-            if (!getLightPassIndices(subModels, _lightPassIndices)) { continue; }
+            if (!getLightPassIndices(subModels, _lightPassIndices, passLayout)) { continue; }
 
             _lightIndices.length = 0;
 
             this._lightCulling(model, validPunctualLights);
 
-            if (!_lightIndices.length) { continue; }
+            if (!_lightIndices.length && validPunctualLights.length > 0) { continue; }
 
             for (let j = 0; j < subModels.length; j++) {
                 const lightPassIdx = _lightPassIndices[j];
@@ -229,38 +215,39 @@ export class RenderAdditiveLightQueue {
                 this._addRenderQueue(pass, subModel, model, lightPassIdx);
             }
         }
+    }
 
+    public gatherLightPasses (camera: Camera, cmdBuff: CommandBuffer, passLayout = 'default'): void {
+        this.clear();
+
+        const validPunctualLights = this._pipeline.pipelineSceneData.validPunctualLights;
+        if (!validPunctualLights.length) {
+            this._bindForwardAddLight(validPunctualLights, passLayout);
+            return;
+        }
+
+        this._updateUBOs(camera, cmdBuff);
+        this._updateLightDescriptorSet(camera, cmdBuff);
+        this._bindForwardAddLight(validPunctualLights, passLayout);
         // only for instanced and batched, no light culling applied
         for (let l = 0; l < validPunctualLights.length; l++) {
             const light = validPunctualLights[l];
             this._instancedLightPassPool.lights.push(light);
             this._instancedLightPassPool.dynamicOffsets.push(this._lightBufferStride * l);
-            this._batchedLightPassPool.lights.push(light);
-            this._batchedLightPassPool.dynamicOffsets.push(this._lightBufferStride * l);
         }
 
         this._instancedQueues.forEach((instancedQueue) => {
             instancedQueue.uploadBuffers(cmdBuff);
         });
-        this._batchedQueues.forEach((batchedQueue) => {
-            batchedQueue.uploadBuffers(cmdBuff);
-        });
     }
 
-    public recordCommandBuffer (device: Device, renderPass: RenderPass, cmdBuff: CommandBuffer) {
+    public recordCommandBuffer (device: Device, renderPass: RenderPass, cmdBuff: CommandBuffer): void {
         const globalDSManager: GlobalDSManager = this._pipeline.globalDSManager;
         for (let j = 0; j < this._instancedQueues.length; ++j) {
             const light = this._instancedLightPassPool.lights[j];
             _dynamicOffsets[0] = this._instancedLightPassPool.dynamicOffsets[j];
             const descriptorSet = globalDSManager.getOrCreateDescriptorSet(light);
             this._instancedQueues[j].recordCommandBuffer(device, renderPass, cmdBuff, descriptorSet, _dynamicOffsets);
-        }
-
-        for (let j = 0; j < this._batchedQueues.length; ++j) {
-            const light = this._batchedLightPassPool.lights[j];
-            _dynamicOffsets[0] = this._batchedLightPassPool.dynamicOffsets[j];
-            const descriptorSet = globalDSManager.getOrCreateDescriptorSet(light);
-            this._batchedQueues[j].recordCommandBuffer(device, renderPass, cmdBuff, descriptorSet, _dynamicOffsets);
         }
 
         for (let i = 0; i < this._lightPasses.length; i++) {
@@ -288,7 +275,7 @@ export class RenderAdditiveLightQueue {
     }
 
     // light culling
-    protected _lightCulling (model: Model, validPunctualLights: Light[]) {
+    protected _lightCulling (model: Model, validPunctualLights: Light[]): void {
         let isCulled = false;
         for (let l = 0; l < validPunctualLights.length; l++) {
             const light = validPunctualLights[l];
@@ -314,7 +301,7 @@ export class RenderAdditiveLightQueue {
     }
 
     // add renderQueue
-    protected _addRenderQueue (pass: Pass, subModel: SubModel, model: Model, lightPassIdx: number) {
+    protected _addRenderQueue (pass: Pass, subModel: SubModel, model: Model, lightPassIdx: number): void {
         const validPunctualLights = this._pipeline.pipelineSceneData.validPunctualLights;
         const { batchingScheme } = pass;
 
@@ -338,13 +325,6 @@ export class RenderAdditiveLightQueue {
                     if (!this._instancedQueues[l]) { this._instancedQueues[l] = new RenderInstancedQueue(); }
                     this._instancedQueues[l].queue.add(buffer);
                 } break;
-                case BatchingSchemes.VB_MERGING: {
-                    const buffer = pass.getBatchedBuffer(l);
-                    buffer.merge(subModel, lightPassIdx, model);
-                    buffer.dynamicOffsets[0] = this._lightBufferStride;
-                    if (!this._batchedQueues[l]) { this._batchedQueues[l] = new RenderBatchedQueue(); }
-                    this._batchedQueues[l].queue.add(buffer);
-                } break;
                 default:
                     lp!.lights.push(light);
                     lp!.dynamicOffsets.push(this._lightBufferStride * lightIdx);
@@ -358,7 +338,7 @@ export class RenderAdditiveLightQueue {
     }
 
     // update light DescriptorSet
-    protected _updateLightDescriptorSet (camera: Camera, cmdBuff: CommandBuffer) {
+    protected _updateLightDescriptorSet (camera: Camera, cmdBuff: CommandBuffer): void {
         const device = this._pipeline.device;
         const sceneData = this._pipeline.pipelineSceneData;
         const shadowInfo = sceneData.shadows;
@@ -387,7 +367,7 @@ export class RenderAdditiveLightQueue {
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 2] = 1.0;
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 3] = 0.0;
 
-                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = 2.0;
+                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = LightType.SPHERE;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 1] = packing;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 2] = 0.0;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 3] = 0.0;
@@ -408,8 +388,17 @@ export class RenderAdditiveLightQueue {
                 Mat4.invert(_matShadowView, (light as SpotLight).node!.getWorldMatrix());
 
                 // light proj
-                Mat4.perspective(_matShadowViewProj, (light as SpotLight).angle, 1.0, 0.001, (light as SpotLight).range,
-                    true, cap.clipSpaceMinZ, cap.clipSpaceSignY, 0);
+                Mat4.perspective(
+                    _matShadowViewProj,
+                    (light as SpotLight).angle,
+                    1.0,
+                    0.001,
+                    (light as SpotLight).range,
+                    true,
+                    cap.clipSpaceMinZ,
+                    cap.clipSpaceSignY,
+                    0,
+                );
                 matShadowProj = _matShadowViewProj.clone();
                 matShadowInvProj = _matShadowViewProj.clone().invert();
 
@@ -429,7 +418,7 @@ export class RenderAdditiveLightQueue {
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 2] = spotLight.shadowPcf;
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 3] = spotLight.shadowBias;
 
-                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = 1.0;
+                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = LightType.SPOT;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 1] = packing;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 2] = spotLight.shadowNormalBias;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 3] = 0.0;
@@ -471,7 +460,7 @@ export class RenderAdditiveLightQueue {
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 2] = 1.0;
                 this._shadowUBO[UBOShadow.SHADOW_WIDTH_HEIGHT_PCF_BIAS_INFO_OFFSET + 3] = 0.0;
 
-                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = 2.0;
+                this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 0] = LightType.POINT;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 1] = packing;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 2] = 0.0;
                 this._shadowUBO[UBOShadow.SHADOW_LIGHT_PACKING_NBIAS_NULL_INFO_OFFSET + 3] = 0.0;
@@ -488,7 +477,7 @@ export class RenderAdditiveLightQueue {
         }
     }
 
-    protected _updateUBOs (camera: Camera, cmdBuff: CommandBuffer) {
+    protected _updateUBOs (camera: Camera, cmdBuff: CommandBuffer): void {
         const { exposure } = camera;
         const sceneData = this._pipeline.pipelineSceneData;
         const isHDR = sceneData.isHDR;
@@ -502,7 +491,7 @@ export class RenderAdditiveLightQueue {
             this._lightBuffer.resize(this._lightBufferStride * this._lightBufferCount);
             this._lightBufferData = new Float32Array(this._lightBufferElementCount * this._lightBufferCount);
 
-            this._firstLightBufferView.initialize(new BufferViewInfo(this._lightBuffer, 0, UBOForwardLight.SIZE));
+            this._firstLightBufferView = deviceManager.gfxDevice.createBuffer(new BufferViewInfo(this._lightBuffer, 0, UBOForwardLight.SIZE));
         }
 
         for (let l = 0, offset = 0; l < validPunctualLights.length; l++, offset += this._lightBufferElementCount) {

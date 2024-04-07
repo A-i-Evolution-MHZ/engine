@@ -33,6 +33,7 @@
 #include "GLES3Framebuffer.h"
 #include "GLES3GPUObjects.h"
 #include "GLES3InputAssembler.h"
+#include "GLES3PipelineCache.h"
 #include "GLES3PipelineLayout.h"
 #include "GLES3PipelineState.h"
 #include "GLES3PrimaryCommandBuffer.h"
@@ -112,6 +113,7 @@ bool GLES3Device::doInit(const DeviceInfo & /*info*/) {
     _features[toNumber(Feature::MULTIPLE_RENDER_TARGETS)] = true;
     _features[toNumber(Feature::BLEND_MINMAX)] = true;
     _features[toNumber(Feature::ELEMENT_INDEX_UINT)] = true;
+    _features[toNumber(Feature::RASTERIZATION_ORDER_NOCOHERENT)] = false;
 
     if (_gpuConstantRegistry->glMinorVersion) {
         _features[toNumber(Feature::COMPUTE_SHADER)] = true;
@@ -119,8 +121,6 @@ bool GLES3Device::doInit(const DeviceInfo & /*info*/) {
 
     ccstd::string fbfLevelStr = "NONE";
     // PVRVFrame has issues on their support
-#if 0 // CC_PLATFORM != CC_PLATFORM_WINDOWS
-    // TODO: enable fbf in the future, it is not implemented yet in gles3 backend
     if (checkExtension("framebuffer_fetch")) {
         ccstd::string nonCoherent = "framebuffer_fetch_non";
 
@@ -131,30 +131,46 @@ bool GLES3Device::doInit(const DeviceInfo & /*info*/) {
         if (it != _extensions.end()) {
             if (*it == CC_TOSTR(GL_EXT_shader_framebuffer_fetch_non_coherent)) {
                 _gpuConstantRegistry->mFBF = FBFSupportLevel::NON_COHERENT_EXT;
-                fbfLevelStr                = "NON_COHERENT_EXT";
+                _features[toNumber(Feature::RASTERIZATION_ORDER_NOCOHERENT)] = true;
+                fbfLevelStr = "NON_COHERENT_EXT";
             } else if (*it == CC_TOSTR(GL_QCOM_shader_framebuffer_fetch_noncoherent)) {
                 _gpuConstantRegistry->mFBF = FBFSupportLevel::NON_COHERENT_QCOM;
-                fbfLevelStr                = "NON_COHERENT_QCOM";
+                fbfLevelStr = "NON_COHERENT_QCOM";
+                _features[toNumber(Feature::RASTERIZATION_ORDER_NOCOHERENT)] = true;
                 GL_CHECK(glEnable(GL_FRAMEBUFFER_FETCH_NONCOHERENT_QCOM));
             }
         } else if (checkExtension(CC_TOSTR(GL_EXT_shader_framebuffer_fetch))) {
             // we only care about EXT_shader_framebuffer_fetch, the ARM version does not support MRT
             _gpuConstantRegistry->mFBF = FBFSupportLevel::COHERENT;
-            fbfLevelStr                = "COHERENT";
+            fbfLevelStr = "COHERENT";
         }
         _features[toNumber(Feature::INPUT_ATTACHMENT_BENEFIT)] = _gpuConstantRegistry->mFBF != FBFSupportLevel::NONE;
+        _features[toNumber(Feature::SUBPASS_COLOR_INPUT)] = true;
     }
-#endif
 
+    if (checkExtension(CC_TOSTR(GL_EXT_debug_marker))) {
+        _gpuConstantRegistry->debugMarker = true;
+    }
+
+    if (checkExtension(CC_TOSTR(ARM_shader_framebuffer_fetch_depth_stencil))) {
+        _features[toNumber(Feature::SUBPASS_DEPTH_STENCIL_INPUT)] = true;
+        fbfLevelStr += "_DEPTH_STENCIL";
+    }
+    _gpuConstantRegistry->multiDrawIndirect = checkExtension((CC_TOSTR(multi_draw_indirect)));
+
+    ccstd::string msaaLevelStr = "NONE";
 #if CC_PLATFORM != CC_PLATFORM_WINDOWS || ALLOW_MULTISAMPLED_RENDER_TO_TEXTURE_ON_DESKTOP
     if (checkExtension("multisampled_render_to_texture")) {
+        msaaLevelStr = "MSRT1";
         if (checkExtension("multisampled_render_to_texture2")) {
             _gpuConstantRegistry->mMSRT = MSRTSupportLevel::LEVEL2;
+            msaaLevelStr = "MSRT2";
         } else {
             _gpuConstantRegistry->mMSRT = MSRTSupportLevel::LEVEL1;
         }
     }
 #endif
+    _features[toNumber(Feature::MULTI_SAMPLE_RESOLVE_DEPTH_STENCIL)] = true;
 
     ccstd::string compressedFmts;
 
@@ -204,9 +220,10 @@ bool GLES3Device::doInit(const DeviceInfo & /*info*/) {
         glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, reinterpret_cast<GLint *>(&_caps.maxComputeWorkGroupCount.z));
     }
 
-    if (checkExtension("occlusion_query_boolean")) {
-        _caps.supportQuery = true;
-    }
+    _caps.supportQuery = checkExtension("occlusion_query_boolean");
+    _caps.supportFirstInstance = checkExtension("base_instance");
+    _caps.supportFilterMinMax = checkExtension("texture_filter_minmax");
+    _caps.supportGPUDriven = hasFeature(Feature::COMPUTE_SHADER);
 
     QueueInfo queueInfo;
     queueInfo.type = QueueType::GRAPHICS;
@@ -222,12 +239,18 @@ bool GLES3Device::doInit(const DeviceInfo & /*info*/) {
 
     _gpuStateCache->initialize(_caps.maxTextureUnits, _caps.maxImageUnits, _caps.maxUniformBufferBindings, _caps.maxShaderStorageBufferBindings, _caps.maxVertexAttributes);
 
+#if CC_USE_PIPELINE_CACHE
+    _pipelineCache = std::make_unique<GLES3PipelineCache>();
+    _pipelineCache->init();
+#endif
+
     CC_LOG_INFO("GLES3 device initialized.");
     CC_LOG_INFO("RENDERER: %s", _renderer.c_str());
     CC_LOG_INFO("VENDOR: %s", _vendor.c_str());
     CC_LOG_INFO("VERSION: %s", _version.c_str());
     CC_LOG_INFO("COMPRESSED_FORMATS: %s", compressedFmts.c_str());
     CC_LOG_INFO("FRAMEBUFFER_FETCH: %s", fbfLevelStr.c_str());
+    CC_LOG_INFO("MULTI_SAMPLE_RENDER_TO_TEXTURE: %s", msaaLevelStr.c_str());
 
     if (_xr) {
         _xr->initializeGLESData(pfnGLES3wLoadProc(), GLES3Device::getInstance()->context());
@@ -249,6 +272,8 @@ void GLES3Device::doDestroy() {
     CC_SAFE_DESTROY_AND_DELETE(_queryPool)
     CC_SAFE_DESTROY_AND_DELETE(_queue)
     CC_SAFE_DESTROY_AND_DELETE(_gpuContext)
+
+    _pipelineCache.reset();
 }
 
 void GLES3Device::acquire(Swapchain *const *swapchains, uint32_t count) {
@@ -585,13 +610,17 @@ void GLES3Device::copyBuffersToTexture(const uint8_t *const *buffers, Texture *d
 
 void GLES3Device::copyTextureToBuffers(Texture *srcTexture, uint8_t *const *buffers, const BufferTextureCopy *regions, uint32_t count) {
     CC_PROFILE(GLES3DeviceCopyTextureToBuffers);
-    cmdFuncGLES3CopyTextureToBuffers(this, static_cast<GLES3Texture *>(srcTexture)->gpuTexture(), buffers, regions, count);
+    cmdFuncGLES3CopyTextureToBuffers(this, static_cast<GLES3Texture *>(srcTexture)->gpuTextureView(), buffers, regions, count);
 }
 
 void GLES3Device::getQueryPoolResults(QueryPool *queryPool) {
     CC_PROFILE(GLES3DeviceGetQueryPoolResults);
     auto *cmdBuff = static_cast<GLES3CommandBuffer *>(getCommandBuffer());
     cmdBuff->getQueryPoolResults(queryPool);
+}
+
+SampleCount GLES3Device::getMaxSampleCount(Format format, TextureUsage usage, TextureFlags flags) const {
+    return static_cast<SampleCount>(cmdFuncGLES3GetMaxSampleCount(this, format, usage, flags));
 }
 
 } // namespace gfx

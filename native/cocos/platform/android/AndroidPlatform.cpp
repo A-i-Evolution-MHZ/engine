@@ -28,6 +28,7 @@
 #include "application/ApplicationManager.h"
 #include "base/Log.h"
 #include "base/memory/Memory.h"
+#include "base/std/container/unordered_map.h"
 #include "game-activity/native_app_glue/android_native_app_glue.h"
 #include "java/jni/JniHelper.h"
 #include "modules/Screen.h"
@@ -75,13 +76,14 @@ extern int cocos_main(int argc, const char **argv); // NOLINT(readability-identi
 
 namespace cc {
 
-struct cc::TouchEvent touchEvent;
 struct cc::KeyboardEvent keyboardEvent;
 
 struct InputAction {
     uint32_t buttonMask{0};
     int32_t actionCode{-1};
 };
+
+extern ccstd::unordered_map<int32_t, const char *> androidKeyCodes;
 
 static const InputAction PADDLEBOAT_ACTIONS[INPUT_ACTION_COUNT] = {
     {PADDLEBOAT_BUTTON_DPAD_UP, static_cast<int>(KeyCode::DPAD_UP)},
@@ -211,8 +213,8 @@ public:
         if (inputBuffer->keyEventsCount != 0) {
             for (uint64_t i = 0; i < inputBuffer->keyEventsCount; ++i) {
                 GameActivityKeyEvent *keyEvent = &inputBuffer->keyEvents[i];
-                if (Paddleboat_processGameActivityKeyInputEvent(keyEvent,
-                                                                sizeof(GameActivityKeyEvent))) {
+                if (_gameControllerIndex >= 0 && Paddleboat_processGameActivityKeyInputEvent(keyEvent,
+                                                                                             sizeof(GameActivityKeyEvent))) {
                     controllerEvent = true;
                 } else {
                     cookGameActivityKeyEvent(keyEvent);
@@ -224,12 +226,17 @@ public:
             for (uint64_t i = 0; i < inputBuffer->motionEventsCount; ++i) {
                 GameActivityMotionEvent *motionEvent = &inputBuffer->motionEvents[i];
 
-                if (Paddleboat_processGameActivityMotionInputEvent(motionEvent,
-                                                                   sizeof(GameActivityMotionEvent))) {
+                if (_gameControllerIndex >= 0 && Paddleboat_processGameActivityMotionInputEvent(motionEvent,
+                                                                                                sizeof(GameActivityMotionEvent))) {
                     controllerEvent = true;
                 } else {
                     // Didn't belong to a game controller, process it ourselves if it is a touch event
-                    cookGameActivityMotionEvent(motionEvent);
+                    bool isMouseEvent = motionEvent->pointerCount > 0 && (motionEvent->pointers[0].toolType == AMOTION_EVENT_TOOL_TYPE_STYLUS || motionEvent->pointers[0].toolType == AMOTION_EVENT_TOOL_TYPE_MOUSE);
+                    if (isMouseEvent) {
+                        cookGameActivityMouseEvent(motionEvent);
+                    } else {
+                        cookGameActivityMotionEvent(motionEvent);
+                    }
                 }
             }
             android_app_clear_motion_events(inputBuffer);
@@ -320,9 +327,9 @@ public:
                 }
 
                 auto lx = controllerData.leftStick.stickX;
-                auto ly = controllerData.leftStick.stickY;
+                auto ly = -controllerData.leftStick.stickY;
                 auto rx = controllerData.rightStick.stickX;
-                auto ry = controllerData.rightStick.stickY;
+                auto ry = -controllerData.rightStick.stickY;
 
                 info.axisInfos.emplace_back(StickAxisCode::LEFT_STICK_X, lx);
                 info.axisInfos.emplace_back(StickAxisCode::LEFT_STICK_Y, ly);
@@ -343,7 +350,66 @@ public:
     }
 
     // NOLINTNEXTLINE
+    bool cookGameActivityMouseEvent(GameActivityMotionEvent *motionEvent) {
+        cc::MouseEvent mouseEvent;
+        if (motionEvent->pointerCount > 0) {
+            mouseEvent.windowId = ISystemWindow::mainWindowId; // must be main window here
+
+            int action = motionEvent->action;
+            int actionMasked = action & AMOTION_EVENT_ACTION_MASK;
+            int button = motionEvent->buttonState;
+
+            setMousePosition(mouseEvent, motionEvent);
+            switch (button) {
+                case AMOTION_EVENT_BUTTON_PRIMARY:
+                    mouseEvent.button = 0;
+                    break;
+                case AMOTION_EVENT_BUTTON_SECONDARY:
+                    mouseEvent.button = 2;
+                    break;
+                case AMOTION_EVENT_BUTTON_TERTIARY:
+                    mouseEvent.button = 1;
+                    break;
+                case AMOTION_EVENT_BUTTON_BACK:
+                    mouseEvent.button = 3;
+                    break;
+                case AMOTION_EVENT_BUTTON_FORWARD:
+                    mouseEvent.button = 4;
+                    break;
+                default:
+                    mouseEvent.button = 0;
+            }
+
+            if (actionMasked == AMOTION_EVENT_ACTION_DOWN ||
+                actionMasked == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+                mouseEvent.type = cc::MouseEvent::Type::DOWN;
+            } else if (actionMasked == AMOTION_EVENT_ACTION_UP ||
+                       actionMasked == AMOTION_EVENT_ACTION_POINTER_UP) {
+                mouseEvent.type = cc::MouseEvent::Type::UP;
+            } else if (actionMasked == AMOTION_EVENT_ACTION_SCROLL) {
+                mouseEvent.type = cc::MouseEvent::Type::WHEEL;
+                // TODO(): wheel delta
+            } else if (actionMasked == AMOTION_EVENT_ACTION_MOVE) {
+                mouseEvent.type = cc::MouseEvent::Type::MOVE;
+            } else if (actionMasked == AMOTION_EVENT_ACTION_HOVER_MOVE) {
+                mouseEvent.type = cc::MouseEvent::Type::MOVE;
+            } else if (actionMasked == AMOTION_EVENT_ACTION_HOVER_ENTER) {
+                return false;
+            } else if (actionMasked == AMOTION_EVENT_ACTION_HOVER_EXIT) {
+                return false;
+            } else {
+                return false;
+            }
+
+            events::Mouse::broadcast(mouseEvent);
+            return true;
+        }
+        return false;
+    }
+
+    // NOLINTNEXTLINE
     bool cookGameActivityMotionEvent(GameActivityMotionEvent *motionEvent) {
+        cc::TouchEvent touchEvent;
         if (motionEvent->pointerCount > 0) {
             touchEvent.windowId = ISystemWindow::mainWindowId; // must be main window here
 
@@ -351,10 +417,12 @@ public:
             int actionMasked = action & AMOTION_EVENT_ACTION_MASK;
             int eventChangedIndex = -1;
 
+            bool isMouseEvent = motionEvent->pointerCount > 0 && (motionEvent->pointers[0].toolType == AMOTION_EVENT_TOOL_TYPE_STYLUS || motionEvent->pointers[0].toolType == AMOTION_EVENT_TOOL_TYPE_MOUSE);
+
             if (actionMasked == AMOTION_EVENT_ACTION_DOWN ||
                 actionMasked == AMOTION_EVENT_ACTION_POINTER_DOWN) {
                 if (actionMasked == AMOTION_EVENT_ACTION_POINTER_DOWN) {
-                    eventChangedIndex = action >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+                    eventChangedIndex = ((action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
                 } else {
                     eventChangedIndex = 0;
                 }
@@ -363,7 +431,7 @@ public:
                        actionMasked == AMOTION_EVENT_ACTION_POINTER_UP) {
                 touchEvent.type = cc::TouchEvent::Type::ENDED;
                 if (actionMasked == AMOTION_EVENT_ACTION_POINTER_UP) {
-                    eventChangedIndex = action >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+                    eventChangedIndex = ((action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
                 } else {
                     eventChangedIndex = 0;
                 }
@@ -375,33 +443,46 @@ public:
                 return false;
             }
 
+            bool touchHandled = true;
             if (eventChangedIndex >= 0) {
-                addTouchEvent(eventChangedIndex, motionEvent);
+                touchHandled = addTouchEvent(touchEvent, eventChangedIndex, motionEvent);
             } else {
                 for (int i = 0; i < motionEvent->pointerCount; i++) {
-                    addTouchEvent(i, motionEvent);
+                    addTouchEvent(touchEvent, i, motionEvent);
                 }
             }
             events::Touch::broadcast(touchEvent);
             touchEvent.touches.clear();
-            return true;
+            return touchHandled;
         }
         return false;
     }
 
     // NOLINTNEXTLINE
     bool cookGameActivityKeyEvent(GameActivityKeyEvent *keyEvent) {
-        for (const auto &action : INPUT_KEY_ACTIONS) {
-            if (action.buttonMask != keyEvent->keyCode) {
-                continue;
+        if (_gameControllerIndex >= 0) {
+            for (const auto &action : INPUT_KEY_ACTIONS) {
+                if (action.buttonMask != keyEvent->keyCode) {
+                    continue;
+                }
+                keyboardEvent.action = 0 == keyEvent->action ? cc::KeyboardEvent::Action::PRESS
+                                                             : cc::KeyboardEvent::Action::RELEASE;
+                keyboardEvent.key = action.actionCode;
+                events::Keyboard::broadcast(keyboardEvent);
+                return true;
             }
-            keyboardEvent.action = 0 == keyEvent->action ? cc::KeyboardEvent::Action::PRESS
-                                                         : cc::KeyboardEvent::Action::RELEASE;
-            keyboardEvent.key = action.actionCode;
-            events::Keyboard::broadcast(keyboardEvent);
-            return true;
         }
-        return false;
+        keyboardEvent.action = 0 == keyEvent->action ? cc::KeyboardEvent::Action::PRESS
+                                                     : cc::KeyboardEvent::Action::RELEASE;
+        keyboardEvent.key = keyEvent->keyCode;
+        auto keyCodeItr = androidKeyCodes.find(keyEvent->keyCode);
+        if (keyCodeItr == androidKeyCodes.end()) {
+            keyboardEvent.code.clear();
+        } else {
+            keyboardEvent.code = keyCodeItr->second;
+        }
+        events::Keyboard::broadcast(keyboardEvent);
+        return true;
     }
 
     // NOLINTNEXTLINE
@@ -535,6 +616,7 @@ public:
                 ev.type = cc::WindowEvent::Type::SIZE_CHANGED;
                 ev.width = ANativeWindow_getWidth(_androidPlatform->_app->window);
                 ev.height = ANativeWindow_getHeight(_androidPlatform->_app->window);
+                ev.windowId = ISystemWindow::mainWindowId;
                 events::WindowEvent::broadcast(ev);
                 break;
             }
@@ -589,14 +671,23 @@ public:
     }
 
 private:
-    static void addTouchEvent(int index, GameActivityMotionEvent *motionEvent) {
+    static bool addTouchEvent(cc::TouchEvent &touchEvent, int index, GameActivityMotionEvent *motionEvent) {
         if (index < 0 || index >= motionEvent->pointerCount) {
-            ABORT_IF(false);
+            return false;
         }
         int id = motionEvent->pointers[index].id;
         float x = GameActivityPointerAxes_getX(&motionEvent->pointers[index]);
         float y = GameActivityPointerAxes_getY(&motionEvent->pointers[index]);
         touchEvent.touches.emplace_back(x, y, id);
+        return true;
+    }
+
+    static void setMousePosition(cc::MouseEvent &mouseEvent, GameActivityMotionEvent *motionEvent) {
+        if (motionEvent->pointerCount == 0) {
+            ABORT_IF(false);
+        }
+        mouseEvent.x = GameActivityPointerAxes_getX(&motionEvent->pointers[0]);
+        mouseEvent.y = GameActivityPointerAxes_getY(&motionEvent->pointers[0]);
     }
 
     AppEventCallback _eventCallback{nullptr};
@@ -750,9 +841,7 @@ int32_t AndroidPlatform::loop() {
         if (xr && !xr->platformLoopStart()) continue;
         _inputProxy->handleInput();
         if (_inputProxy->isAnimating() && (xr ? xr->getXRConfig(xr::XRConfigKey::SESSION_RUNNING).getBool() : true)) {
-            if (xr) xr->beginRenderFrame();
             runTask();
-            if (xr) xr->endRenderFrame();
             if (_inputProxy->isActive()) {
                 flushTasksOnGameThreadAtForegroundJNI();
             }

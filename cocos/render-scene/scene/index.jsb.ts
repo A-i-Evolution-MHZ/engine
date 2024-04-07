@@ -21,7 +21,9 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-import { Vec3, Enum, cclegacy } from '../../core';
+import { cclegacy } from '@base/global';
+import { Enum } from '@base/object';
+import { Vec3 } from '@base/math';
 import type { LODData as JsbLODData, LODGroup as JsbLODGroup } from './lod-group';
 
 export const LODData: typeof JsbLODData = jsb.LODData;
@@ -29,30 +31,28 @@ export type LODData = JsbLODData;
 export const LODGroup: typeof JsbLODGroup = jsb.LODGroup;
 export type LODGroup = JsbLODGroup;
 
-import type {
-    Ambient as JsbAmbient,
-    Light as JsbLight,
-    DirectionalLight as JsbDirectionalLight,
-    SpotLight as JsbSpotLight,
-    SphereLight as JsbSphereLight,
-    PointLight as JsbPointLight,
-    RangedDirectionalLight as JsbRangedDirectionalLight,
-    Fog as JsbFog,
-    Shadows as JsbShadows,
-    Skybox as JsbSkybox,
-} from './index';
+import type { Ambient as JsbAmbient, Light as JsbLight, DirectionalLight as JsbDirectionalLight, SpotLight as JsbSpotLight, SphereLight as JsbSphereLight, PointLight as JsbPointLight, RangedDirectionalLight as JsbRangedDirectionalLight, Fog as JsbFog, Shadows as JsbShadows, Skybox as JsbSkybox, PostSettings as JsbPostSettings } from './index';
 
 // NOTE: why don't we export FogInfo and ShadowInfo from 'index.ts' 
-import type {
-    FogInfo as JsbFogInfo,
-    ShadowsInfo as JsbShadowsInfo,
-} from '../../scene-graph/scene-globals';
+import type { FogInfo as JsbFogInfo, ShadowsInfo as JsbShadowsInfo } from '../../scene-graph/scene-globals';
 
 declare const jsb: any;
 
 export type Ambient = JsbAmbient;
 export const Ambient: typeof JsbAmbient = jsb.Ambient;
 cclegacy.Ambient = Ambient;
+
+/**
+ * @en Default sun illuminance
+ * @zh 默认太阳亮度
+ */
+Ambient.SUN_ILLUM = 65000.0;
+/**
+ * @en Default sky illuminance
+ * @zh 默认天空亮度
+ */
+Ambient.SKY_ILLUM = 20000.0;
+
 
 /**
  * Light related.
@@ -158,6 +158,7 @@ export const FogType = Enum({
      */
     LAYERED: 3,
 });
+export const FOG_TYPE_NONE = FogType.LAYERED + 1;
 
 export const FogInfo: typeof JsbFogInfo = jsb.FogInfo;
 export type FogInfo = JsbFogInfo;
@@ -236,6 +237,13 @@ export const PCFType = Enum({
      * @readonly
      */
     SOFT_2X: 2,
+
+    /**
+     * @zh x16 次采样
+     * @en x16 times
+     * @readonly
+     */
+    SOFT_4X: 3,
 });
 export const CSMLevel = Enum({
     /**
@@ -320,15 +328,52 @@ export const EnvironmentLightingType = Enum({
     DIFFUSEMAP_WITH_REFLECTION: 2,
 });
 
+export const ToneMappingType = Enum({
+    DEFAULT: 0,
+    LINEAR: 1,
+});
+
 export const ShadowsInfo: typeof JsbShadowsInfo = jsb.ShadowsInfo;
 export type ShadowsInfo = JsbShadowsInfo;
-export const Shadows: typeof JsbShadows = jsb.Shadow;
+export const Shadows: typeof JsbShadows = jsb.Shadows;
 export type Shadows = JsbShadows;
 cclegacy.Shadows = Shadows;
+
+/**
+ * @en MAX_FAR. This is shadow camera max far.
+ * @zh 阴影相机的最远视距。
+ */
+
+Object.defineProperty(Shadows, "MAX_FAR", {
+    configurable: true,
+    enumerable: true,
+    get() {
+        return 2000.0;
+    }
+});
+
+const COEFFICIENT_OF_EXPANSION = 2.0 * Math.sqrt(3.0);
+/**
+ * @en EXPANSION_RATIO. This is shadow boundingBox Coefficient of expansion.
+ * @zh 阴影包围盒扩大系数。
+ */
+Object.defineProperty(Shadows, 'COEFFICIENT_OF_EXPANSION', {
+    configurable: true,
+    enumerable: true,
+    get() {
+        return COEFFICIENT_OF_EXPANSION;
+    }
+});
+
+
 
 export const Skybox: typeof JsbSkybox = jsb.Skybox;
 export type Skybox = JsbSkybox;
 cclegacy.Skybox = Skybox;
+
+export const PostSettings: typeof JsbPostSettings = jsb.PostSettings;
+export type PostSettings = JsbPostSettings;
+cclegacy.PostSettings = PostSettings;
 
 export * from './model';
 export * from './submodel';

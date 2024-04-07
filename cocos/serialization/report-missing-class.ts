@@ -23,13 +23,13 @@
 */
 
 import { EDITOR } from 'internal:constants';
-import { errorID } from '../core';
+import { errorID } from '@base/debug';
 
 /**
  *
  * @engineInternal
  */
-export function reportMissingClass (id: string) {
+export function reportMissingClass (id: string): void {
     if (EDITOR && EditorExtends.UuidUtils.isUuid(id)) {
         id = EditorExtends.UuidUtils.decompressUuid(id);
         errorID(5301, id);

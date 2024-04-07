@@ -22,13 +22,13 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import { RenderPass } from '../gfx';
 import { PipelineStateManager } from './pipeline-state-manager';
 import { isEnableEffect, SetIndex } from './define';
 import { Camera } from '../render-scene/scene/camera';
 import { RenderPipeline } from './render-pipeline';
 import { getPhaseID } from './pass-phase';
-import { cclegacy } from '../core';
 
 export class UIPhase {
     private _phaseID = getPhaseID('default');
@@ -38,11 +38,11 @@ export class UIPhase {
         if (isEnableEffect()) this._phaseID = r.getPhaseID(r.getPassID('default'), 'default');
     }
 
-    public activate (pipeline: RenderPipeline) {
+    public activate (pipeline: RenderPipeline): void {
         this._pipeline = pipeline;
     }
 
-    public render (camera: Camera, renderPass: RenderPass) {
+    public render (camera: Camera, renderPass: RenderPass): void {
         const pipeline = this._pipeline;
         const device = pipeline.device;
         const cmdBuff = pipeline.commandBuffers[0];

@@ -56,14 +56,6 @@ export abstract class InputAssembler extends GFXObject {
     }
 
     /**
-     * @en Get the indirect buffer, if present.
-     * @zh 间接绘制缓冲。
-     */
-    get indirectBuffer (): Buffer | null {
-        return this._indirectBuffer;
-    }
-
-    /**
      * @en Get hash of current attributes.
      * @zh 获取顶点属性数组的哈希值。
      */
@@ -78,7 +70,7 @@ export abstract class InputAssembler extends GFXObject {
     set vertexCount (count: number) {
         this._drawInfo.vertexCount = count;
     }
-    get vertexCount () {
+    get vertexCount (): number {
         return this._drawInfo.vertexCount;
     }
 
@@ -89,7 +81,7 @@ export abstract class InputAssembler extends GFXObject {
     set firstVertex (first: number) {
         this._drawInfo.firstVertex = first;
     }
-    get firstVertex () {
+    get firstVertex (): number {
         return this._drawInfo.firstVertex;
     }
 
@@ -100,7 +92,7 @@ export abstract class InputAssembler extends GFXObject {
     set indexCount (count: number) {
         this._drawInfo.indexCount = count;
     }
-    get indexCount () {
+    get indexCount (): number {
         return this._drawInfo.indexCount;
     }
 
@@ -111,7 +103,7 @@ export abstract class InputAssembler extends GFXObject {
     set firstIndex (first: number) {
         this._drawInfo.firstIndex = first;
     }
-    get firstIndex () {
+    get firstIndex (): number {
         return this._drawInfo.firstIndex;
     }
 
@@ -122,7 +114,7 @@ export abstract class InputAssembler extends GFXObject {
     set vertexOffset (offset: number) {
         this._drawInfo.vertexOffset = offset;
     }
-    get vertexOffset () {
+    get vertexOffset (): number {
         return this._drawInfo.vertexOffset;
     }
 
@@ -133,7 +125,7 @@ export abstract class InputAssembler extends GFXObject {
     set instanceCount (count: number) {
         this._drawInfo.instanceCount = count;
     }
-    get instanceCount () {
+    get instanceCount (): number {
         return this._drawInfo.instanceCount;
     }
 
@@ -144,7 +136,7 @@ export abstract class InputAssembler extends GFXObject {
     set firstInstance (first: number) {
         this._drawInfo.firstInstance = first;
     }
-    get firstInstance () {
+    get firstInstance (): number {
         return this._drawInfo.firstInstance;
     }
 
@@ -169,7 +161,6 @@ export abstract class InputAssembler extends GFXObject {
 
     protected _vertexBuffers: Buffer[] = [];
     protected _indexBuffer: Buffer | null = null;
-    protected _indirectBuffer: Buffer | null = null;
 
     protected _drawInfo = new DrawInfo();
 

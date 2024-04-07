@@ -22,7 +22,10 @@
  THE SOFTWARE.
 */
 
-import { Vec3, RecyclePool, error, js, IVec3Like, geometry } from '../../core';
+import { error, warnID } from '@base/debug';
+import { js, memop } from '@base/utils';
+import { Vec3, IVec3Like, IQuatLike } from '@base/math';
+import { geometry } from '../../core';
 import { PhysicsRayResult } from '../framework/physics-ray-result';
 import { BuiltinSharedBody } from './builtin-shared-body';
 import { BuiltinShape } from './shapes/builtin-shape';
@@ -48,10 +51,46 @@ const TriggerEventObject = {
  * not a full physical simulator
  */
 export class BuiltInWorld implements IPhysicsWorld {
-    setGravity (v: IVec3Like) { }
-    setAllowSleep (v: boolean) { }
-    setDefaultMaterial (v: PhysicsMaterial) { }
-    get impl () { return this; }
+    sweepBox (worldRay: geometry.Ray, halfExtent: IVec3Like, orientation: IQuatLike,
+        options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepBoxClosest (worldRay: geometry.Ray, halfExtent: IVec3Like, orientation: IQuatLike,
+        options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepSphere (worldRay: geometry.Ray, radius: number, options: IRaycastOptions,
+        pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepSphereClosest (worldRay: geometry.Ray, radius: number,
+        options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepCapsule (worldRay: geometry.Ray, radius: number, height: number, orientation: IQuatLike,
+        options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepCapsuleClosest (worldRay: geometry.Ray, radius: number, height: number,
+        orientation: IQuatLike, options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    setGravity (v: IVec3Like): void { }
+    setAllowSleep (v: boolean): void { }
+    setDefaultMaterial (v: PhysicsMaterial): void { }
+    get impl (): BuiltInWorld { return this; }
     shapeArr: BuiltinShape[] = [];
     readonly bodies: BuiltinSharedBody[] = [];
 
@@ -125,7 +164,7 @@ export class BuiltInWorld implements IPhysicsWorld {
         return !(tmp_d === Infinity);
     }
 
-    raycast (worldRay: geometry.Ray, options: IRaycastOptions, pool: RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+    raycast (worldRay: geometry.Ray, options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
         const max_d = options.maxDistance;
         const mask = options.mask;
         for (let i = 0; i < this.bodies.length; i++) {
@@ -151,21 +190,21 @@ export class BuiltInWorld implements IPhysicsWorld {
         return BuiltinSharedBody.getSharedBody(node, this, wrappedBody);
     }
 
-    addSharedBody (body: BuiltinSharedBody) {
+    addSharedBody (body: BuiltinSharedBody): void {
         const index = this.bodies.indexOf(body);
         if (index < 0) {
             this.bodies.push(body);
         }
     }
 
-    removeSharedBody (body: BuiltinSharedBody) {
+    removeSharedBody (body: BuiltinSharedBody): void {
         const index = this.bodies.indexOf(body);
         if (index >= 0) {
             js.array.fastRemoveAt(this.bodies, index);
         }
     }
 
-    private emitTriggerEvent () {
+    private emitTriggerEvent (): void {
         let shapeA: BuiltinShape;
         let shapeB: BuiltinShape;
         for (let i = 0; i < this.shapeArr.length; i += 2) {

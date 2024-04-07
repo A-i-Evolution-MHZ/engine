@@ -33,6 +33,7 @@
 #include "core/builtin/BuiltinResMgr.h"
 #include "engine/EngineEvents.h"
 #include "platform/BasePlatform.h"
+#include "platform/CountdownTrigger.h"
 #include "platform/FileUtils.h"
 #include "renderer/GFXDeviceManager.h"
 #include "renderer/core/ProgramLib.h"
@@ -70,9 +71,15 @@
 #endif
 #include "profiler/Profiler.h"
 
+#if !CC_EDITOR && (CC_PLATFORM == CC_PLATFORM_ANDROID || CC_PLATFORM == CC_PLATFORM_WINDOWS || CC_PLATFORM == CC_PLATFORM_MACOS || CC_PLATFORM == CC_PLATFORM_IOS)
+    #define COUNTDOWN_TRIGGER_ENABLED 1
+#else
+    #define COUNTDOWN_TRIGGER_ENABLED 0
+#endif
+
 namespace {
 
-bool setCanvasCallback(se::Object * /*global*/) {
+bool setCanvasCallback(se::Object *global) {
     se::AutoHandleScope scope;
     se::ScriptEngine *se = se::ScriptEngine::getInstance();
     auto *window = CC_GET_MAIN_SYSTEM_WINDOW();
@@ -80,21 +87,32 @@ bool setCanvasCallback(se::Object * /*global*/) {
     auto viewSize = window->getViewSize();
     auto dpr = cc::BasePlatform::getPlatform()->getInterface<cc::IScreen>()->getDevicePixelRatio();
 
-    std::stringstream ss;
-    {
-        ss << "globalThis.jsb = globalThis.jsb || {}; " << std::endl;
-        ss << "jsb.window = jsb.window || {}; " << std::endl;
-        ss << "jsb.window.innerWidth = " << static_cast<int>(viewSize.width / dpr) << ";" << std::endl;
-        ss << "jsb.window.innerHeight = " << static_cast<int>(viewSize.height / dpr) << ";" << std::endl;
-        ss << "jsb.window.windowHandler = ";
-        if (sizeof(handler) == 8) { // use bigint
-            ss << static_cast<uint64_t>(handler) << "n;";
-        }
-        if (sizeof(handler) == 4) {
-            ss << static_cast<uint32_t>(handler) << ";";
-        }
+    se::Value jsbVal;
+    bool ok = global->getProperty("jsb", &jsbVal);
+    if (!jsbVal.isObject()) {
+        se::HandleObject jsbObj(se::Object::createPlainObject());
+        global->setProperty("jsb", se::Value(jsbObj));
+        jsbVal.setObject(jsbObj, true);
     }
-    se->evalString(ss.str().c_str());
+
+    se::Value windowVal;
+    jsbVal.toObject()->getProperty("window", &windowVal);
+    if (!windowVal.isObject()) {
+        se::HandleObject windowObj(se::Object::createPlainObject());
+        jsbVal.toObject()->setProperty("window", se::Value(windowObj));
+        windowVal.setObject(windowObj, true);
+    }
+
+    int width = static_cast<int>(viewSize.width / dpr);
+    int height = static_cast<int>(viewSize.height / dpr);
+    windowVal.toObject()->setProperty("innerWidth", se::Value(width));
+    windowVal.toObject()->setProperty("innerHeight", se::Value(height));
+
+    if (sizeof(handler) == 8) { // use bigint
+        windowVal.toObject()->setProperty("windowHandle", se::Value(static_cast<uint64_t>(handler)));
+    } else {
+        windowVal.toObject()->setProperty("windowHandle", se::Value(static_cast<uint32_t>(handler)));
+    }
 
     return true;
 }
@@ -133,6 +151,10 @@ int32_t Engine::init() {
 #endif
 
     EventDispatcher::init();
+
+#if COUNTDOWN_TRIGGER_ENABLED
+    CountdownTrigger::init();
+#endif
 
     BasePlatform *platform = BasePlatform::getPlatform();
 
@@ -190,6 +212,9 @@ void Engine::destroy() {
 
     CCObject::deferredDestroy();
 
+#if COUNTDOWN_TRIGGER_ENABLED
+    CountdownTrigger::destroy();
+#endif
     delete _builtinResMgr;
     delete _programLib;
 
@@ -206,6 +231,7 @@ void Engine::destroy() {
 
 int32_t Engine::run() {
     BasePlatform *platform = BasePlatform::getPlatform();
+    _xr = CC_GET_XR_INTERFACE();
     platform->runInPlatformThread([&]() {
         tick();
     });
@@ -250,7 +276,7 @@ void Engine::setPreferredFramesPerSecond(int fps) {
     }
     BasePlatform *platform = BasePlatform::getPlatform();
     platform->setFps(fps);
-    _prefererredNanosecondsPerFrame = static_cast<long>(1.0 / fps * NANOSECONDS_PER_SECOND); // NOLINT(google-runtime-int)
+    _preferredNanosecondsPerFrame = static_cast<long>(1.0 / fps * NANOSECONDS_PER_SECOND); // NOLINT(google-runtime-int)
 }
 
 void Engine::tick() {
@@ -274,16 +300,23 @@ void Engine::tick() {
 
         // iOS/macOS use its own fps limitation algorithm.
         // Windows for Editor should not sleep,because Editor call tick function synchronously
-#if (CC_PLATFORM == CC_PLATFORM_ANDROID || (CC_PLATFORM == CC_PLATFORM_WINDOWS && !CC_EDITOR) || CC_PLATFORM == CC_PLATFORM_OHOS || CC_PLATFORM == CC_PLATFORM_OPENHARMONY) || (defined(CC_SERVER_MODE) && (CC_PLATFORM == CC_PLATFORM_MAC_OSX))
-        if (dtNS < static_cast<double>(_prefererredNanosecondsPerFrame)) {
+#if (CC_PLATFORM == CC_PLATFORM_ANDROID || (CC_PLATFORM == CC_PLATFORM_WINDOWS && !CC_EDITOR) || CC_PLATFORM == CC_PLATFORM_OHOS || CC_PLATFORM == CC_PLATFORM_OPENHARMONY || CC_PLATFORM == CC_PLATFORM_MACOS)
+        if (dtNS < static_cast<double>(_preferredNanosecondsPerFrame)) {
             CC_PROFILE(EngineSleep);
             std::this_thread::sleep_for(
-                std::chrono::nanoseconds(_prefererredNanosecondsPerFrame - static_cast<int64_t>(dtNS)));
-            dtNS = static_cast<double>(_prefererredNanosecondsPerFrame);
+                std::chrono::nanoseconds(_preferredNanosecondsPerFrame - static_cast<int64_t>(dtNS)));
+            dtNS = static_cast<double>(_preferredNanosecondsPerFrame);
         }
 #endif
 
         prevTime = std::chrono::steady_clock::now();
+        if (_xr) _xr->beginRenderFrame();
+#if COUNTDOWN_TRIGGER_ENABLED
+        CountdownTrigger countdownTrigger(
+            _blockingTimeoutMS, +[]() {
+                events::ScriptExecutionTimeout::broadcast();
+            });
+#endif
 
         _scheduler->update(dt);
 
@@ -292,7 +325,7 @@ void Engine::tick() {
         se::ScriptEngine::getInstance()->mainLoopUpdate();
 
         cc::DeferredReleasePool::clear();
-
+        if (_xr) _xr->endRenderFrame();
         now = std::chrono::steady_clock::now();
         dtNS = dtNS * 0.1 + 0.9 * static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(now - prevTime).count());
         dt = static_cast<float>(dtNS) / NANOSECONDS_PER_SECOND;
@@ -323,10 +356,12 @@ bool Engine::redirectWindowEvent(const WindowEvent &ev) {
         isHandled = true;
     } else if (ev.type == WindowEvent::Type::SIZE_CHANGED ||
                ev.type == WindowEvent::Type::RESIZED) {
-        events::Resize::broadcast(ev.width, ev.height, ev.windowId);
         auto *w = CC_GET_SYSTEM_WINDOW(ev.windowId);
         CC_ASSERT(w);
         w->setViewSize(ev.width, ev.height);
+        // Because the ts layer calls the getviewsize interface in response to resize.
+        // So we need to set the view size when sending the message.
+        events::Resize::broadcast(ev.width, ev.height, ev.windowId);
         isHandled = true;
     } else if (ev.type == WindowEvent::Type::HIDDEN ||
                ev.type == WindowEvent::Type::MINIMIZED) {

@@ -22,13 +22,13 @@
  THE SOFTWARE.
 */
 import { HTML5 } from 'internal:constants';
-import { legacyCC } from './global-exports';
+import { cclegacy } from '@base/global';
 
 declare const fsUtils: any;
 
 export class EffectSettings {
     init (path = ''): Promise<void> {
-        if (!legacyCC.rendering || !legacyCC.rendering.enableEffectImport || !path) {
+        if (!cclegacy.rendering || !cclegacy.rendering.enableEffectImport || !path) {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
@@ -45,11 +45,11 @@ export class EffectSettings {
                 const xhr = new XMLHttpRequest();
                 xhr.open('GET', path);
                 xhr.responseType = 'arraybuffer';
-                xhr.onload = () => {
+                xhr.onload = (): void => {
                     this._data = xhr.response;
                     resolve();
                 };
-                xhr.onerror = () => {
+                xhr.onerror = (): void => {
                     reject(new Error('request effect settings failed!'));
                 };
                 xhr.send(null);
@@ -63,4 +63,4 @@ export class EffectSettings {
 }
 
 export const effectSettings = new EffectSettings();
-legacyCC.effectSettings = effectSettings;
+cclegacy.effectSettings = effectSettings;

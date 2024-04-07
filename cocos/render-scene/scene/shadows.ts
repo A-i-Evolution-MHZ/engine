@@ -23,8 +23,12 @@
 */
 
 import { DEBUG } from 'internal:constants';
+import { assert } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { Enum } from '@base/object';
+import { Color, Mat4, Vec3, Vec2 } from '@base/math';
 import { Material } from '../../asset/assets/material';
-import { Color, Mat4, Vec3, Vec2, Enum, assert, geometry, cclegacy } from '../../core';
+import { geometry } from '../../core';
 import type { ShadowsInfo } from '../../scene-graph/scene-globals';
 import { IMacroPatch } from '../core/pass';
 import { Shader } from '../../gfx';
@@ -293,7 +297,7 @@ export class Shadows {
      * @en The transform matrix of the light source
      * @zh 光源的变换矩阵
      */
-    public get matLight () {
+    public get matLight (): Mat4 {
         return this._matLight;
     }
 
@@ -337,7 +341,7 @@ export class Shadows {
      * @param patches The macro patches for the shader
      * @returns The shader for the planar shadow
      */
-    public getPlanarShader (patches: IMacroPatch[] | null): Shader | null {
+    public getPlanarShader (patches: Readonly<IMacroPatch[] | null>): Shader | null {
         if (!this._material) {
             this._material = new Material();
             this._material.initialize({ effectName: 'pipeline/planar-shadow' });
@@ -350,26 +354,7 @@ export class Shadows {
         return passes.length > 0 ? passes[0].getShaderVariant(patches) : null;
     }
 
-    /**
-     * @en Get the shader which support instancing draw for the planar shadow with macro patches
-     * @zh 通过指定宏获取支持实例化渲染的平面阴影的 Shader 对象
-     * @param patches The macro patches for the shader
-     * @returns The shader for the planar shadow
-     */
-    public getPlanarInstanceShader (patches: IMacroPatch[] | null): Shader | null {
-        if (!this._instancingMaterial) {
-            this._instancingMaterial = new Material();
-            this._instancingMaterial.initialize({ effectName: 'pipeline/planar-shadow', defines: { USE_INSTANCING: true } });
-        }
-
-        const passes = this._instancingMaterial.passes;
-        if (DEBUG) {
-            assert(passes.length > 0, 'passes should not be empty!');
-        }
-        return passes.length > 0 ? passes[0].getShaderVariant(patches) : null;
-    }
-
-    public initialize (shadowsInfo: ShadowsInfo) {
+    public initialize (shadowsInfo: ShadowsInfo): void {
         this._enabled = shadowsInfo.enabled;
         this._type = this.enabled ? shadowsInfo.type : SHADOW_TYPE_NONE;
 
@@ -383,7 +368,7 @@ export class Shadows {
         }
     }
 
-    public activate () {
+    public activate (): void {
         if (this._enabled) {
             if (this.type === ShadowType.Planar) {
                 this._updatePlanarInfo();
@@ -401,14 +386,10 @@ export class Shadows {
         }
     }
 
-    protected _updatePlanarInfo () {
+    protected _updatePlanarInfo (): void {
         if (!this._material) {
             this._material = new Material();
             this._material.initialize({ effectName: 'pipeline/planar-shadow' });
-        }
-        if (!this._instancingMaterial) {
-            this._instancingMaterial = new Material();
-            this._instancingMaterial.initialize({ effectName: 'pipeline/planar-shadow', defines: { USE_INSTANCING: true } });
         }
         const root = cclegacy.director.root;
         const pipeline = root.pipeline;
@@ -416,7 +397,7 @@ export class Shadows {
         root.onGlobalPipelineStateChanged();
     }
 
-    public destroy () {
+    public destroy (): void {
         if (this._material) {
             this._material.destroy();
         }

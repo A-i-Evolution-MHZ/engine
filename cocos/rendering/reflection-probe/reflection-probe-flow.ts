@@ -23,12 +23,13 @@
 */
 import { EDITOR } from 'internal:constants';
 import { ccclass } from 'cc.decorator';
+import { cclegacy } from '@base/global';
 import { IRenderFlowInfo, RenderFlow } from '../render-flow';
 import { ReflectionProbeStage } from './reflection-probe-stage';
 import { RenderFlowTag } from '../pipeline-serialization';
-import { RenderPipeline } from '..';
-import { Camera, ProbeType, ReflectionProbe } from '../../render-scene/scene';
-import { cclegacy } from '../../core';
+import { RenderPipeline } from '../render-pipeline';
+import { Camera } from '../../render-scene/scene/camera';
+import { ProbeType, ReflectionProbe } from '../../render-scene/scene/reflection-probe';
 
 /**
  * @en reflection probe render flow
@@ -53,15 +54,15 @@ export class ReflectionProbeFlow extends RenderFlow {
         return true;
     }
 
-    public activate (pipeline: RenderPipeline) {
+    public activate (pipeline: RenderPipeline): void {
         super.activate(pipeline);
     }
 
-    public render (camera: Camera) {
+    public render (camera: Camera): void {
         if (!cclegacy.internal.reflectionProbeManager) {
             return;
         }
-        const probes = cclegacy.internal.reflectionProbeManager.getProbes();
+        const probes = cclegacy.internal.reflectionProbeManager.getProbes() as ReflectionProbe[];
         for (let i = 0; i < probes.length; i++) {
             if (probes[i].needRender) {
                 if (EDITOR || probes[i].probeType === ProbeType.PLANAR) {
@@ -71,10 +72,10 @@ export class ReflectionProbeFlow extends RenderFlow {
         }
     }
 
-    public destroy () {
+    public destroy (): void {
         super.destroy();
     }
-    private _renderStage (camera: Camera, probe: ReflectionProbe) {
+    private _renderStage (camera: Camera, probe: ReflectionProbe): void {
         for (let i = 0; i < this._stages.length; i++) {
             const probeStage = this._stages[i] as ReflectionProbeStage;
             if (probe.probeType === ProbeType.PLANAR) {

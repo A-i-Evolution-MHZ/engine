@@ -45,6 +45,15 @@ void EmptyCommandBuffer::beginRenderPass(RenderPass *renderPass, Framebuffer *fb
 void EmptyCommandBuffer::endRenderPass() {
 }
 
+void EmptyCommandBuffer::insertMarker(const MarkerInfo &marker) {
+}
+
+void EmptyCommandBuffer::beginMarker(const MarkerInfo &marker) {
+}
+
+void EmptyCommandBuffer::endMarker() {
+}
+
 void EmptyCommandBuffer::execute(CommandBuffer *const *cmdBuffs, uint32_t count) {
 }
 
@@ -87,6 +96,12 @@ void EmptyCommandBuffer::nextSubpass() {
 void EmptyCommandBuffer::draw(const DrawInfo &info) {
 }
 
+void EmptyCommandBuffer::drawIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+}
+
+void EmptyCommandBuffer::drawIndexedIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) {
+}
+
 void EmptyCommandBuffer::updateBuffer(Buffer *buff, const void *data, uint32_t size) {
 }
 
@@ -94,6 +109,15 @@ void EmptyCommandBuffer::copyBuffersToTexture(const uint8_t *const *buffers, Tex
 }
 
 void EmptyCommandBuffer::blitTexture(Texture *srcTexture, Texture *dstTexture, const TextureBlit *regions, uint32_t count, Filter filter) {
+}
+
+void EmptyCommandBuffer::copyTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+}
+
+void EmptyCommandBuffer::resolveTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) {
+}
+
+void EmptyCommandBuffer::copyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, const BufferCopy *regions, uint32_t count) {
 }
 
 void EmptyCommandBuffer::dispatch(const DispatchInfo &info) {

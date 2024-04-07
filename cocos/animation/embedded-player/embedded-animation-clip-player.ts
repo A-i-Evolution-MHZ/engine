@@ -23,7 +23,7 @@
 */
 
 import { ccclass, serializable } from 'cc.decorator';
-import { errorID } from '../../core';
+import { errorID } from '@base/debug';
 import type { Node } from '../../scene-graph/node';
 import { AnimationClip } from '../animation-clip';
 import { AnimationState } from '../animation-state';
@@ -56,7 +56,7 @@ export class EmbeddedAnimationClipPlayable extends EmbeddedPlayable {
     @serializable
     public clip: AnimationClip | null = null;
 
-    public instantiate (root: Node) {
+    public instantiate (root: Node): EmbeddedAnimationClipPlayableState | null {
         const { clip, path } = this;
         if (!clip) {
             return null;

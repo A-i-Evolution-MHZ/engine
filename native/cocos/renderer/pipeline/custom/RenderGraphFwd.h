@@ -38,6 +38,9 @@ namespace cc {
 
 namespace render {
 
+struct ClearValue;
+struct RasterView;
+struct ComputeView;
 struct ResourceDesc;
 struct ResourceTraits;
 struct RenderSwapchain;
@@ -59,8 +62,13 @@ struct PersistentTextureTag;
 struct FramebufferTag;
 struct SwapchainTag;
 struct SamplerTag;
+struct FormatViewTag;
+struct SubresourceViewTag;
+struct FormatView;
+struct SubresourceView;
 struct ResourceGraph;
 struct ComputePass;
+struct ResolvePass;
 struct CopyPass;
 struct MovePass;
 struct RaytracePass;
@@ -83,6 +91,21 @@ struct RenderGraph;
 } // namespace cc
 
 namespace ccstd {
+
+template <>
+struct hash<cc::render::ClearValue> {
+    hash_t operator()(const cc::render::ClearValue& val) const noexcept;
+};
+
+template <>
+struct hash<cc::render::RasterView> {
+    hash_t operator()(const cc::render::RasterView& val) const noexcept;
+};
+
+template <>
+struct hash<cc::render::ComputeView> {
+    hash_t operator()(const cc::render::ComputeView& val) const noexcept;
+};
 
 template <>
 struct hash<cc::render::Subpass> {

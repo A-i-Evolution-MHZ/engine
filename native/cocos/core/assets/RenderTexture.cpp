@@ -36,7 +36,7 @@ gfx::RenderPassInfo getDefaultRenderPassInfo(gfx::Device *device) {
     gfx::RenderPassInfo info;
     info.colorAttachments.push_back({
         gfx::Format::RGBA8,
-        gfx::SampleCount::ONE,
+        gfx::SampleCount::X1,
         gfx::LoadOp::CLEAR,
         gfx::StoreOp::STORE,
         device->getGeneralBarrier({
@@ -116,6 +116,18 @@ void RenderTexture::initWindow(const IRenderTextureCreateInfo &info) {
         windowInfo.renderPassInfo = info.passInfo.value();
     } else {
         windowInfo.renderPassInfo = getDefaultRenderPassInfo(device);
+    }
+
+    if (info.externalResLow.has_value()) {
+        windowInfo.externalResLow = info.externalResLow.value();
+    }
+
+    if (info.externalResHigh.has_value()) {
+        windowInfo.externalResHigh = info.externalResHigh.value();
+    }
+
+    if (info.externalFlag.has_value()) {
+        windowInfo.externalFlag = info.externalFlag.value();
     }
 
     if (_window != nullptr) {

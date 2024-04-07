@@ -287,6 +287,10 @@ TextureBarrier *DeviceAgent::getTextureBarrier(const TextureBarrierInfo &info) {
     return _actor->getTextureBarrier(info);
 }
 
+BufferBarrier *DeviceAgent::getBufferBarrier(const BufferBarrierInfo &info) {
+    return _actor->getBufferBarrier(info);
+}
+
 template <typename T>
 void doBufferTextureCopy(const uint8_t *const *buffers, Texture *texture, const BufferTextureCopy *regions, uint32_t count, MessageQueue *mq, T *actor) {
     uint32_t bufferCount = 0U;
@@ -449,6 +453,10 @@ void DeviceAgent::frameSync() {
         {
             actor->frameSync();
         });
+}
+
+SampleCount DeviceAgent::getMaxSampleCount(Format format, TextureUsage usage, TextureFlags flags) const {
+    return _actor->getMaxSampleCount(format, usage, flags);
 }
 
 } // namespace gfx

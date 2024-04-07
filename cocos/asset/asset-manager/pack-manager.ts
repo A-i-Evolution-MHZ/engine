@@ -22,20 +22,27 @@
  THE SOFTWARE.
 */
 
+import { error, errorID } from '@base/debug';
+import { assertIsTrue } from '@base/debug/internal';
+import { js } from '@base/utils';
 import { ImageAsset } from '../assets/image-asset';
 import { Texture2D } from '../assets/texture-2d';
-import { packCustomObjData, unpackJSONs } from '../../serialization/deserialize';
-import { error, errorID, js } from '../../core';
+import { isGeneralPurposePack, packCustomObjData, unpackJSONs } from '../../serialization/deserialize';
 import Cache from './cache';
 import downloader from './downloader';
 import { transform } from './helper';
 import RequestItem from './request-item';
 import { files } from './shared';
 
-export type Unpacker = (packUuid: string[], data: any, options: Record<string, any>, onComplete: ((err: Error | null, data?: any | null) => void)) => void;
+export type Unpacker = (
+    packUuid: string[],
+    data: any,
+    options: Record<string, any>,
+    onComplete: ((err: Error | null, data?: any) => void),
+) => void;
 
 interface IUnpackRequest {
-    onComplete: ((err: Error | null, data?: any | null) => void);
+    onComplete: ((err: Error | null, data?: any) => void);
     id: string;
 }
 
@@ -51,6 +58,7 @@ export class PackManager {
     private _loading = new Cache<IUnpackRequest[]>();
     private _unpackers: Record<string, Unpacker> = {
         '.json': this.unpackJson,
+        '.ccon': this.unpackJson,
     };
 
     /**
@@ -69,22 +77,27 @@ export class PackManager {
      *
      * @example
      * downloader.downloadFile('pack.json', { xhrResponseType: 'json'}, null, (err, file) => {
-     *      packManager.unpackJson(['a', 'b'], file, null, (err, data) => console.log(err));
+     *      packManager.unpackJson(['a', 'b'], file, null, (err, data) => log(err));
      * });
      *
      */
-    public unpackJson (pack: string[], json: any, options: Record<string, any>, onComplete: ((err: Error | null, data?: Record<string, any> | null) => void)): void {
-        let out = js.createMap(true);
+    public unpackJson (
+        pack: readonly string[],
+        json: any,
+        options: Record<string, any>,
+        onComplete: ((err: Error | null, data?: Record<string, any> | null) => void),
+    ): void {
+        const out: Record<string, any> = js.createMap(true);
         let err: Error | null = null;
 
-        if (Array.isArray(json)) {
-            json = unpackJSONs(json as any);
+        if (isGeneralPurposePack(json)) {
+            const unpacked = unpackJSONs(json);
 
-            if (json.length !== pack.length) {
+            if (unpacked.length !== pack.length) {
                 errorID(4915);
             }
             for (let i = 0; i < pack.length; i++) {
-                out[`${pack[i]}@import`] = json[i];
+                out[`${pack[i]}@import`] = unpacked[i];
             }
         } else {
             const textureType = js.getClassId(Texture2D);
@@ -107,13 +120,14 @@ export class PackManager {
                 }
             } else {
                 err = new Error('unmatched type pack!');
-                out = null;
+                onComplete(err, null);
+                return;
             }
         }
         onComplete(err, out);
     }
 
-    public init () {
+    public init (): void {
         this._loading.clear();
     }
 
@@ -140,7 +154,7 @@ export class PackManager {
      */
     public register (type: string, handler: Unpacker): void;
     public register (map: Record<string, Unpacker>): void;
-    public register (type: string | Record<string, Unpacker>, handler?: Unpacker) {
+    public register (type: string | Record<string, Unpacker>, handler?: Unpacker): void {
         if (typeof type === 'object') {
             js.mixin(this._unpackers, type);
         } else {
@@ -166,11 +180,17 @@ export class PackManager {
      *
      * @example
      * downloader.downloadFile('pack.json', {xhrResponseType: 'json'}, null, (err, file) => {
-     *      packManager.unpack(['2fawq123d', '1zsweq23f'], file, '.json', null, (err, data) => console.log(err));
+     *      packManager.unpack(['2fawq123d', '1zsweq23f'], file, '.json', null, (err, data) => log(err));
      * });
      *
      */
-    public unpack (pack: string[], data: any, type: string, options: Record<string, any>, onComplete: ((err: Error | null, data?: any | null) => void)): void {
+    public unpack (
+        pack: string[],
+        data: any,
+        type: string,
+        options: Record<string, any>,
+        onComplete: ((err: Error | null, data?: any) => void),
+    ): void {
         if (!data) {
             onComplete(new Error('package data is wrong!'));
             return;
@@ -197,10 +217,10 @@ export class PackManager {
      * var requestItem = AssetManager.RequestItem.create();
      * requestItem.uuid = 'fcmR3XADNLgJ1ByKhqcC5Z';
      * requestItem.info = config.getAssetInfo('fcmR3XADNLgJ1ByKhqcC5Z');
-     * packManager.load(requestItem, null, (err, data) => console.log(err));
+     * packManager.load(requestItem, null, (err, data) => log(err));
      *
      */
-    public load (item: RequestItem, options: Record<string, any> | null, onComplete: ((err: Error | null, data?: any | null) => void)): void {
+    public load (item: RequestItem, options: Record<string, any> | null, onComplete: ((err: Error | null, data?: any) => void)): void {
         // if not in any package, download as uausl
         if (item.isNative || !item.info || !item.info.packs) {
             downloader.download(item.id, item.url, item.ext, item.options, onComplete);
@@ -215,35 +235,39 @@ export class PackManager {
         const packs = item.info.packs;
 
         // find a loading package
-        let pack = packs.find((val) => this._loading.has(val.uuid));
+        const loadingPack = packs.find((val): boolean => this._loading.has(val.uuid));
 
-        if (pack) {
-            this._loading.get(pack.uuid)!.push({ onComplete, id: item.id });
+        if (loadingPack) {
+            const req = this._loading.get(loadingPack.uuid);
+            assertIsTrue(req);
+            req.push({ onComplete, id: item.id });
             return;
         }
 
         // download a new package
-        pack = packs[0];
+        const pack = packs[0];
         this._loading.add(pack.uuid, [{ onComplete, id: item.id }]);
 
         // find the url of pack
-        const url = transform(pack.uuid, { ext: pack.ext, bundle: item.config!.name }) as string;
+        assertIsTrue(item.config);
+        const url = transform(pack.uuid, { ext: pack.ext, bundle: item.config.name }) as string;
 
-        downloader.download(pack.uuid, url, pack.ext, item.options, (err, data) => {
-            files.remove(pack!.uuid);
+        downloader.download(pack.uuid, url, pack.ext, item.options, (err, data): void => {
+            files.remove(pack.uuid);
             if (err) {
                 error(err.message, err.stack);
             }
             // unpack package
-            this.unpack(pack!.packedUuids, data, pack!.ext, item.options, (err2, result) => {
+            this.unpack(pack.packedUuids, data, pack.ext, item.options, (err2, result): void => {
                 if (!err2) {
                     for (const id in result) {
                         files.add(id, result[id]);
                     }
                 }
-                const callbacks = this._loading.remove(pack!.uuid);
-                for (let i = 0, l = callbacks!.length; i < l; i++) {
-                    const cb = callbacks![i];
+                const callbacks = this._loading.remove(pack.uuid);
+                assertIsTrue(callbacks);
+                for (let i = 0, l = callbacks.length; i < l; i++) {
+                    const cb = callbacks[i];
                     if (err || err2) {
                         cb.onComplete(err || err2);
                         continue;

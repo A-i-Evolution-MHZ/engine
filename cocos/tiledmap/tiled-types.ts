@@ -22,9 +22,9 @@
  THE SOFTWARE.
 */
 
-import { Color, Rect, Size, Vec2 } from '../core';
+import { ccenum } from '@base/object';
+import { Color, Rect, Size, Vec2 } from '@base/math';
 import { SpriteFrame } from '../2d/assets';
-import { ccenum } from '../core/value-types/enum';
 import { HorizontalTextAlignment, VerticalTextAlignment } from '../2d/components/label';
 import { Texture2D } from '../asset/assets';
 
@@ -368,6 +368,8 @@ export class TMXTilesetInfo {
 
     imageName: string | null = null;
 
+    imageOffset: Vec2 | null = null;
+
     imageSize = new Size(0, 0);
 
     tileOffset = new Vec2(0, 0);
@@ -376,16 +378,21 @@ export class TMXTilesetInfo {
 
     collection = false;
 
-    rectForGID (gid_: MixedGID | GID, result?: TiledGrid) {
+    rectForGID (gid_: MixedGID | GID, result?: TiledGrid): Rect | TiledGrid {
         const rect = result || new Rect(0, 0, 0, 0);
         rect.width = this._tileSize.width;
         rect.height = this._tileSize.height;
         let gid = gid_ as unknown as number;
         gid &= TileFlag.FLIPPED_MASK;
         gid -= (this.firstGid as unknown as number);
-        const max_x = Math.floor((this.imageSize.width - this.margin * 2 + this.spacing) / (this._tileSize.width + this.spacing));
-        rect.x = Math.round((gid % max_x) * (this._tileSize.width + this.spacing) + this.margin);
-        rect.y = Math.round(Math.floor(gid / max_x) * (this._tileSize.height + this.spacing) + this.margin);
+        if (this.imageOffset) {
+            rect.x = this.imageOffset.x;
+            rect.y = this.imageOffset.y;
+        } else {
+            const max_x = Math.floor((this.imageSize.width - this.margin * 2 + this.spacing) / (this._tileSize.width + this.spacing));
+            rect.x = Math.round((gid % max_x) * (this._tileSize.width + this.spacing) + this.margin);
+            rect.y = Math.round(Math.floor(gid / max_x) * (this._tileSize.height + this.spacing) + this.margin);
+        }
         return rect;
     }
 }
@@ -420,7 +427,7 @@ export class TMXObjectGroupInfo {
      * Gets the Properties.
      * @return {Array}
      */
-    getProperties () {
+    getProperties (): PropertiesInfo {
         return this.properties;
     }
 
@@ -428,7 +435,7 @@ export class TMXObjectGroupInfo {
      * Set the Properties.
      * @param {object} value
      */
-    setProperties (value: PropertiesInfo) {
+    setProperties (value: PropertiesInfo): void {
         this.properties = value;
     }
 }
@@ -486,7 +493,7 @@ export class TMXLayerInfo {
      * Gets the Properties.
      * @return {Object}
      */
-    getProperties () {
+    getProperties (): PropertiesInfo {
         return this.properties;
     }
 
@@ -494,7 +501,7 @@ export class TMXLayerInfo {
      * Set the Properties.
      * @param {object} value
      */
-    setProperties (value: PropertiesInfo) {
+    setProperties (value: PropertiesInfo): void {
         this.properties = value;
     }
 

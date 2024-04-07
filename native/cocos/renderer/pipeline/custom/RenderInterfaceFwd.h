@@ -33,27 +33,31 @@
 #include "cocos/core/assets/EffectAsset.h"
 #include "cocos/renderer/core/PassUtils.h"
 #include "cocos/renderer/pipeline/PipelineSceneData.h"
-#include "cocos/renderer/pipeline/custom/RenderCommonFwd.h"
-#include "cocos/scene/Camera.h"
+#include "cocos/renderer/pipeline/custom/CustomFwd.h"
 
 namespace cc {
 
 namespace render {
 
 class PipelineRuntime;
+
+enum class PipelineType;
+enum class SubpassCapabilities : uint32_t;
+
+struct PipelineCapabilities;
 class RenderNode;
 class Setter;
-class RasterQueueBuilder;
-class RasterSubpassBuilder;
+class RenderQueueBuilder;
+class BasicRenderPassBuilder;
+class BasicMultisampleRenderPassBuilder;
+class BasicPipeline;
+class RenderSubpassBuilder;
+class MultisampleRenderSubpassBuilder;
 class ComputeQueueBuilder;
 class ComputeSubpassBuilder;
-class RasterPassBuilder;
+class RenderPassBuilder;
+class MultisampleRenderPassBuilder;
 class ComputePassBuilder;
-class MovePassBuilder;
-class CopyPassBuilder;
-class SceneVisitor;
-class SceneTask;
-class SceneTransversal;
 class Pipeline;
 class PipelineBuilder;
 class RenderingModule;

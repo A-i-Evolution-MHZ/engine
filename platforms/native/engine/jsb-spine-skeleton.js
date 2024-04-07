@@ -133,8 +133,8 @@ const cacheManager = require('./jsb-cache-manager');
         }
         this._skeletonCache = spine.initSkeletonData(uuid, filePath, atlasText, jsbTextures, this.scale);
         if (this._skeletonCache) {
-            this.width = this._skeletonCache.getWidth();
-            this.height = this._skeletonCache.getHeight();
+            this.width = this._skeletonCache.width;
+            this.height = this._skeletonCache.height;
         }
     };
 
@@ -177,7 +177,7 @@ const cacheManager = require('./jsb-cache-manager');
         this._callback = callback;
 
         // eslint-disable-next-line no-undef
-        const AnimationEventType = legacyCC.internal.SpineAnimationEventType;
+        const AnimationEventType = cc.internal.SpineAnimationEventType;
 
         this.setStartListener(function (trackEntry) {
             if (this._target && this._callback) {
@@ -516,10 +516,11 @@ const cacheManager = require('./jsb-cache-manager');
 
     skeleton.setAnimation = function (trackIndex, name, loop) {
         const strName = name.toString();
-        this._animationName = strName;
         this._playTimes = loop ? 0 : 1;
         let res = null;
         if (this._nativeSkeleton) {
+            if (!this._nativeSkeleton.findAnimation(strName)) return res;
+            this._animationName = strName;
             if (this.isAnimationCached()) {
                 res = this._nativeSkeleton.setAnimation(strName, loop);
             } else {
@@ -816,6 +817,21 @@ const cacheManager = require('./jsb-cache-manager');
                 boneNode.matrix = tm;
             }
         }
+    };
+
+    skeleton.setSlotTexture = function (slotName, tex2d, createNew) {
+        if (this.isAnimationCached()) {
+            console.error(`Cached mode can't change texture of slot`);
+            return;
+        }
+        if (!this._nativeSkeleton) return;
+        const slot = this.findSlot(slotName);
+        if (!slot) {
+            console.error(`No slot named:${slotName}`);
+            return;
+        }
+        const createNewAttachment = createNew || false;
+        this._nativeSkeleton.setSlotTexture(slotName, tex2d, createNewAttachment);
     };
 
     //////////////////////////////////////////

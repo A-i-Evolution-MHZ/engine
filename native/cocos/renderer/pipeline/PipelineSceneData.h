@@ -43,6 +43,8 @@ class Skybox;
 class Fog;
 class Octree;
 class Light;
+class Skin;
+class PostSettings;
 } // namespace scene
 namespace gi {
 class LightProbes;
@@ -74,6 +76,8 @@ public:
     inline scene::Fog *getFog() const { return _fog; }
     inline scene::Octree *getOctree() const { return _octree; }
     inline gi::LightProbes *getLightProbes() const { return _lightProbes; }
+    inline scene::Skin *getSkin() const { return _skin; }
+    inline scene::PostSettings *getPostSettings() const { return _postSettings; }
     inline gfx::InputAssembler *getOcclusionQueryInputAssembler() const { return _occlusionQueryInputAssembler; }
     inline scene::Pass *getOcclusionQueryPass() const { return _occlusionQueryPass; }
     inline gfx::Shader *getOcclusionQueryShader() const { return _occlusionQueryShader; }
@@ -82,6 +86,8 @@ public:
     inline const ccstd::vector<gfx::Shader *> &getGeometryRendererShaders() const { return _geometryRendererShaders; }
     inline scene::Pass *getDebugRendererPass() const { return _debugRendererPass; }
     inline gfx::Shader *getDebugRendererShader() const { return _debugRendererShader; }
+    inline Material *getGPUCullingMaterial(uint32_t index) const { return _gpuCullingMaterials[index].get(); }
+    inline Material *getHizMaterial() const { return _hizMaterial.get(); }
     inline void addRenderObject(RenderObject &&obj) { _renderObjects.emplace_back(obj); }
     inline void clearRenderObjects() { _renderObjects.clear(); }
     inline void addValidPunctualLight(scene::Light *light) { _validPunctualLights.emplace_back(light); }
@@ -90,11 +96,18 @@ public:
     inline void setShadingScale(float val) { _shadingScale = val; }
     inline bool getCSMSupported() const { return _csmSupported; }
     inline void setCSMSupported(bool val) { _csmSupported = val; }
+    inline void setGPUDrivenEnabled(bool enable) { _gpuDrivenEnabled = enable; }
+    bool isGPUDrivenEnabled() const;
+    inline scene::Model *getStandardSkinModel() const { return _standardSkinModel.get(); }
+    void setStandardSkinModel(scene::Model *val);
+    inline scene::Model *getSkinMaterialModel() const { return _skinMaterialModel.get(); }
+    void setSkinMaterialModel(scene::Model *val);
 
 protected:
     void initOcclusionQuery();
     void initGeometryRenderer();
     void initDebugRenderer();
+    void initGPUDrivenMaterial();
     gfx::InputAssembler *createOcclusionQueryIA();
 
     static constexpr uint32_t GEOMETRY_RENDERER_TECHNIQUE_COUNT{6};
@@ -104,6 +117,10 @@ protected:
     IntrusivePtr<gfx::InputAssembler> _occlusionQueryInputAssembler;
     IntrusivePtr<Material> _occlusionQueryMaterial{nullptr};
     IntrusivePtr<Material> _debugRendererMaterial{nullptr};
+    ccstd::array<IntrusivePtr<Material>, 3> _gpuCullingMaterials;
+    IntrusivePtr<Material> _hizMaterial{nullptr};
+    IntrusivePtr<scene::Model> _standardSkinModel;
+    IntrusivePtr<scene::Model> _skinMaterialModel;
 
     gfx::Shader *_occlusionQueryShader{nullptr}; // weak reference
     scene::Pass *_occlusionQueryPass{nullptr};   // weak reference
@@ -122,12 +139,16 @@ protected:
     scene::Octree *_octree{nullptr};
     // manage memory manually
     gi::LightProbes *_lightProbes{nullptr};
-
+    // manage memory manually
+    scene::Skin *_skin{nullptr};
+    // manage memory manually
     CSMLayers *_csmLayers{nullptr};
+    // manage memory manually
+    scene::PostSettings *_postSettings{nullptr};
 
     bool _isHDR{true};
     bool _csmSupported{true};
-
+    bool _gpuDrivenEnabled{false};
     float _shadingScale{1.0F};
 
     RenderObjectList _renderObjects;

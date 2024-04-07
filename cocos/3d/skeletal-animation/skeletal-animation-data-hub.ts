@@ -22,9 +22,9 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import { DataPoolManager } from './data-pool-manager';
 import type { AnimationClip } from '../../animation/animation-clip';
-import { cclegacy } from '../../core';
 import { BAKE_SKELETON_CURVE_SYMBOL } from '../../animation/internal-symbols';
 
 type BakeData = ReturnType<AnimationClip[typeof BAKE_SKELETON_CURVE_SYMBOL]>;
@@ -50,7 +50,7 @@ export class SkelAnimDataHub {
         return data;
     }
 
-    public static destroy (clip: AnimationClip) {
+    public static destroy (clip: AnimationClip): void {
         SkelAnimDataHub.pool.delete(clip);
     }
 

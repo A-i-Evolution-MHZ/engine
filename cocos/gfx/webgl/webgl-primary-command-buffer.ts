@@ -22,6 +22,7 @@
  THE SOFTWARE.
 */
 
+import { error } from '@base/debug';
 import { Buffer } from '../base/buffer';
 import { CommandBuffer } from '../base/command-buffer';
 import { BufferSource, DrawInfo, BufferTextureCopy, Color, Rect, BufferUsageBit, Viewport, TextureBlit, Filter } from '../base/define';
@@ -30,9 +31,7 @@ import { InputAssembler } from '../base/input-assembler';
 import { Texture } from '../base/texture';
 import { WebGLBuffer } from './webgl-buffer';
 import { WebGLCommandBuffer } from './webgl-command-buffer';
-import {
-    WebGLCmdFuncBeginRenderPass, WebGLCmdFuncBindStates, WebGLCmdFuncBlitTexture, WebGLCmdFuncCopyBuffersToTexture,
-    WebGLCmdFuncDraw, WebGLCmdFuncExecuteCmds, WebGLCmdFuncUpdateBuffer } from './webgl-commands';
+import { WebGLCmdFuncBeginRenderPass, WebGLCmdFuncBindStates, WebGLCmdFuncBlitTexture, WebGLCmdFuncCopyBuffersToTexture, WebGLCmdFuncDraw, WebGLCmdFuncExecuteCmds, WebGLCmdFuncUpdateBuffer } from './webgl-commands';
 import { WebGLFramebuffer } from './webgl-framebuffer';
 import { WebGLTexture } from './webgl-texture';
 import { RenderPass } from '../base/render-pass';
@@ -47,7 +46,7 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
         clearColors: Readonly<Color[]>,
         clearDepth: number,
         clearStencil: number,
-    ) {
+    ): void {
         WebGLCmdFuncBeginRenderPass(
             WebGLDeviceManager.instance,
             (renderPass as WebGLRenderPass).gpuRenderPass,
@@ -57,7 +56,7 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
         this._isInRenderPass = true;
     }
 
-    public draw (infoOrAssembler: DrawInfo | InputAssembler) {
+    public draw (infoOrAssembler: DrawInfo | InputAssembler): void {
         if (this._isInRenderPass) {
             if (this._isStateInvalied) {
                 this.bindStates();
@@ -86,11 +85,11 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
                 }
             }
         } else {
-            console.error('Command \'draw\' must be recorded inside a render pass.');
+            error('Command \'draw\' must be recorded inside a render pass.');
         }
     }
 
-    public setViewport (viewport: Readonly<Viewport>) {
+    public setViewport (viewport: Readonly<Viewport>): void {
         const { stateCache: cache, gl } = WebGLDeviceManager.instance;
 
         if (cache.viewport.left !== viewport.left
@@ -106,7 +105,7 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
         }
     }
 
-    public setScissor (scissor: Readonly<Rect>) {
+    public setScissor (scissor: Readonly<Rect>): void {
         const { stateCache: cache, gl } = WebGLDeviceManager.instance;
 
         if (cache.scissorRect.x !== scissor.x
@@ -122,7 +121,7 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
         }
     }
 
-    public updateBuffer (buffer: Buffer, data: Readonly<BufferSource>, size?: number) {
+    public updateBuffer (buffer: Buffer, data: Readonly<BufferSource>, size?: number): void {
         if (!this._isInRenderPass) {
             const gpuBuffer = (buffer as WebGLBuffer).gpuBuffer;
             if (gpuBuffer) {
@@ -138,22 +137,22 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
                 WebGLCmdFuncUpdateBuffer(WebGLDeviceManager.instance, gpuBuffer, data as ArrayBuffer, 0, buffSize);
             }
         } else {
-            console.error('Command \'updateBuffer\' must be recorded outside a render pass.');
+            error('Command \'updateBuffer\' must be recorded outside a render pass.');
         }
     }
 
-    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>) {
+    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>): void {
         if (!this._isInRenderPass) {
             const gpuTexture = (texture as WebGLTexture).gpuTexture;
             if (gpuTexture) {
                 WebGLCmdFuncCopyBuffersToTexture(WebGLDeviceManager.instance, buffers, gpuTexture, regions);
             }
         } else {
-            console.error('Command \'copyBufferToTexture\' must be recorded outside a render pass.');
+            error('Command \'copyBufferToTexture\' must be recorded outside a render pass.');
         }
     }
 
-    public execute (cmdBuffs: Readonly<CommandBuffer[]>, count: number) {
+    public execute (cmdBuffs: Readonly<CommandBuffer[]>, count: number): void {
         for (let i = 0; i < count; ++i) {
             // actually they are secondary buffers, the cast here is only for type checking
             const webGLCmdBuff = cmdBuffs[i] as WebGLPrimaryCommandBuffer;
@@ -164,7 +163,7 @@ export class WebGLPrimaryCommandBuffer extends WebGLCommandBuffer {
         }
     }
 
-    protected bindStates () {
+    protected bindStates (): void {
         WebGLCmdFuncBindStates(WebGLDeviceManager.instance, this._curGPUPipelineState, this._curGPUInputAssembler,
             this._curGPUDescriptorSets, this._curDynamicOffsets, this._curDynamicStates);
         this._isStateInvalied = false;

@@ -22,14 +22,13 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import { Billboard } from './billboard';
 import { Line } from './line';
 import { ParticleSystem } from './particle-system';
 import { ParticleUtils } from './particle-utils';
 import CurveRange from './animator/curve-range';
-import { cclegacy } from '../core';
 import GradientRange from './animator/gradient-range';
-import Gradient, { AlphaKey, ColorKey } from './animator/gradient';
 import Burst from './burst';
 
 export {
@@ -39,9 +38,6 @@ export {
     ParticleUtils,
     CurveRange,
     GradientRange,
-    Gradient,
-    AlphaKey,
-    ColorKey,
     Burst,
 };
 

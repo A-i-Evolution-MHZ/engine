@@ -1,11 +1,70 @@
+/* eslint-disable quote-props */
 const pkg = require('../../../package.json');
+const { mixin, link } = require('../../i18n-utils');
 const version = pkg.version.replace(/(^\d+\.\d+)\..*$/, (str, a) => {
     return a;
 });
 
 const url = 'https://docs.cocos.com/creator';
 
-module.exports = {
+module.exports = link(mixin({
+
+    classes: {
+        'cc': {
+            'animation': {
+                'TCVariableBinding': {
+                    menu: 'Variable Binding',
+                    tooltip: 'Use the variable\'s value as condition value.',
+                    properties: {
+                        'variableName': {
+                            label: 'Variable',
+                            tooltip: 'Variable name.',
+                        },
+                    },
+                },
+                'TCAuxiliaryCurveBinding': {
+                    menu: 'Auxiliary Curve Binding',
+                    tooltip: 'Use the auxiliary curve \'s current value as condition value.',
+                    properties: {
+                        'curveName': {
+                            label: 'Curve',
+                            tooltip: 'Auxiliary curve name.',
+                        },
+                    },
+                },
+                'TCStateWeightBinding': {
+                    menu: 'State Weight Binding',
+                    tooltip: 'Use the state \'s weight as condition value.',
+                    abbr: {
+                        label: 'State Weight',
+                        tooltip: 'The current weight of transition source state.',
+                    },
+                },
+                'TCStateMotionTimeBinding': {
+                    menu: 'Motion Time Binding',
+                    tooltip: 'Use the elapsed (normalized) time of motions in state as condition value.',
+                    abbr: {
+                        label: 'Motion Elapsed Time',
+                        tooltip: 'The elapsed (normalized) time of motions in transition source state.',
+                    },
+                },
+            },
+            CurveRange: {
+                properties: {
+                    spline: {
+                        displayName: 'Spline',
+                    },
+                    splineMin: {
+                        displayName: 'Spline Min',
+                    },
+                    splineMax: {
+                        displayName: 'Spline Max',
+                    },
+                },
+            },
+        },
+    },
+
     help: {
         cc: {
             Node: `${url}/${version}/manual/en/concepts/scene/node-component.html`,
@@ -25,9 +84,13 @@ module.exports = {
             DirectionalLight: `${url}/${version}/manual/en/concepts/scene/light/lightType/dir-light.html`,
             SphereLight: `${url}/${version}/manual/en/concepts/scene/light/lightType/sphere-light.html`,
             SpotLight: `${url}/${version}/manual/en/concepts/scene/light/lightType/spot-light.html`,
+            LightProbeGroup: `${url}/${version}/manual/en/concepts/scene/light/probe/light-probe.html`,
             UICoordinateTracker: `${url}/${version}/manual/en/ui-system/components/editor/ui-coordinate-tracker.html`,
             Animation: `${url}/${version}/manual/en/animation/animation-component.html`,
             SkeletalAnimation: `${url}/${version}/manual/en/animation/skeletal-animation.html`,
+            animation: {
+                AnimationController: `${url}/${version}/manual/en/animation/marionette/animation-controller.html`,
+            },
             AudioSource: `${url}/${version}/manual/en/audio-system/overview.html`,
             Billboard: `${url}/${version}/manual/en/particle-system/billboard-component.html`,
             Line: `${url}/${version}/manual/en/particle-system/line-component.html`,
@@ -58,21 +121,45 @@ module.exports = {
             RigidBody2D: `${url}/${version}/manual/en/physics-2d/physics-2d-rigid-body.html`,
             Joint2D: `${url}/${version}/manual/en/physics-2d/physics-2d-joint.html`,
             BoxCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
-            SphereCollider: `${url}/${version}/manual/en/physics/physics-component.html`,
-            CapsuleCollider: `${url}/${version}/manual/en/physics/physics-component.html`,
-            CylinderCollider: `${url}/${version}/manual/en/physics/physics-component.html`,
-            MeshCollider: `${url}/${version}/manual/en/physics/physics-component.html`,
+            CapsuleCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            ConeCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            CylinderCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            MeshCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            PlaneCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            SphereCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            SimplexCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            TerrainCollider: `${url}/${version}/manual/en/physics/physics-collider.html`,
+            ConfigurableConstraint: `${url}/${version}/manual/en/physics/physics-constraint.html`,
+            FixedConstraint: `${url}/${version}/manual/en/physics/physics-constraint.html`,
+            HingeConstraint: `${url}/${version}/manual/en/physics/physics-constraint.html`,
+            PointToPointConstraint: `${url}/${version}/manual/en/physics/physics-constraint.html`,
             RigidBody: `${url}/${version}/manual/en/physics/physics-rigidbody.html`,
+            BoxCharacterController: `${url}/${version}/manual/en/physics/character-controller/index.html`,
+            CapsuleCharacterController: `${url}/${version}/manual/en/physics/character-controller/index.html`,
+            PhysicsMaterial: `${url}/${version}/manual/en/physics/physics-material.html`,
             ConstantForce: `${url}/${version}/manual/en/physics/physics-component.html`,
             VideoPlayer: `${url}/${version}/manual/en/ui-system/components/editor/videoplayer.html`,
             WebView: `${url}/${version}/manual/en/ui-system/components/editor/webview.html`,
             SafeArea: `${url}/${version}/manual/en/ui-system/components/editor/safearea.html`,
             Terrain: `${url}/${version}/manual/en/editor/terrain/`,
             TiledMap: `${url}/${version}/manual/en/editor/components/tiledmap.html`,
+            TiledTile: `${url}/${version}/manual/en/editor/components/tiledtile.html`,
             Spine: `${url}/${version}/manual/en/editor/components/spine.html`,
             DragonBones: `${url}/${version}/manual/en/editor/components/dragonbones.html`,
             OctreeCulling: `${url}/${version}/manual/en/advanced-topics/native-scene-culling.html`,
             LightProbe: ``,
+            PostProcess: `${url}/${version}/manual/en/render-pipeline/post-process/post-process.html`,
+            BlitScreen: `${url}/${version}/manual/en/render-pipeline/post-process/blit-screen.html`,
+            TAA: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            FSR: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            FXAA: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            Bloom: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            HBAO: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            ColorGrading: `${url}/${version}/manual/en/render-pipeline/post-process/index.html`,
+            Skin: `${url}/${version}/manual/en/shader/advanced-shader/skin.html`,
+            RenderRoot2D: `${url}/${version}/manual/en/ui-system/components/editor/renderroot2d.html`,
+            ReflectionProbe: `${url}/${version}/manual/en/concepts/scene/light/probe/reflection-art-workflow.html`,
+            Sorting: `${url}/${version}/manual/en/engine/rendering/sorting.html`,
         },
         assets: {
             javascript: `${url}/${version}/manual/en/concepts/scene/node-component.html`,
@@ -91,7 +178,7 @@ module.exports = {
             'erp-texture-cube': `${url}/${version}/manual/en/asset/texture-cube.html`,
             gltf: `${url}/${version}/manual/en/asset/model/glTF.html`,
             fbx: `${url}/${version}/manual/en/asset/model/mesh.html`,
-            json: `${url}/${version}manual/en/asset/json.html`,
+            json: `${url}/${version}/manual/en/asset/json.html`,
             'label-atlas': `${url}/${version}/manual/en/asset/label-atlas.html`,
             material: `${url}/${version}/manual/en/asset/material.html`,
             particle: '',
@@ -105,7 +192,7 @@ module.exports = {
             'sprite-frame': `${url}/${version}/manual/en/asset/sprite-frame.html`,
             terrain: `${url}/${version}/manual/en/editor/terrain/#creating-terrain-objects-and-assets`,
             text: `${url}/${version}/manual/en/asset/text.html`,
-            'tiled-map': `${url}/${version}/manual/manual/en/asset/tiledmap.html`,
+            'tiled-map': `${url}/${version}/manual/en/asset/tiledmap.html`,
             'ttf-font': `${url}/${version}/manual/en/asset/font.html#dynamic-fonts`,
             'video-clip': ``,
             'render-texture': `${url}/${version}/manual/en/asset/render-texture.html`,
@@ -194,6 +281,8 @@ module.exports = {
         ISO: 'Camera ISO, controls the exposure parameter',
         rect: 'The size of the viewport that this camera will eventually render to the screen.',
         target_texture: 'Output render texture of the camera. Default to null, which outputs directly to screen',
+        use_postprocess: 'Whether this camera should use post process.',
+        postprocess: 'If camera post process is not specified, will use the global post process.',
     },
     lights: {
         color: 'Color of the light',
@@ -221,14 +310,6 @@ module.exports = {
         shadowAdvancedOptions: 'shadow advanced options',
         csmLayersTransition: 'Enable or disable CSM layers transition(Improve quality, reduce performance)',
         csmTransitionRange: 'CSM layers transition range(in NDC space: value range is 0 to 1)',
-    },
-    model: {
-        shadow_receiving_model: 'Shadow receive mode',
-        shadow_casting_model: 'Shadow projection mode',
-        mesh: 'The mesh of the model',
-        skinning_root: 'The skinning root, where the controlling Animation is located',
-        shadow_bias: 'Bias value (world space unit) that can avoid moire artifacts with shadows for model. <br>The more the value, the more the light leakage',
-        shadow_normal_bias: 'Bias value (world space unit) that can avoid moire artifacts with surfaces that parallel to the directional light',
     },
     sprite: {
         gray_scale: 'Whether turn on grayscale rendering mode',
@@ -327,6 +408,13 @@ module.exports = {
         font_underline: 'Font underlined',
         spacing_x: 'The spacing between text characters, only available in BMFont',
         underline_height: 'The height of underline',
+        outline_enable: 'Whether outline is enabled',
+        outline_width: 'The width of outline',
+        outline_color: 'The color of outline',
+        shadow_enable: 'Whether shadow is enabled',
+        shadow_color: 'The color of shadow',
+        shadow_offset: 'Offset between font and shadow',
+        shadow_blur: 'A non-negative float specifying the level of shadow blur',
     },
     labelOutline: {
         color: 'Outline color',
@@ -953,6 +1041,10 @@ module.exports = {
             label: "Box2D Based 2D Physics System",
             description: "2D Physics system that based on Box2D.",
         },
+        physics_2d_box2d_wasm: {
+            label: "Box2D-wasm Based 2D Physics System",
+            description: "2D Physics system that based on Box2D-wasm.",
+        },
         intersection_2d: {
             label: "2D Intersection Algorithms",
             description: "Include 2D intersection algorithms.",
@@ -1024,6 +1116,10 @@ module.exports = {
         marionette: {
             label: "Marionette Animation System",
             description: "Enable the Marionette animation system",
+        },
+        procedural_animation: {
+            label: "Procedural Animation",
+            description: "Enable the procedural animation related features, such as pose graph etc.",
         },
         xr: {
             label: "XR",
@@ -1105,12 +1201,93 @@ module.exports = {
             torque: 'The torque applied to the rigid body in the world coordinate system',
             localTorque: 'The torque applied to the rigid body in the local coordinate system',
         },
+        constraint: {
+            attachedBody: 'The rigid body where the constraint is attached to',
+            connectedBody: 'The rigid body connected to the constraint, <br>if not set, the world object will be used',
+            enableCollision: 'Whether to enable collision between the two rigid bodies',
+            pivotA: 'The pivot point of the constraint in the local coordinate system of the attached rigid body',
+            pivotB: 'The pivot point of the constraint in the local coordinate system of the connected rigid body',
+            breakForce: 'The maximum force that can be applied to the constraint before it breaks',
+            breakTorque: 'The maximum torque that can be applied to the constraint before it breaks',
+            axis: 'The axis of the constraint in the local coordinate system of the attached rigid body',
+            secondaryAxis: 'The secondary axis of the constraint in the local coordinate system of the attached rigid body',
+            autoCalculatePivotB: 'Automatically derivate the pivotB from the pivotA and the relative transform of the two rigid bodies',
+            linearLimit: {
+                xMotion: 'The constraint mode along the x axis',
+                yMotion: 'The constraint mode along the y axis',
+                zMotion: 'The constraint mode along the z axis',
+                upper: 'The upper limit of the constraint',
+                lower: 'The lower limit of the constraint',
+                enableSoftConstraint: 'Whether to enable soft constraint',
+                stiffness: 'The stiffness factor of the constraint',
+                damping: 'The damping factor of the constraint',
+                restitution: 'The restitution factor of the constraint',
+            },
+            angularLimit: {
+                twistMotion: 'The constraint mode of the twist angle',
+                swingMotion1: 'The constraint mode of the swing y angle',
+                swingMotion2: 'The constraint mode of the swing z angle',
+                twistExtent: 'The twist angle limit',
+                swingExtent1: 'The swing y angle limit',
+                swingExtent2: 'The swing z angle limit',
+                enableSoftConstraintSwing: 'Whether to enable soft constraint for the swing constraint',
+                swingStiffness: 'The stiffness factor of the swing constraint',
+                swingDamping: 'The damping factor of the swing constraint',
+                swingRestitution: 'The restitution factor of the swing constraint',
+                enableSoftConstraintTwist: 'Whether to enable soft constraint for the twist constraint',
+                twistStiffness: 'The stiffness factor of the twist constraint',
+                twistDamping: 'The damping factor of the twist constraint',
+                twistRestitution: 'The restitution factor of the twist constraint',
+            },
+            linearDriver: {
+                xMode: 'The driver mode along the x axis',
+                yMode: 'The driver mode along the y axis',
+                zMode: 'The driver mode along the z axis',
+                targetPosition: 'The target position of the driver',
+                targetVelocity: 'The target velocity of the driver',
+                strength: 'The strength of the driver',
+            },
+            angularDriver: {
+                twistMode: 'The driver mode along the twist axis',
+                swingMode1: 'The driver mode along the swing y axis',
+                swingMode2: 'The driver mode along the swing z axis',
+                targetOrientation: 'The target orientation of the driver',
+                targetAngularVelocity: 'The target angular velocity of the driver',
+                strength: 'The strength of the driver',
+            },
+        },
+        material: {
+            friction: 'The friction coefficient of the material',
+            rollingFriction: 'The rolling friction coefficient of the material',
+            spinningFriction: 'The spinning friction coefficient of the material',
+            restitution: 'The coefficient of restitution of the material',
+        },
+        character_controller: {
+            group: 'Collision Group of the character controller.',
+            minMoveDistance: 'The minimum movement distance of the character controller.',
+            stepOffset: 'The step offset of the character controller.',
+            slopeLimit: 'The slope limit of the character controller in degree.',
+            skinWidth: 'The skin width of the character controller.',
+            detectCollisions: 'If the character controller can collide with other objects without calling move().',
+            enableOverlapRecovery: 'If the character controller enable overlap recovery when penetrating with other colliders.',
+            center: 'The center of the character controller in local space.',
+            capsuleRadius: 'The radius of the sphere of the capsule shape of the character controller in local space.',
+            capsuleHeight: 'The height of the capsule shape of the character controller in local space.',
+            boxHalfHeight: 'The half height of the box shape of the character controller in local space.',
+            boxHalfSideExtent: 'The half side extent of box shape of the character controller in local space.',
+            boxHalfForwardExtent: 'The half forward extent of the box shape of the character controller in local space.',
+        },
     },
     octree_culling: {
         enabled: 'The switch of octree culling, only available for native platforms.',
         minPos: 'The minimum position of the world bounding box.',
         maxPos: 'The maximum position of the world bounding box.',
         depth: 'The depth of octree.',
+    },
+    skin: {
+        enabled: 'The switch of skin scattering',
+        blurRadius: 'This parameter specifies the range of subsurface scattering , in other words, scattering filter width.',
+        sssIntensity: 'This parameter specifies the intensity of subsurface scattering.',
     },
     light_probe: {
         giScale: 'The value of GI multiplier.',
@@ -1120,6 +1297,7 @@ module.exports = {
         showProbe: 'The switch of showing light probe.',
         showWireframe: 'The switch of showing connection of light probe.',
         showConvex: 'The switch of showing convex of light probe.',
+        lightProbeSphereVolume: 'The value of all light probe sphere display size',
     },
     light_probe_group: {
         method: 'The automatic generation algorithm of light probe.',
@@ -1132,4 +1310,40 @@ module.exports = {
     reflection_probe: {
         fastBake: 'If checked, generating progress will ignore GGX convolution for cubemap, very fast generation.',
     },
-};
+    hbao: {
+        radiusScale: 'The range of ambient occlusion, by adjusting this value, the dark area can be better adapted to the scale of the scene.',
+        aoSaturation: 'The saturation of ambient occlusion, the higher the value, the darker.',
+        needBlur: 'Turn on for a softer effect with less noise, but it consumes some performance.',
+    },
+    bloom: {
+        enableAlphaMask: 'Transparent channel flag bit, if you turn on this function, please also reduce the object material intrinsic color a channel output, a value of less than 1 object will not have a flood light',
+        useHdrIlluminance: 'To use scene HDR brightness to filter flooded areas, both HDR mode and the CC_USE_FLOAT_OUTPUT macro must be enabled.',
+        threshold: 'The brightness threshold, brighter area will produce bloom, this value unit is the LDR brightness seen by the human eye, independent of exposure.',
+        iterations: 'The number of blur iterations, the higher the value that results in a larger and softer flare range, but with reduced performance.',
+        intensity: 'Flood intensity, the higher the value, the brighter the halo, please adjust it moderately.',
+    },
+    color_grading: {
+        contribute: 'Adjust contribution of LUT for screen color, The influence on screen color can be adjusted in the range of 0-1.',
+        originalMap: 'Support arbitary LUT for Nx1 blocks or 8x8 blocks automatically. The builtin lut texture path is internal/dependencies/textures/lut/.',
+    },
+    taa: {
+        sampleScale: 'TAA sample range. Smaller values are recommended, as too large values may cause jittering.',
+        feedback: 'History frame blend value. The higher the value, the better the anti-aliasing effect, but the picture may become blurry.',
+    },
+    fsr: {
+        sharpness: 'Sharpness',
+    },
+    postprocess: {
+        global: 'Whether the post process is enabled for all post process camera.',
+        shadingScale: 'Rendering resolution.',
+        enableShadingScaleInEditor: 'Enable Shading Scale In Editor',
+    },
+    tone_mapping: {
+        toneMappingType: 'Tone mapping type,valid only when HDR is enabled.',
+    },
+},
+
+require('./modules/rendering'),
+require('./animation'),
+
+));

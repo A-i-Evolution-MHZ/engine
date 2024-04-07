@@ -23,10 +23,13 @@
 */
 
 import { JSB } from 'internal:constants';
+import { assertID, errorID } from '@base/debug';
+import { assertIsTrue } from '@base/debug/internal';
+import { memop } from '@base/utils';
 import { Device, Attribute } from '../../gfx';
 import { MeshBuffer } from './mesh-buffer';
 import { BufferAccessor } from './buffer-accessor';
-import { assertID, errorID, Pool, macro, assertIsTrue } from '../../core';
+import { macro } from '../../core';
 import { director } from '../../game';
 
 interface IFreeEntry {
@@ -34,7 +37,7 @@ interface IFreeEntry {
     length: number;
 }
 
-const _entryPool = new Pool<IFreeEntry>(() => ({
+const _entryPool = new memop.Pool<IFreeEntry>(() => ({
     offset: 0,
     length: 0,
 }), 32);
@@ -61,7 +64,7 @@ export class StaticVBChunk {
         assertIsTrue(meshBuffer === vertexAccessor.getMeshBuffer(bufferId));
     }
 
-    setIndexBuffer (indices: ArrayLike<number>) {
+    setIndexBuffer (indices: ArrayLike<number>): void {
         if (JSB) {
             // 放到原生
             assertIsTrue(indices.length === this.ib.length);
@@ -81,7 +84,7 @@ export class StaticVBAccessor extends BufferAccessor {
     private _vCount = 0;
     private _iCount = 0;
     private _id = 0;
-    get id () { return this._id; }
+    get id (): number { return this._id; }
 
     public constructor (device: Device, attributes: Attribute[], vCount?: number, iCount?: number) {
         super(device, attributes);
@@ -92,7 +95,7 @@ export class StaticVBAccessor extends BufferAccessor {
         this._allocateBuffer();
     }
 
-    public destroy () {
+    public destroy (): void {
         // Destroy mesh buffers and reuse free entries
         for (let i = 0; i < this._buffers.length; ++i) {
             this._buffers[i].destroy();
@@ -106,7 +109,7 @@ export class StaticVBAccessor extends BufferAccessor {
         super.destroy();
     }
 
-    public reset () {
+    public reset (): void {
         for (let i = 0; i < this._buffers.length; ++i) {
             const buffer = this._buffers[i];
             // Reset index buffer
@@ -127,7 +130,7 @@ export class StaticVBAccessor extends BufferAccessor {
         return this._buffers[bid];
     }
 
-    public uploadBuffers () {
+    public uploadBuffers (): void {
         for (let i = 0; i < this._buffers.length; ++i) {
             const firstEntry = this._freeLists[i][0];
             const buffer = this._buffers[i];
@@ -139,7 +142,7 @@ export class StaticVBAccessor extends BufferAccessor {
         }
     }
 
-    public appendIndices (bufferId: number, indices: Uint16Array) {
+    public appendIndices (bufferId: number, indices: Uint16Array): void {
         const buf = this._buffers[bufferId];
         const iCount = indices.length;
         if (iCount) {
@@ -157,7 +160,7 @@ export class StaticVBAccessor extends BufferAccessor {
         }
     }
 
-    public allocateChunk (vertexCount: number, indexCount: number) {
+    public allocateChunk (vertexCount: number, indexCount: number): StaticVBChunk | null {
         const byteLength = vertexCount * this.vertexFormatBytes;
         let buf: MeshBuffer = null!; let freeList: IFreeEntry[];
         let bid = 0; let eid = -1; let entry: IFreeEntry | null = null;
@@ -200,7 +203,7 @@ export class StaticVBAccessor extends BufferAccessor {
         }
     }
 
-    public recycleChunk (chunk: StaticVBChunk) {
+    public recycleChunk (chunk: StaticVBChunk): void {
         const freeList = this._freeLists[chunk.bufferId];
         const buf = this._buffers[chunk.bufferId];
         let offset = chunk.vertexOffset * this.vertexFormatBytes;
@@ -269,7 +272,7 @@ export class StaticVBAccessor extends BufferAccessor {
         }
     }
 
-    private _allocateChunkFromEntry (bid: number, eid: number, entry: IFreeEntry, bytes: number) {
+    private _allocateChunkFromEntry (bid: number, eid: number, entry: IFreeEntry, bytes: number): void {
         const remaining = entry.length - bytes;
         const offset = entry.offset + bytes;
         const buf = this._buffers[bid];
@@ -287,7 +290,7 @@ export class StaticVBAccessor extends BufferAccessor {
         }
     }
 
-    private _allocateBuffer () {
+    private _allocateBuffer (): number {
         // Validate length of buffer array
         assertID(this._buffers.length === this._freeLists.length, 9003);
 

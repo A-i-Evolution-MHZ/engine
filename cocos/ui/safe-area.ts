@@ -24,13 +24,13 @@
 
 import { ccclass, help, executionOrder, menu, executeInEditMode, requireComponent } from 'cc.decorator';
 import { EDITOR } from 'internal:constants';
-import { screenAdapter } from 'pal/screen-adapter';
+import { screenAdapter } from '@pal/screen-adapter';
+import { cclegacy } from '@base/global';
 import { Component } from '../scene-graph/component';
 import { UITransform } from '../2d/framework';
 import { sys } from '../core/platform';
 import { Widget } from './widget';
 import { widgetManager } from './widget-manager';
-import { legacyCC } from '../core/global-exports';
 import { view } from './view';
 
 /**
@@ -58,14 +58,14 @@ import { view } from './view';
 @menu('UI/SafeArea')
 @requireComponent(Widget)
 export class SafeArea extends Component {
-    public onEnable () {
+    public onEnable (): void {
         this.updateArea();
         // IDEA: need to delay the callback on Native platform ?
         screenAdapter.on('window-resize', this.updateArea, this);
         screenAdapter.on('orientation-change', this.updateArea, this);
     }
 
-    public onDisable () {
+    public onDisable (): void {
         screenAdapter.off('window-resize', this.updateArea, this);
         screenAdapter.off('orientation-change', this.updateArea, this);
     }
@@ -78,7 +78,7 @@ export class SafeArea extends Component {
      * let safeArea = this.node.addComponent(cc.SafeArea);
      * safeArea.updateArea();
      */
-    public updateArea () {
+    public updateArea (): void {
         // TODO Remove Widget dependencies in the future
         const widget = this.node.getComponent(Widget) as Widget;
         const uiTransComp = this.node.getComponent(UITransform) as UITransform;
@@ -116,4 +116,4 @@ export class SafeArea extends Component {
     }
 }
 
-legacyCC.SafeArea = SafeArea;
+cclegacy.SafeArea = SafeArea;

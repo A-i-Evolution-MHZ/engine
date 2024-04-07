@@ -22,12 +22,31 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass, serializable,
-} from 'cc.decorator';
+import { ccclass, serializable, tooltip, type, disallowAnimation } from 'cc.decorator';
+import { cclegacy } from '@base/global';
+import { CCBoolean } from '@base/object';
 import { scene } from '../render-scene';
 import { Layers } from '../scene-graph/layers';
 import { Renderer } from './renderer';
+import { _decorator } from '../core';
+import { Model, SubModel } from '../render-scene/scene';
+import { isEnableEffect } from '../rendering/define';
+import { Root } from '../root';
+import { getPhaseID } from '../rendering/pass-phase';
+
+let _phaseID = getPhaseID('specular-pass');
+function getSkinPassIndex (subModel: SubModel): number {
+    const passes = subModel.passes;
+    const r = cclegacy.rendering;
+    if (isEnableEffect()) _phaseID = r.getPhaseID(r.getPassID('specular-pass'), 'default');
+    for (let k = 0; k < passes.length; k++) {
+        if (((!r || !r.enableEffectImport) && passes[k].phase === _phaseID)
+        || (isEnableEffect() && passes[k].phaseID === _phaseID)) {
+            return k;
+        }
+    }
+    return -1;
+}
 
 /**
  * @en Base class for all rendering components containing model.
@@ -39,7 +58,7 @@ export class ModelRenderer extends Renderer {
      * @en The visibility which will be applied to the committed models.
      * @zh 应用于所有提交渲染的 Model 的可见性
      */
-    get visibility () {
+    get visibility (): number {
         return this._visFlags;
     }
 
@@ -52,7 +71,7 @@ export class ModelRenderer extends Renderer {
      * @en The priority which will be applied to the committed models.(Valid only in transparent queues)
      * @zh 应用于所有提交渲染的 Model 的排序优先级（只在半透明渲染队列中起效）
      */
-    get priority () {
+    get priority (): number {
         return this._priority;
     }
 
@@ -76,23 +95,23 @@ export class ModelRenderer extends Renderer {
         return this._models;
     }
 
-    protected onEnable () {
+    protected onEnable (): void {
         this._updatePriority();
     }
 
-    protected _attachToScene () {
+    protected _attachToScene (): void {
     }
 
     /**
      * @engineInternal
      */
-    public _detachFromScene () {
+    public _detachFromScene (): void {
     }
 
-    protected _onVisibilityChange (val) {
+    protected _onVisibilityChange (val): void {
     }
 
-    protected _updatePriority () {
+    protected _updatePriority (): void {
         if (this._models.length > 0) {
             for (let i = 0; i < this._models.length; i++) {
                 this._models[i].priority = this._priority;

@@ -23,12 +23,13 @@
 */
 
 import { JSB } from 'internal:constants';
-import { js, Color } from '../../../core';
+import { js } from '@base/utils';
+import { Color } from '@base/math';
 import { IBatcher } from '../../renderer/i-batcher';
 import { Label } from '../../components/label';
 import { fillMeshVertices3D } from '../utils';
-import { bmfont } from './bmfont';
 import { letterFont } from './letter-font';
+import type { RenderData } from '../../renderer/render-data';
 
 const tempColor = new Color(255, 255, 255, 255);
 
@@ -37,13 +38,13 @@ const tempColor = new Color(255, 255, 255, 255);
  * 可通过 `UI.letter` 获取该组装器。
  */
 export const letter = {
-    createData (comp: Label) {
+    createData (comp: Label): RenderData {
         const renderData = comp.requestRenderData();
         renderData.resize(0, 0);
         return renderData;
     },
 
-    fillBuffers (comp: Label, renderer: IBatcher) {
+    fillBuffers (comp: Label, renderer: IBatcher): void {
         if (!comp.renderData) {
             return;
         }
@@ -54,9 +55,7 @@ export const letter = {
         fillMeshVertices3D(node, renderer, comp.renderData, tempColor);
     },
 
-    appendQuad: bmfont.appendQuad,
-
-    updateColor (label: Label) {
+    updateColor (label: Label): void {
         if (JSB) {
             const renderData = label.renderData!;
             const vertexCount = renderData.vertexCount;

@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { Vec3 } from '../math';
+import { Vec3 } from '@base/math';
 import enums from './enums';
 
 /**
@@ -172,7 +172,7 @@ export class Triangle {
      * @zh
      * 获取此三角形的类型，固定返回 `enums.SHAPE_TRIANGLE`。
      */
-    get type () {
+    get type (): number {
         return this._type;
     }
 

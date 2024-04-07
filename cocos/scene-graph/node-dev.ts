@@ -23,18 +23,18 @@
 */
 
 import { EDITOR, DEV, TEST } from 'internal:constants';
-import { CCObject } from '../core/data/object';
-import * as js from '../core/utils/js';
-import { legacyCC } from '../core/global-exports';
-import { error, errorID, getError } from '../core/platform/debug';
+import { cclegacy } from '@base/global';
+import { error, errorID, getError, warn } from '@base/debug';
+import { js } from '@base/utils';
+import { CCObject } from '@base/object';
 import { Component } from './component';
 
 const Destroying = CCObject.Flags.Destroying;
-const IS_PREVIEW = !!legacyCC.GAME_VIEW;
+const IS_PREVIEW = !!cclegacy.GAME_VIEW;
 
-export function nodePolyfill (Node) {
+export function nodePolyfill (Node): void {
     if ((EDITOR && !IS_PREVIEW) || TEST) {
-        Node.prototype._onPreDestroy = function () {
+        Node.prototype._onPreDestroy = function (): boolean {
             const destroyByParent: boolean = this._onPreDestroyBase();
             if (!destroyByParent) {
                 // ensure this node can reattach to scene by undo system
@@ -46,7 +46,7 @@ export function nodePolyfill (Node) {
     }
 
     if (EDITOR || TEST) {
-        Node.prototype._checkMultipleComp = function (ctor) {
+        Node.prototype._checkMultipleComp = function (ctor): boolean {
             const existing = this.getComponent(ctor._disallowMultiple);
             if (existing) {
                 if (existing.constructor === ctor) {
@@ -62,11 +62,11 @@ export function nodePolyfill (Node) {
          * @param {Component} depended
          * @return {Component[]}
          */
-        Node.prototype._getDependComponent = function (depended) {
+        Node.prototype._getDependComponent = function (depended): Component[] {
             const dependant: Component[] = [];
             for (let i = 0; i < this._components.length; i++) {
                 const comp = this._components[i];
-                if (comp !== depended && comp.isValid && !legacyCC.Object._willDestroy(comp)) {
+                if (comp !== depended && comp.isValid && !cclegacy.Object._willDestroy(comp)) {
                     const reqComps = comp.constructor._requireComponent;
                     if (reqComps) {
                         if (Array.isArray(reqComps)) {
@@ -89,11 +89,11 @@ export function nodePolyfill (Node) {
          * @param {Component} comp
          * @param {Number} index
          */
-        Node.prototype._addComponentAt = function (comp, index) {
+        Node.prototype._addComponentAt = function (comp, index): void {
             if (this._objFlags & Destroying) {
                 return error('isDestroying');
             }
-            if (!(comp instanceof legacyCC.Component)) {
+            if (!(comp instanceof cclegacy.Component)) {
                 return errorID(3811);
             }
             if (index > this._components.length) {
@@ -131,23 +131,23 @@ export function nodePolyfill (Node) {
                 }
             }
             if (this._activeInHierarchy) {
-                legacyCC.director._nodeActivator.activateComp(comp);
+                cclegacy.director._nodeActivator.activateComp(comp);
             }
             return undefined;
         };
 
-        Node.prototype.onRestore = function () {
+        Node.prototype.onRestore = function (): void {
             // check activity state
             const shouldActiveNow = this._active && !!(this._parent && this._parent._activeInHierarchy);
             if (this._activeInHierarchy !== shouldActiveNow) {
-                legacyCC.director._nodeActivator.activateNode(this, shouldActiveNow);
+                cclegacy.director._nodeActivator.activateNode(this, shouldActiveNow);
             }
         };
         Node.prototype._onRestoreBase = Node.prototype.onRestore;
 
-        Node.prototype._registerIfAttached = function (register) {
+        Node.prototype._registerIfAttached = function (register): void {
             if (!this._id) {
-                console.warn(`Node(${this && this.name}}) is invalid or its data is corrupted.`);
+                warn(`Node(${this && this.name}}) is invalid or its data is corrupted.`);
                 return;
             }
             if (EditorExtends.Node && EditorExtends.Component) {
@@ -157,7 +157,7 @@ export function nodePolyfill (Node) {
                     for (let i = 0; i < this._components.length; i++) {
                         const comp = this._components[i];
                         if (!comp || !comp._id) {
-                            console.warn(`Component attached to node:${this.name} is corrupted`);
+                            warn(`Component attached to node:${this.name} is corrupted`);
                         } else {
                             EditorExtends.Component.add(comp._id, comp);
                         }
@@ -166,7 +166,7 @@ export function nodePolyfill (Node) {
                     for (let i = 0; i < this._components.length; i++) {
                         const comp = this._components[i];
                         if (!comp || !comp._id) {
-                            console.warn(`Component attached to node:${this.name} is corrupted`);
+                            warn(`Component attached to node:${this.name} is corrupted`);
                         } else {
                             EditorExtends.Component.remove(comp._id);
                         }
@@ -190,7 +190,7 @@ export function nodePolyfill (Node) {
             let path = '';
             // eslint-disable-next-line @typescript-eslint/no-this-alias
             let node: any = this;
-            while (node && !(node instanceof legacyCC.Scene)) {
+            while (node && !(node instanceof cclegacy.Scene)) {
                 if (path) {
                     path = `${node.name}/${path}`;
                 } else {

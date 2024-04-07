@@ -43,11 +43,6 @@ public:
         CUBE = 0,
         PLANAR = 1,
     };
-    enum class UseProbeType {
-        NONE = 0,
-        BAKED_CUBEMAP = 1,
-        PLANAR_REFLECTION = 2,
-    };
     /**
      * @en Set probe type,cube or planar.
      * @zh 设置探针类型，cube或者planar
@@ -140,8 +135,9 @@ public:
     inline const ccstd::vector<IntrusivePtr<cc::RenderTexture>>& getBakedCubeTextures() const { return _bakedCubeTextures; }
     void resetCameraParams();
     void updateCameraDir(int32_t faceIdx);
-    Vec2 getRenderArea() const;
+    Vec2 renderArea() const;
     void packBackgroundColor();
+    bool isRGBE() const;
 
 private:
     ccstd::vector<IntrusivePtr<cc::RenderTexture>> _bakedCubeTextures;

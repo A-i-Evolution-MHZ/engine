@@ -23,20 +23,20 @@
 */
 
 import CANNON from '@cocos/cannon';
+import { IVec3Like, Vec3 } from '@base/math';
 import { CannonConstraint } from './cannon-constraint';
 import { IPointToPointConstraint } from '../../spec/i-physics-constraint';
-import { IVec3Like, Vec3 } from '../../../core';
 import { PointToPointConstraint } from '../../framework';
 import { CannonRigidBody } from '../cannon-rigid-body';
 
 const v3_0 = new Vec3();
 
 export class CannonPointToPointConstraint extends CannonConstraint implements IPointToPointConstraint {
-    public get impl () {
+    public get impl (): CANNON.PointToPointConstraint {
         return this._impl as CANNON.PointToPointConstraint;
     }
 
-    public get constraint () {
+    public get constraint (): PointToPointConstraint {
         return this._com as PointToPointConstraint;
     }
 
@@ -54,13 +54,13 @@ export class CannonPointToPointConstraint extends CannonConstraint implements IP
         } else {
             const node = cs.node;
             Vec3.multiply(v3_0, node.worldScale, cs.pivotA);
+            Vec3.transformQuat(v3_0, v3_0, node.worldRotation);
             Vec3.add(v3_0, v3_0, node.worldPosition);
-            Vec3.add(v3_0, v3_0, cs.pivotB);
             Vec3.copy(this.impl.pivotB, v3_0);
         }
     }
 
-    onComponentSet () {
+    onComponentSet (): void {
         const bodyA = (this._rigidBody.body as CannonRigidBody).impl;
         const cb = this.constraint.connectedBody;
         let bodyB: CANNON.Body = (CANNON.World as any).staticBody;
@@ -72,11 +72,11 @@ export class CannonPointToPointConstraint extends CannonConstraint implements IP
         this.setPivotB(this.constraint.pivotB);
     }
 
-    updateScale0 () {
+    updateScale0 (): void {
         this.setPivotA(this.constraint.pivotA);
     }
 
-    updateScale1 () {
+    updateScale1 (): void {
         this.setPivotB(this.constraint.pivotB);
     }
 }

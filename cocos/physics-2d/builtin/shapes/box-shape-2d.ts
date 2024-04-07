@@ -22,8 +22,8 @@
  THE SOFTWARE.
 */
 
+import { Vec2, Rect } from '@base/math';
 import { BuiltinShape2D } from './shape-2d';
-import { Vec2, Rect } from '../../../core';
 import { BoxCollider2D } from '../../framework';
 import Intersection2D from '../intersection-2d';
 
@@ -33,7 +33,7 @@ export class BuiltinBoxShape extends BuiltinShape2D {
         return this._worldPoints;
     }
 
-    update () {
+    update (): void {
         const aabb = this._worldAabb;
 
         const collider = this.collider as BoxCollider2D;
@@ -62,13 +62,13 @@ export class BuiltinBoxShape extends BuiltinShape2D {
         aabb.height = maxy - miny;
     }
 
-    containsPoint (p: Vec2) {
+    containsPoint (p: Vec2): boolean {
         if (!this.worldAABB.contains(p)) {
             return false;
         }
         return Intersection2D.pointInPolygon(p, this.worldPoints);
     }
-    intersectsRect (rect: Rect) {
+    intersectsRect (rect: Rect): boolean {
         if (!this.worldAABB.intersects(rect)) {
             return false;
         }

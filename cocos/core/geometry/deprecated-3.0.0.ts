@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { replaceProperty } from '../utils/x-deprecated';
+import { warn } from '@base/debug';
+import { replaceProperty } from '@base/utils';
 
 import intersect from './intersect';
 import { Line } from './line';
@@ -170,8 +171,8 @@ replaceProperty(intersect, 'intersect', [
     },
 ]);
 
-function deprecatedClassMessage (oldClassName: string, newClassName) {
-    console.warn(`${oldClassName} is deprecated, please use ${newClassName} instead.`);
+function deprecatedClassMessage (oldClassName: string, newClassName): void {
+    warn(`${oldClassName} is deprecated, please use ${newClassName} instead.`);
 }
 
 /**

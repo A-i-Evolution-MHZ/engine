@@ -24,6 +24,7 @@
 
 import { _decorator } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM } from '../define';
+import { AnimationGraphBindingContext } from './animation-graph-context';
 import { VariableNotDefinedError, VariableTypeMismatchedError } from './errors';
 import type { VarInstance } from './graph-eval';
 import { VariableType } from './variable';
@@ -85,9 +86,7 @@ export type BindCallback<TValue, TThis, TArgs extends any[]> =
 
 export type VariableTypeValidator = () => void;
 
-export interface BindContext {
-    getVar(id: string): VarInstance | undefined;
-}
+export type BindContext = AnimationGraphBindingContext;
 
 export function bindOr<TValue, TThis, TArgs extends any[]> (
     context: BindContext,
@@ -131,7 +130,7 @@ export function bindNumericOr<TValue, TThis, TArgs extends any[]> (
     callback: BindCallback<TValue, TThis, TArgs>,
     thisArg: TThis,
     ...args: TArgs
-) {
+): number | TValue {
     const {
         variable,
         value,
@@ -168,19 +167,19 @@ export function validateVariableExistence (varInstance: VarInstance | undefined,
     }
 }
 
-export function validateVariableType (type: VariableType, expected: VariableType, name: string) {
+export function validateVariableType (type: VariableType, expected: VariableType, name: string): void {
     if (type !== expected) {
         throw new VariableTypeMismatchedError(name, 'number');
     }
 }
 
-export function validateVariableTypeNumeric (type: VariableType, name: string) {
+export function validateVariableTypeNumeric (type: VariableType, name: string): void {
     if (type !== VariableType.FLOAT && type !== VariableType.INTEGER) {
         throw new VariableTypeMismatchedError(name, 'number or integer');
     }
 }
 
-export function validateVariableTypeTriggerLike (type: VariableType, name: string) {
+export function validateVariableTypeTriggerLike (type: VariableType, name: string): void {
     if (type !== VariableType.TRIGGER) {
         throw new VariableTypeMismatchedError(name, 'trigger');
     }

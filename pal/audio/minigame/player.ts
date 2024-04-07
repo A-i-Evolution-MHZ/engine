@@ -22,8 +22,8 @@
  THE SOFTWARE.
 */
 
-import { minigame } from 'pal/minigame';
-import { legacyCC } from '../../../cocos/core/global-exports';
+import { minigame } from '@pal/minigame';
+import { cclegacy } from '@base/global';
 import { AudioLoadOptions, AudioType, AudioState, AudioPCMDataView } from '../type';
 import { AudioPlayerMinigame, OneShotAudioMinigame } from './player-minigame';
 import { AudioPlayerWeb, OneShotAudioWeb } from './player-web';
@@ -33,14 +33,14 @@ type AbstractAudioPlayer = AudioPlayerMinigame | AudioPlayerWeb;
 
 export class OneShotAudio {
     private _audio:  AbstractOneShotAudio;
-    get onPlay () {
+    get onPlay (): (() => void) | undefined {
         return this._audio.onPlay;
     }
     set onPlay (v) {
         this._audio.onPlay = v;
     }
 
-    get onEnd () {
+    get onEnd (): (() => void) | undefined {
         return this._audio.onEnd;
     }
     set onEnd (v) {
@@ -77,7 +77,7 @@ export class AudioPlayer {
             }
         });
     }
-    destroy () {
+    destroy (): void {
         this._player.destroy();
     }
     static loadNative (url: string, opts?: AudioLoadOptions): Promise<unknown> {
@@ -119,13 +119,13 @@ export class AudioPlayer {
     play (): Promise<void> { return this._player.play(); }
     pause (): Promise<void> {  return this._player.pause(); }
     stop (): Promise<void> { return this._player.stop(); }
-    onInterruptionBegin (cb: () => void) { this._player.onInterruptionBegin(cb); }
-    offInterruptionBegin (cb?: () => void) { this._player.offInterruptionBegin(cb); }
-    onInterruptionEnd (cb: () => void) { this._player.onInterruptionEnd(cb); }
-    offInterruptionEnd (cb?: () => void) { this._player.offInterruptionEnd(cb); }
-    onEnded (cb: () => void) { this._player.onEnded(cb); }
-    offEnded (cb?: () => void) { this._player.offEnded(cb); }
+    onInterruptionBegin (cb: () => void): void { this._player.onInterruptionBegin(cb); }
+    offInterruptionBegin (cb?: () => void): void { this._player.offInterruptionBegin(cb); }
+    onInterruptionEnd (cb: () => void): void { this._player.onInterruptionEnd(cb); }
+    offInterruptionEnd (cb?: () => void): void { this._player.offInterruptionEnd(cb); }
+    onEnded (cb: () => void): void { this._player.onEnded(cb); }
+    offEnded (cb?: () => void): void { this._player.offEnded(cb); }
 }
 
 // REMOVE_ME
-legacyCC.AudioPlayer = AudioPlayer;
+cclegacy.AudioPlayer = AudioPlayer;

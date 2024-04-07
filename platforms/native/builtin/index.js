@@ -116,7 +116,9 @@ function createTimeoutInfo (prevFuncArgs, isRepeat) {
     return info.id;
 }
 
-if (!window.oh) {
+if (window.oh && window.scriptEngineType === 'napi') {
+    console.log(`Openharmony with napi has alreay implemented setTimeout/setInterval`);
+} else {
     // In openharmony, the setTimeout function will conflict with the timer of the worker thread and cause a crash,
     // so you need to use the default timer
     jsbWindow.setTimeout = function (cb) {
@@ -209,6 +211,12 @@ for (const key in jsbWindow) {
     if (globalThis[key] === undefined) {
         globalThis[key] = jsbWindow[key];
     }
+}
+
+// In the openharmony platform, XMLHttpRequest is not undefined, but there are problems to using it.
+// So the native implementation is forced to be used.
+if (window.oh && typeof globalThis.XMLHttpRequest !== 'undefined') {
+    globalThis.XMLHttpRequest = jsbWindow.XMLHttpRequest;
 }
 
 if (typeof globalThis.window === 'undefined') {

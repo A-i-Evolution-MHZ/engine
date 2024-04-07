@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { Vec4, cclegacy } from '../../core';
+import { cclegacy } from '@base/global';
+import { Vec4 } from '@base/math';
 import { AmbientInfo } from '../../scene-graph/scene-globals';
 
 /**
@@ -127,7 +128,7 @@ export class Ambient {
 
     protected _enabled = false;
 
-    public initialize (ambientInfo: AmbientInfo) {
+    public initialize (ambientInfo: AmbientInfo): void {
         // Init HDR/LDR from serialized data on load
         this._skyColorHDR = ambientInfo.skyColorHDR;
         this._groundAlbedoHDR.set(ambientInfo.groundAlbedoHDR);

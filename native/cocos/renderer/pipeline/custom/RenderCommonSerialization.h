@@ -37,52 +37,16 @@ namespace cc {
 
 namespace render {
 
-inline void save(OutputArchive& ar, const RasterView& v) {
-    save(ar, v.slotName);
-    save(ar, v.accessType);
-    save(ar, v.attachmentType);
-    save(ar, v.loadOp);
-    save(ar, v.storeOp);
-    save(ar, v.clearFlags);
-    save(ar, v.clearColor);
-    save(ar, v.slotID);
-}
-
-inline void load(InputArchive& ar, RasterView& v) {
-    load(ar, v.slotName);
-    load(ar, v.accessType);
-    load(ar, v.attachmentType);
-    load(ar, v.loadOp);
-    load(ar, v.storeOp);
-    load(ar, v.clearFlags);
-    load(ar, v.clearColor);
-    load(ar, v.slotID);
-}
-
-inline void save(OutputArchive& ar, const ComputeView& v) {
-    save(ar, v.name);
-    save(ar, v.accessType);
-    save(ar, v.clearFlags);
-    save(ar, v.clearColor);
-    save(ar, v.clearValueType);
-}
-
-inline void load(InputArchive& ar, ComputeView& v) {
-    load(ar, v.name);
-    load(ar, v.accessType);
-    load(ar, v.clearFlags);
-    load(ar, v.clearColor);
-    load(ar, v.clearValueType);
-}
-
 inline void save(OutputArchive& ar, const LightInfo& v) {
     // skip, light: IntrusivePtr<scene::Light>
     save(ar, v.level);
+    save(ar, v.culledByLight);
 }
 
 inline void load(InputArchive& ar, LightInfo& v) {
     // skip, light: IntrusivePtr<scene::Light>
     load(ar, v.level);
+    load(ar, v.culledByLight);
 }
 
 inline void save(OutputArchive& ar, const Descriptor& v) {
@@ -141,6 +105,22 @@ inline void load(InputArchive& ar, DescriptorBlockIndex& v) {
     load(ar, v.visibility);
 }
 
+inline void save(OutputArchive& ar, const ResolvePair& v) {
+    save(ar, v.source);
+    save(ar, v.target);
+    save(ar, v.resolveFlags);
+    save(ar, v.mode);
+    save(ar, v.mode1);
+}
+
+inline void load(InputArchive& ar, ResolvePair& v) {
+    load(ar, v.source);
+    load(ar, v.target);
+    load(ar, v.resolveFlags);
+    load(ar, v.mode);
+    load(ar, v.mode1);
+}
+
 inline void save(OutputArchive& ar, const CopyPair& v) {
     save(ar, v.source);
     save(ar, v.target);
@@ -152,6 +132,9 @@ inline void save(OutputArchive& ar, const CopyPair& v) {
     save(ar, v.targetMostDetailedMip);
     save(ar, v.targetFirstSlice);
     save(ar, v.targetPlaneSlice);
+    save(ar, v.sourceOffset);
+    save(ar, v.targetOffset);
+    save(ar, v.bufferSize);
 }
 
 inline void load(InputArchive& ar, CopyPair& v) {
@@ -165,6 +148,9 @@ inline void load(InputArchive& ar, CopyPair& v) {
     load(ar, v.targetMostDetailedMip);
     load(ar, v.targetFirstSlice);
     load(ar, v.targetPlaneSlice);
+    load(ar, v.sourceOffset);
+    load(ar, v.targetOffset);
+    load(ar, v.bufferSize);
 }
 
 inline void save(OutputArchive& ar, const MovePair& v) {
@@ -175,6 +161,7 @@ inline void save(OutputArchive& ar, const MovePair& v) {
     save(ar, v.targetMostDetailedMip);
     save(ar, v.targetFirstSlice);
     save(ar, v.targetPlaneSlice);
+    save(ar, v.possibleUsage);
 }
 
 inline void load(InputArchive& ar, MovePair& v) {
@@ -185,6 +172,7 @@ inline void load(InputArchive& ar, MovePair& v) {
     load(ar, v.targetMostDetailedMip);
     load(ar, v.targetFirstSlice);
     load(ar, v.targetPlaneSlice);
+    load(ar, v.possibleUsage);
 }
 
 inline void save(OutputArchive& ar, const PipelineStatistics& v) {

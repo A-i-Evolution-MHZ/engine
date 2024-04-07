@@ -1,3 +1,7 @@
+/// <reference path="../../@types/consts.d.ts"/>
+/// <reference path="../../native/external/emscripten/external-wasm.d.ts"/>
+/// <reference path="../../native/external/emscripten/webgpu/webgpu.d.ts"/>
+
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable no-void */
 /*
@@ -23,18 +27,27 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-import { WEBGPU } from 'internal:constants';
-import webgpuUrl from 'url:native/external/emscripten/webgpu/webgpu_wasm.wasm';
-import glslangUrl from 'url:native/external/emscripten/webgpu/glslang.wasm';
-import wasmDevice from './webgpu_wasm.js';
-import glslangLoader from './glslang.js';
-import { legacyCC } from '../core/global-exports';
+import { WASM_SUPPORT_MODE, WEBGPU } from 'internal:constants';
+import webgpuUrl from 'external:emscripten/webgpu/webgpu_wasm.wasm';
+import glslangUrl from 'external:emscripten/webgpu/glslang.wasm';
+import twgslUrl from 'external:emscripten/webgpu/twgsl.wasm'
 
-export const glslalgWasmModule: any = {
+import wasmDevice from 'external:emscripten/webgpu/webgpu_wasm.js';
+import glslangLoader from 'external:emscripten/webgpu/glslang.js';
+import twgslLoader from 'external:emscripten/webgpu/twgsl.js'
+import { cclegacy } from '@base/global';
+import { WebAssemblySupportMode } from '../misc/webassembly-support';
+import { log } from 'console';
+
+export const glslangWasmModule: any = {
     glslang: null,
 };
 
-export const gfx: any = legacyCC.gfx = {
+export const twgslModule: any = {
+    twgsl: null,
+};
+
+export const gfx: any = cclegacy.gfx = {
     wasmBinary: null,
     nativeDevice: null,
 };
@@ -45,17 +58,21 @@ export const webgpuAdapter: any = {
 };
 
 export const promiseForWebGPUInstantiation = (() => {
-    if (WEBGPU) {
+    if (WEBGPU && WASM_SUPPORT_MODE !== WebAssemblySupportMode.NONE) {
+        // TODO: we need to support AsmJS fallback option
         return Promise.all([
             glslangLoader(new URL(glslangUrl, import.meta.url).href).then((res) => {
-                glslalgWasmModule.glslang = res;
+                glslangWasmModule.glslang = res;
+            }),
+            twgslLoader(new URL(twgslUrl, import.meta.url).href).then((data) => {
+                twgslModule.twgsl = data;
             }),
             new Promise<void>((resolve) => {
                 fetch(new URL(webgpuUrl, import.meta.url).href).then((response) => {
                     response.arrayBuffer().then((buffer) => {
                         gfx.wasmBinary = buffer;
                         wasmDevice(gfx).then(() => {
-                            legacyCC.WebGPUDevice = gfx.CCWGPUDevice;
+                            cclegacy.WebGPUDevice = gfx.CCWGPUDevice;
                             resolve();
                         });
                     });
@@ -66,7 +83,7 @@ export const promiseForWebGPUInstantiation = (() => {
                     adapter.requestDevice().then((device) => {
                         webgpuAdapter.adapter = adapter;
                         webgpuAdapter.device = device;
-                        console.log(gfx);
+                        log(gfx);
                         resolve();
                     });
                 });
@@ -76,10 +93,10 @@ export const promiseForWebGPUInstantiation = (() => {
     return Promise.resolve();
 })();
 
-if (WEBGPU) {
+if (WEBGPU && WASM_SUPPORT_MODE !== WebAssemblySupportMode.NONE) {
     const intervalId = setInterval(() => {
-        if (legacyCC.game) {
-            legacyCC.game.onPreInfrastructureInitDelegate.add(() => promiseForWebGPUInstantiation);
+        if (cclegacy.game) {
+            cclegacy.game.onPreInfrastructureInitDelegate.add(() => promiseForWebGPUInstantiation);
             clearInterval(intervalId);
         }
     }, 10);

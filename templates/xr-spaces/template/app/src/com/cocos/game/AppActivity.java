@@ -27,6 +27,7 @@ package com.cocos.game;
 import android.os.Bundle;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.util.Log;
 
 import com.cocos.service.SDKWrapper;
 import com.cocos.lib.CocosActivity;
@@ -44,16 +45,16 @@ public class AppActivity extends CocosActivity {
 
     @Override
     protected void onResume() {
-      super.onResume();
-      CocosXRVideoManager.getInstance().onResume();
-      SDKWrapper.shared().onResume();
+        super.onResume();
+        CocosXRVideoManager.getInstance().onResume();
+        SDKWrapper.shared().onResume();
     }
 
     @Override
     protected void onPause() {
-      super.onPause();
-      CocosXRVideoManager.getInstance().onPause();
-      SDKWrapper.shared().onPause();
+        super.onPause();
+        CocosXRVideoManager.getInstance().onPause();
+        SDKWrapper.shared().onPause();
     }
 
     @Override
@@ -127,5 +128,15 @@ public class AppActivity extends CocosActivity {
     public void onLowMemory() {
         SDKWrapper.shared().onLowMemory();
         super.onLowMemory();
+    }
+
+    @Override
+    public void onWindowFocusChanged (boolean hasFocus) {
+        Log.d("ccc", "AppActivity onWindowFocusChanged:" + hasFocus);
+        //Because Spaces applications launch on glasses(secondary display) we can ignore focus lost events which allow for
+        //keyevents to still be processed by Cocos Engine for remote openxr controllers to function
+        if(hasFocus) {
+            super.onWindowFocusChanged(hasFocus);
+        }
     }
 }

@@ -189,8 +189,29 @@ public:
     inline void setSubMeshIdx(const ccstd::optional<uint32_t> &idx) { _subMeshIdx = idx; }
     inline const ccstd::optional<uint32_t> &getSubMeshIdx() const { return _subMeshIdx; }
 
+    inline uint32_t getId() const { return _id; }
+
+    inline void setMeshPoolIndex(uint32_t index) { _meshPoolIndex = index; }
+    inline uint32_t getMeshPoolIndex() const { return _meshPoolIndex; }
+
+    void resetBuffers(const gfx::BufferList &vertexBuffers,
+                         gfx::Buffer *indexBuffer,
+                         uint32_t vertexCount,
+                         uint32_t firstVertex,
+                         uint32_t indexCount,
+                         uint32_t firstIndex,
+                         int32_t vertexOffset);
+
 private:
     gfx::Buffer *allocVertexIdBuffer(gfx::Device *device);
+
+    static inline uint32_t generateId() {
+        static uint32_t generator = 0U;
+        return generator++;
+    }
+
+    uint32_t _id{UINT_MAX};
+    uint32_t _meshPoolIndex{UINT_MAX}; // index in GPUMeshPool
 
     bool _isOwnerOfIndexBuffer{true};
 

@@ -22,12 +22,12 @@
  THE SOFTWARE.
 */
 
+import { Rect } from '@base/math';
 import { SpriteFrame } from '../2d/assets';
 import { Texture2D } from '../asset/assets';
-import { Rect } from '../core';
 import { GID, TiledGrid, TiledTextureGrids, TMXTilesetInfo } from './tiled-types';
 
-export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextureGrids, spFrame?: SpriteFrame) {
+export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextureGrids, spFrame?: SpriteFrame): void {
     const spf: SpriteFrame = spFrame || tileset.sourceImage!;
     const tex: Texture2D = spf.texture as Texture2D;
 
@@ -95,7 +95,7 @@ export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextur
 
         tileset.rectForGID(gid as unknown as GID, grid);
 
-        if (!spFrame || count > 1) {
+        if (!spFrame || count > 1 || tileset.imageOffset) {
             if (spFrame) {
                 grid._name = spFrame.name;
                 const lm = spFrame.unbiasUV[0];

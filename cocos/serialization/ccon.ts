@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { getError, cclegacy } from '../core';
+import { getError } from '@base/debug';
+import { cclegacy } from '@base/global';
 
 const VERSION = 1;
 
@@ -36,11 +37,11 @@ export class CCON {
         this._chunks = chunks;
     }
 
-    get document () {
+    get document (): unknown {
         return this._document;
     }
 
-    get chunks () {
+    get chunks (): Uint8Array[] {
         return this._chunks;
     }
 
@@ -54,7 +55,7 @@ interface CCONPreface {
     chunks: string[];
 }
 
-export function encodeCCONJson (ccon: CCON, chunkURLs: string[]) {
+export function encodeCCONJson (ccon: CCON, chunkURLs: string[]): unknown {
     return {
         version: VERSION,
         document: ccon.document,
@@ -62,7 +63,10 @@ export function encodeCCONJson (ccon: CCON, chunkURLs: string[]) {
     } as unknown;
 }
 
-export function parseCCONJson (json: unknown) {
+export function parseCCONJson (json: unknown): {
+    chunks: string[];
+    document: unknown;
+} {
     const cconPreface = json as CCONPreface;
 
     return {
@@ -71,7 +75,7 @@ export function parseCCONJson (json: unknown) {
     };
 }
 
-export function encodeCCONBinary (ccon: CCON) {
+export function encodeCCONBinary (ccon: CCON): Uint8Array {
     const { document, chunks } = ccon;
 
     const jsonString = JSON.stringify(document);
@@ -105,7 +109,7 @@ export function encodeCCONBinary (ccon: CCON) {
     }
 }
 
-export function decodeCCONBinary (bytes: Uint8Array) {
+export function decodeCCONBinary (bytes: Uint8Array): CCON {
     if (bytes.length < 16) {
         throw new InvalidCCONError(getError(13102));
     }
@@ -180,7 +184,7 @@ interface BufferConstructor {
     from(buffer: ArrayBuffer, byteOffset?: number, byteLength?: number): Buffer;
 }
 
-function encodeJson (input: string) {
+function encodeJson (input: string): Uint8Array {
     if (typeof TextEncoder !== 'undefined') {
         return new TextEncoder().encode(input);
     } else if ('Buffer' in globalThis) {
@@ -196,7 +200,7 @@ function encodeJson (input: string) {
     }
 }
 
-function decodeJson (data: Uint8Array) {
+function decodeJson (data: Uint8Array): string {
     if (typeof TextDecoder !== 'undefined') {
         return new TextDecoder().decode(data);
     } else if ('Buffer' in globalThis) {
@@ -214,11 +218,11 @@ export class BufferBuilder {
     private _viewOrPaddings: (ArrayBufferView | number)[] = [];
     private _length = 0;
 
-    get byteLength () {
+    get byteLength (): number {
         return this._length;
     }
 
-    public alignAs (align: number) {
+    public alignAs (align: number): number {
         if (align !== 0) {
             const remainder = this._length % align;
             if (remainder !== 0) {
@@ -231,14 +235,14 @@ export class BufferBuilder {
         return 0;
     }
 
-    public append (view: ArrayBufferView) {
+    public append (view: ArrayBufferView): number {
         const result = this._length;
         this._viewOrPaddings.push(view);
         this._length += view.byteLength;
         return result;
     }
 
-    public get () {
+    public get (): Uint8Array {
         const result = new Uint8Array(this._length);
         let counter = 0;
         this._viewOrPaddings.forEach((viewOrPadding) => {

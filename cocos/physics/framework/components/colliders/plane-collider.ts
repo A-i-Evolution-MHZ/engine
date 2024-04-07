@@ -22,20 +22,13 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    help,
-    executeInEditMode,
-    menu,
-    tooltip,
-    type,
-    editable,
-    serializable,
-} from 'cc.decorator';
-import { Vec3 } from '../../../../core';
+import { ccclass, help, executeInEditMode, menu, tooltip, type, editable, serializable } from 'cc.decorator';
+import { warnID } from '@base/debug';
+import { Vec3 } from '@base/math';
 import { Collider } from './collider';
 import { IPlaneShape } from '../../../spec/i-physics-shape';
-import { EColliderType } from '../../physics-enum';
+import { EColliderType, ERigidBodyType } from '../../physics-enum';
+import { RigidBody } from '../rigid-body';
 
 /**
  * @en
@@ -58,7 +51,7 @@ export class PlaneCollider extends Collider {
      */
     @type(Vec3)
     @tooltip('i18n:physics3d.collider.plane_normal')
-    public get normal () {
+    public get normal (): Vec3 {
         return this._normal;
     }
 
@@ -78,7 +71,7 @@ export class PlaneCollider extends Collider {
      */
     @editable
     @tooltip('i18n:physics3d.collider.plane_constant')
-    public get constant () {
+    public get constant (): number {
         return this._constant;
     }
 
@@ -96,8 +89,19 @@ export class PlaneCollider extends Collider {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    public get shape () {
+    public get shape (): IPlaneShape {
         return this._shape as IPlaneShape;
+    }
+
+    protected onEnable (): void {
+        super.onEnable();
+
+        if (this.node) {
+            const body = this.node.getComponent(RigidBody);
+            if (body && body.isValid && (body.type === ERigidBodyType.DYNAMIC)) {
+                warnID(9630, this.node.name);
+            }
+        }
     }
 
     /// PRIVATE PROPERTY ///

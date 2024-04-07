@@ -22,10 +22,12 @@
  THE SOFTWARE.
 ****************************************************************************/
 
+#include <boost/graph/depth_first_search.hpp>
 #include "NativePipelineTypes.h"
 #include "RenderGraphGraphs.h"
 #include "RenderGraphTypes.h"
 #include "cocos/renderer/gfx-base/GFXDevice.h"
+#include "details/GraphView.h"
 #include "details/Range.h"
 #include "gfx-base/GFXDef-common.h"
 #include "pipeline/custom/RenderCommonFwd.h"
@@ -95,38 +97,11 @@ gfx::BufferInfo getBufferInfo(const ResourceDesc& desc) {
     };
 }
 
-gfx::TextureInfo getTextureInfo(const ResourceDesc& desc, bool bCube = false) {
+gfx::TextureInfo getTextureInfo(const ResourceDesc& desc) {
     using namespace gfx; // NOLINT(google-build-using-namespace)
-    // type
-    auto type = TextureType::TEX1D;
-    switch (desc.dimension) {
-        case ResourceDimension::TEXTURE1D:
-            if (desc.depthOrArraySize > 1) {
-                type = TextureType::TEX1D_ARRAY;
-            } else {
-                type = TextureType::TEX1D;
-            }
-            break;
-        case ResourceDimension::TEXTURE2D:
-            if (desc.depthOrArraySize > 1) {
-                if (bCube) {
-                    type = TextureType::CUBE;
-                } else {
-                    type = TextureType::TEX2D_ARRAY;
-                }
-            } else {
-                type = TextureType::TEX2D;
-            }
-            break;
-        case ResourceDimension::TEXTURE3D:
-            type = TextureType::TEX3D;
-            break;
-        case ResourceDimension::BUFFER:
-            CC_EXPECTS(false);
-    }
 
     // usage
-    TextureUsage usage = TextureUsage::SAMPLED | TextureUsage::TRANSFER_SRC | TextureUsage::TRANSFER_DST;
+    TextureUsage usage = TextureUsage::NONE;
     if (any(desc.flags & ResourceFlags::COLOR_ATTACHMENT)) {
         usage |= TextureUsage::COLOR_ATTACHMENT;
     }
@@ -140,22 +115,49 @@ gfx::TextureInfo getTextureInfo(const ResourceDesc& desc, bool bCube = false) {
     if (any(desc.flags & ResourceFlags::STORAGE)) {
         usage |= TextureUsage::STORAGE;
     }
+    if (any(desc.flags & ResourceFlags::SHADING_RATE)) {
+        usage |= TextureUsage::SHADING_RATE;
+    }
+    if (any(desc.flags & ResourceFlags::SAMPLED)) {
+        usage |= TextureUsage::SAMPLED;
+    }
+    if (any(desc.flags & ResourceFlags::TRANSFER_SRC)) {
+        usage |= TextureUsage::TRANSFER_SRC;
+    }
+    if (any(desc.flags & ResourceFlags::TRANSFER_DST)) {
+        usage |= TextureUsage::TRANSFER_DST;
+    }
 
     return {
-        type,
+        desc.viewType,
         usage,
         desc.format,
         desc.width,
         desc.height,
         desc.textureFlags,
-        type == TextureType::TEX3D ? 1U : desc.depthOrArraySize,
+        desc.viewType == TextureType::TEX3D ? 1U : desc.depthOrArraySize,
         desc.mipLevels,
         desc.sampleCount,
-        type == TextureType::TEX3D ? desc.depthOrArraySize : 1U,
+        desc.viewType == TextureType::TEX3D ? desc.depthOrArraySize : 1U,
         nullptr,
     };
 }
 
+gfx::TextureViewInfo getTextureViewInfo(const SubresourceView& subresView) {
+    using namespace gfx; // NOLINT(google-build-using-namespace)
+
+    return {
+        nullptr,
+        subresView.viewType,
+        subresView.format,
+        subresView.indexOrFirstMipLevel,
+        subresView.numMipLevels,
+        subresView.firstArraySlice,
+        subresView.numArraySlices,
+        subresView.firstPlane,
+        subresView.numPlanes,
+    };
+}
 } // namespace
 
 bool ManagedTexture::checkResource(const ResourceDesc& desc) const {
@@ -179,9 +181,11 @@ void ResourceGraph::validateSwapchains() {
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void ResourceGraph::mount(gfx::Device* device, vertex_descriptor vertID) {
     std::ignore = device;
     auto& resg = *this;
+    const auto& traits = get(ResourceGraph::TraitsTag{}, *this, vertID);
     const auto& desc = get(ResourceGraph::DescTag{}, *this, vertID);
     visitObject(
         vertID, resg,
@@ -189,7 +193,7 @@ void ResourceGraph::mount(gfx::Device* device, vertex_descriptor vertID) {
             // to be removed
         },
         [&](ManagedBuffer& buffer) {
-            if (!buffer.buffer) {
+            if (!buffer.buffer || buffer.buffer->getSize() != desc.width) {
                 auto info = getBufferInfo(desc);
                 buffer.buffer = device->createBuffer(info);
             }
@@ -204,13 +208,19 @@ void ResourceGraph::mount(gfx::Device* device, vertex_descriptor vertID) {
             CC_ENSURES(texture.texture);
             texture.fenceValue = nextFenceValue;
         },
-        [&](const IntrusivePtr<gfx::Buffer>& buffer) {
-            CC_EXPECTS(buffer);
-            std::ignore = buffer;
+        [&](IntrusivePtr<gfx::Buffer>& buffer) {
+            if (traits.residency != ResourceResidency::EXTERNAL && (!buffer || buffer->getSize() != desc.width)) {
+                auto info = getBufferInfo(desc);
+                buffer = device->createBuffer(info);
+            }
+            CC_ENSURES(buffer);
         },
-        [&](const IntrusivePtr<gfx::Texture>& texture) {
-            CC_EXPECTS(texture);
-            std::ignore = texture;
+        [&](IntrusivePtr<gfx::Texture>& texture) {
+            if (!texture) {
+                auto info = getTextureInfo(desc);
+                texture = device->createTexture(info);
+            }
+            CC_ENSURES(texture);
         },
         [&](const IntrusivePtr<gfx::Framebuffer>& fb) {
             CC_EXPECTS(fb);
@@ -219,6 +229,40 @@ void ResourceGraph::mount(gfx::Device* device, vertex_descriptor vertID) {
         [&](const RenderSwapchain& queue) {
             CC_EXPECTS(queue.swapchain);
             std::ignore = queue;
+        },
+        [&](const FormatView& view) { // NOLINT(misc-no-recursion)
+            std::ignore = view;
+            auto parentID = parent(vertID, resg);
+            CC_EXPECTS(parentID != resg.null_vertex());
+            while (resg.isTextureView(parentID)) {
+                parentID = parent(parentID, resg);
+            }
+            CC_EXPECTS(parentID != resg.null_vertex());
+            CC_EXPECTS(resg.isTexture(parentID));
+            CC_ENSURES(!resg.isTextureView(parentID));
+            mount(device, parentID);
+        },
+        [&](SubresourceView& view) { // NOLINT(misc-no-recursion)
+            SubresourceView originView = view;
+            auto parentID = parent(vertID, resg);
+            CC_EXPECTS(parentID != resg.null_vertex());
+            while (resg.isTextureView(parentID)) {
+                const auto& prtView = get(SubresourceViewTag{}, parentID, resg);
+                originView.firstPlane += prtView.firstPlane;
+                originView.firstArraySlice += prtView.firstArraySlice;
+                originView.indexOrFirstMipLevel += prtView.indexOrFirstMipLevel;
+                parentID = parent(parentID, resg);
+            }
+            CC_EXPECTS(parentID != resg.null_vertex());
+            CC_EXPECTS(resg.isTexture(parentID));
+            CC_ENSURES(!resg.isTextureView(parentID));
+            mount(device, parentID); // NOLINT(misc-no-recursion)
+            auto* parentTexture = resg.getTexture(parentID);
+            if (!view.textureView) {
+                auto textureViewInfo = getTextureViewInfo(originView);
+                textureViewInfo.texture = parentTexture;
+                view.textureView = device->createTexture(textureViewInfo);
+            }
         });
 }
 
@@ -247,6 +291,59 @@ void ResourceGraph::unmount(uint64_t completedFenceValue) {
     }
 }
 
+bool ResourceGraph::isTexture(vertex_descriptor resID) const noexcept {
+    return visitObject(
+        resID, *this,
+        [&](const ManagedBuffer& res) {
+            std::ignore = res;
+            return false;
+        },
+        [&](const IntrusivePtr<gfx::Buffer>& res) {
+            std::ignore = res;
+            return false;
+        },
+        [&](const auto& res) {
+            std::ignore = res;
+            return true;
+        });
+}
+
+bool ResourceGraph::isTextureView(vertex_descriptor resID) const noexcept {
+    return visitObject(
+        resID, *this,
+        [&](const FormatView& view) {
+            std::ignore = view;
+            return true;
+        },
+        [&](const SubresourceView& view) {
+            std::ignore = view;
+            return true;
+        },
+        [&](const auto& res) {
+            std::ignore = res;
+            return false;
+        });
+}
+
+gfx::Buffer* ResourceGraph::getBuffer(vertex_descriptor resID) {
+    gfx::Buffer* buffer = nullptr;
+    visitObject(
+        resID, *this,
+        [&](const ManagedBuffer& res) {
+            buffer = res.buffer.get();
+        },
+        [&](const IntrusivePtr<gfx::Buffer>& buf) {
+            buffer = buf.get();
+        },
+        [&](const auto& buffer) {
+            std::ignore = buffer;
+            CC_EXPECTS(false);
+        });
+    CC_ENSURES(buffer);
+
+    return buffer;
+}
+
 gfx::Texture* ResourceGraph::getTexture(vertex_descriptor resID) {
     gfx::Texture* texture = nullptr;
     visitObject(
@@ -258,11 +355,21 @@ gfx::Texture* ResourceGraph::getTexture(vertex_descriptor resID) {
             texture = tex.get();
         },
         [&](const IntrusivePtr<gfx::Framebuffer>& fb) {
-            std::ignore = fb;
-            CC_EXPECTS(false);
+            CC_EXPECTS(fb->getColorTextures().size() == 1);
+            CC_EXPECTS(fb->getColorTextures().at(0));
+            texture = fb->getColorTextures()[0];
         },
         [&](const RenderSwapchain& sc) {
             texture = sc.swapchain->getColorTexture();
+        },
+        [&](const FormatView& view) {
+            // TODO(zhouzhenglong): add ImageView support
+            std::ignore = view;
+            CC_EXPECTS(false);
+        },
+        [&](const SubresourceView& view) {
+            // TODO(zhouzhenglong): add ImageView support
+            texture = view.textureView;
         },
         [&](const auto& buffer) {
             std::ignore = buffer;

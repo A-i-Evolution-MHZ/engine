@@ -22,14 +22,10 @@
  THE SOFTWARE.
 */
 
+import { warn } from '@base/debug';
 import { Buffer } from '../base/buffer';
 import { BufferUsageBit, BufferSource, BufferInfo, BufferViewInfo } from '../base/define';
-import {
-    WebGL2CmdFuncCreateBuffer,
-    WebGL2CmdFuncDestroyBuffer,
-    WebGL2CmdFuncResizeBuffer,
-    WebGL2CmdFuncUpdateBuffer,
-} from './webgl2-commands';
+import { WebGL2CmdFuncCreateBuffer, WebGL2CmdFuncDestroyBuffer, WebGL2CmdFuncResizeBuffer, WebGL2CmdFuncUpdateBuffer } from './webgl2-commands';
 import { WebGL2DeviceManager } from './webgl2-define';
 import { IWebGL2GPUBuffer, WebGL2IndirectDrawInfos } from './webgl2-gpu-objects';
 
@@ -40,7 +36,7 @@ export class WebGL2Buffer extends Buffer {
 
     private _gpuBuffer: IWebGL2GPUBuffer | null = null;
 
-    public initialize (info: Readonly<BufferInfo> | Readonly<BufferViewInfo>) {
+    public initialize (info: Readonly<BufferInfo> | Readonly<BufferViewInfo>): void {
         if ('buffer' in info) { // buffer view
             this._isBufferView = true;
 
@@ -58,7 +54,6 @@ export class WebGL2Buffer extends Buffer {
                 size: this._size,
                 stride: this._stride,
                 buffer: null,
-                indirects: buffer.gpuBuffer.indirects,
                 glTarget: buffer.gpuBuffer.glTarget,
                 glBuffer: buffer.gpuBuffer.glBuffer,
                 glOffset: info.offset,
@@ -77,7 +72,6 @@ export class WebGL2Buffer extends Buffer {
                 size: this._size,
                 stride: this._stride,
                 buffer: null,
-                indirects: new WebGL2IndirectDrawInfos(),
                 glTarget: 0,
                 glBuffer: null,
                 glOffset: 0,
@@ -89,7 +83,7 @@ export class WebGL2Buffer extends Buffer {
         }
     }
 
-    public destroy () {
+    public destroy (): void {
         if (this._gpuBuffer) {
             if (!this._isBufferView) {
                 WebGL2CmdFuncDestroyBuffer(WebGL2DeviceManager.instance, this._gpuBuffer);
@@ -99,9 +93,9 @@ export class WebGL2Buffer extends Buffer {
         }
     }
 
-    public resize (size: number) {
+    public resize (size: number): void {
         if (this._isBufferView) {
-            console.warn('cannot resize buffer views!');
+            warn('cannot resize buffer views!');
             return;
         }
 
@@ -121,9 +115,9 @@ export class WebGL2Buffer extends Buffer {
         }
     }
 
-    public update (buffer: Readonly<BufferSource>, size?: number) {
+    public update (buffer: Readonly<BufferSource>, size?: number): void {
         if (this._isBufferView) {
-            console.warn('cannot update through buffer views!');
+            warn('cannot update through buffer views!');
             return;
         }
 

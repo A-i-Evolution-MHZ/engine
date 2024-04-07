@@ -22,8 +22,9 @@
  THE SOFTWARE.
 */
 
-import { LODGroup } from "../3d/lod/lodgroup-component";
-import { Vec3, assertIsTrue } from '../core';
+import { assertIsTrue } from '@base/debug/internal';
+import { Vec3 } from '@base/math';
+import { LODGroup } from '../3d/lod/lodgroup-component';
 import { Camera, CameraProjection } from '../render-scene/scene';
 import { scene } from '../render-scene';
 
@@ -64,15 +65,6 @@ export class LODGroupEditorUtility {
             distance =  Vec3.len(lodGroup.localBoundaryCenter.transformMat4(lodGroup.node.worldMatrix).subtract(camera.node.position));
         }
         return this.distanceToRelativeHeight(camera, distance, this.getWorldSpaceSize(lodGroup));
-    }
-
-    /**
-     * @zh 强制使用某几级的LOD
-     * @en Force multi LOD level to use.
-     * lodIndexArray @en The LOD level array. Passing [] will return to standard LOD processing. @zh 要使用的LOD层级数组，传[]时将使用标准的处理流程。
-     */
-    static forceLODs (lodGroup: LODGroup, lodIndexArray: number[]) {
-        lodGroup.lodGroup.lockLODLevels(lodIndexArray);
     }
 
     private static distanceToRelativeHeight (camera: Camera, distance: number | undefined, size: number): number {

@@ -24,14 +24,13 @@
 */
 
 import { ccclass, help, executionOrder, menu, requireComponent, tooltip, type, range, slide, serializable } from 'cc.decorator';
+import { warn } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { Enum } from '@base/object';
+import { Size, Vec2, Vec3, clamp01 } from '@base/math';
 import { Component } from '../scene-graph/component';
 import { UITransform } from '../2d/framework';
-import { Size, Vec2, Vec3 } from '../core/math';
-import { Enum } from '../core/value-types';
-import { clamp01 } from '../core/math/utils';
 import { Sprite } from '../2d/components/sprite';
-import { warn } from '../core/platform/debug';
-import { legacyCC } from '../core/global-exports';
 
 /**
  * @en
@@ -109,7 +108,7 @@ export class ProgressBar extends Component {
      */
     @type(Sprite)
     @tooltip('i18n:progress.bar_sprite')
-    get barSprite () {
+    get barSprite (): Sprite | null {
         return this._barSprite;
     }
 
@@ -131,7 +130,7 @@ export class ProgressBar extends Component {
      */
     @type(Mode)
     @tooltip('i18n:progress.mode')
-    get mode () {
+    get mode (): Mode {
         return this._mode;
     }
 
@@ -164,7 +163,7 @@ export class ProgressBar extends Component {
      * 进度条实际的总长度。
      */
     @tooltip('i18n:progress.total_length')
-    get totalLength () {
+    get totalLength (): number {
         return this._totalLength;
     }
 
@@ -191,7 +190,7 @@ export class ProgressBar extends Component {
     @range([0, 1, 0.1])
     @slide
     @tooltip('i18n:progress.progress')
-    get progress () {
+    get progress (): number {
         return this._progress;
     }
 
@@ -212,7 +211,7 @@ export class ProgressBar extends Component {
      * 进度条是否进行反方向变化。
      */
     @tooltip('i18n:progress.reverse')
-    get reverse () {
+    get reverse (): boolean {
         return this._reverse;
     }
 
@@ -240,7 +239,7 @@ export class ProgressBar extends Component {
     @serializable
     protected _reverse = false;
 
-    protected _initBarSprite () {
+    protected _initBarSprite (): void {
         if (this._barSprite) {
             const entity = this._barSprite.node;
             if (!entity) { return; }
@@ -274,7 +273,7 @@ export class ProgressBar extends Component {
         }
     }
 
-    protected _updateBarStatus () {
+    protected _updateBarStatus (): void {
         if (this._barSprite) {
             const entity = this._barSprite.node;
 
@@ -342,4 +341,4 @@ export class ProgressBar extends Component {
     }
 }
 
-legacyCC.ProgressBar = ProgressBar;
+cclegacy.ProgressBar = ProgressBar;

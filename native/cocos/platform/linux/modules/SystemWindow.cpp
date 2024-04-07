@@ -80,7 +80,7 @@ void SystemWindow::closeWindow() {
 #ifndef CC_SERVER_MODE
     SDL_Event et;
     et.type = SDL_QUIT;
-    auto posted = SDL_PushEvent(&et);
+    SDL_PushEvent(&et);
 #endif
 }
 
@@ -94,10 +94,6 @@ uintptr_t SystemWindow::getDisplay() const {
 
 void SystemWindow::setCursorEnabled(bool value) {
     SDLHelper::setCursorEnabled(value);
-}
-
-void SystemWindow::copyTextToClipboard(const ccstd::string &text) {
-    //TODO
 }
 
 SystemWindow::Size SystemWindow::getViewSize() const {

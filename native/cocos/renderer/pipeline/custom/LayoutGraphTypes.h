@@ -90,6 +90,12 @@ struct RenderPhase {
     PmrTransparentSet<ccstd::pmr::string> shaders;
 };
 
+enum class RenderPassType : uint32_t {
+    SINGLE_RENDER_PASS,
+    RENDER_PASS,
+    RENDER_SUBPASS,
+};
+
 struct LayoutGraph {
     using allocator_type = boost::container::pmr::polymorphic_allocator<char>;
     allocator_type get_allocator() const noexcept { // NOLINT
@@ -211,8 +217,8 @@ struct LayoutGraph {
 
     // PolymorphicGraph
     using VertexTag         = ccstd::variant<RenderStageTag, RenderPhaseTag>;
-    using VertexValue       = ccstd::variant<uint32_t*, RenderPhase*>;
-    using VertexConstValue = ccstd::variant<const uint32_t*, const RenderPhase*>;
+    using VertexValue       = ccstd::variant<RenderPassType*, RenderPhase*>;
+    using VertexConstValue = ccstd::variant<const RenderPassType*, const RenderPhase*>;
     using VertexHandle      = ccstd::variant<
         impl::ValueHandle<RenderStageTag, vertex_descriptor>,
         impl::ValueHandle<RenderPhaseTag, vertex_descriptor>>;
@@ -250,7 +256,7 @@ struct LayoutGraph {
     ccstd::pmr::vector<ccstd::pmr::string> names;
     ccstd::pmr::vector<DescriptorDB> descriptors;
     // PolymorphicGraph
-    ccstd::pmr::vector<uint32_t> stages;
+    ccstd::pmr::vector<RenderPassType> stages;
     ccstd::pmr::vector<RenderPhase> phases;
     // Path
     PmrTransparentMap<ccstd::pmr::string, vertex_descriptor> pathIndex;
@@ -353,7 +359,7 @@ struct DescriptorSetLayoutData {
     }
 
     DescriptorSetLayoutData(const allocator_type& alloc) noexcept; // NOLINT
-    DescriptorSetLayoutData(uint32_t slotIn, uint32_t capacityIn, ccstd::pmr::vector<DescriptorBlockData> descriptorBlocksIn, ccstd::pmr::unordered_map<NameLocalID, gfx::UniformBlock> uniformBlocksIn, PmrFlatMap<NameLocalID, uint32_t> bindingMapIn, const allocator_type& alloc) noexcept;
+    DescriptorSetLayoutData(uint32_t slotIn, uint32_t capacityIn, ccstd::pmr::vector<DescriptorBlockData> descriptorBlocksIn, PmrUnorderedMap<NameLocalID, gfx::UniformBlock> uniformBlocksIn, PmrFlatMap<NameLocalID, uint32_t> bindingMapIn, const allocator_type& alloc) noexcept;
     DescriptorSetLayoutData(DescriptorSetLayoutData&& rhs, const allocator_type& alloc);
 
     DescriptorSetLayoutData(DescriptorSetLayoutData&& rhs) noexcept = default;
@@ -366,7 +372,7 @@ struct DescriptorSetLayoutData {
     uint32_t uniformBlockCapacity{0};
     uint32_t samplerTextureCapacity{0};
     ccstd::pmr::vector<DescriptorBlockData> descriptorBlocks;
-    ccstd::pmr::unordered_map<NameLocalID, gfx::UniformBlock> uniformBlocks;
+    PmrUnorderedMap<NameLocalID, gfx::UniformBlock> uniformBlocks;
     PmrFlatMap<NameLocalID, uint32_t> bindingMap;
 };
 
@@ -509,7 +515,7 @@ struct RenderStageData {
     RenderStageData& operator=(RenderStageData&& rhs) = default;
     RenderStageData& operator=(RenderStageData const& rhs) = delete;
 
-    ccstd::pmr::unordered_map<NameLocalID, gfx::ShaderStageFlagBit> descriptorVisibility;
+    PmrUnorderedMap<NameLocalID, gfx::ShaderStageFlagBit> descriptorVisibility;
 };
 
 struct RenderPhaseData {

@@ -22,9 +22,12 @@
  THE SOFTWARE.
 */
 
-import { ccclass, editable, serializable } from 'cc.decorator';
+// @ts-check
+
+import { ccclass, editable, help, menu, serializable, tooltip, type } from 'cc.decorator';
+import { CCFloat } from '@base/object';
+import { equals } from '@base/math';
 import { Asset } from '../../../asset/assets/asset';
-import { math } from '../../../core';
 
 /**
  * @en
@@ -58,12 +61,14 @@ export class PhysicsMaterial extends Asset {
      * 此材质的摩擦系数。
      */
     @editable
-    get friction () {
+    @type(CCFloat)
+    @tooltip('i18n:physics3d.material.friction')
+    get friction (): number {
         return this._friction;
     }
 
     set friction (value) {
-        if (!math.equals(this._friction, value)) {
+        if (!equals(this._friction, value)) {
             this._friction = value;
             this.emit(PhysicsMaterial.EVENT_UPDATE);
         }
@@ -76,12 +81,14 @@ export class PhysicsMaterial extends Asset {
      * 此材质的滚动摩擦系数。
      */
     @editable
-    get rollingFriction () {
+    @type(CCFloat)
+    @tooltip('i18n:physics3d.material.rollingFriction')
+    get rollingFriction (): number {
         return this._rollingFriction;
     }
 
     set rollingFriction (value) {
-        if (!math.equals(this._rollingFriction, value)) {
+        if (!equals(this._rollingFriction, value)) {
             this._rollingFriction = value;
             this.emit(PhysicsMaterial.EVENT_UPDATE);
         }
@@ -94,12 +101,14 @@ export class PhysicsMaterial extends Asset {
      * 此材质的自旋摩擦系数。
      */
     @editable
-    get spinningFriction () {
+    @type(CCFloat)
+    @tooltip('i18n:physics3d.material.spinningFriction')
+    get spinningFriction (): number {
         return this._spinningFriction;
     }
 
     set spinningFriction (value) {
-        if (!math.equals(this._spinningFriction, value)) {
+        if (!equals(this._spinningFriction, value)) {
             this._spinningFriction = value;
             this.emit(PhysicsMaterial.EVENT_UPDATE);
         }
@@ -112,12 +121,14 @@ export class PhysicsMaterial extends Asset {
      * 此材质的回弹系数。
      */
     @editable
-    get restitution () {
+    @type(CCFloat)
+    @tooltip('i18n:physics3d.material.restitution')
+    get restitution (): number {
         return this._restitution;
     }
 
     set restitution (value) {
-        if (!math.equals(this._restitution, value)) {
+        if (!equals(this._restitution, value)) {
             this._restitution = value;
             this.emit(PhysicsMaterial.EVENT_UPDATE);
         }
@@ -151,7 +162,7 @@ export class PhysicsMaterial extends Asset {
      * @zh
      * 克隆。
      */
-    public clone () {
+    public clone (): PhysicsMaterial {
         const c = new PhysicsMaterial();
         c._friction = this._friction;
         c._restitution = this._restitution;
@@ -188,7 +199,7 @@ export class PhysicsMaterial extends Asset {
      * @param spinningFriction
      * @param restitution
      */
-    public setValues (friction: number, rollingFriction: number, spinningFriction: number, restitution: number) {
+    public setValues (friction: number, rollingFriction: number, spinningFriction: number, restitution: number): void {
         const emitUpdate = this._friction !== friction || this._rollingFriction !== rollingFriction
             || this._spinningFriction !== spinningFriction || this._restitution !== restitution;
         this._friction = friction;

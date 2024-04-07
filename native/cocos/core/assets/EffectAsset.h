@@ -378,6 +378,7 @@ struct IPassStates {
     ccstd::optional<gfx::DynamicStateFlags> dynamicStates;
     ccstd::optional<ccstd::string> phase;
     ccstd::optional<ccstd::string> pass;
+    ccstd::optional<ccstd::string> subpass;
 
     IPassStates() = default;
     explicit IPassStates(const IPassInfoFull &o);
@@ -399,6 +400,7 @@ struct IPassInfoFull final { // cjh } : public IPassInfo {
     ccstd::optional<gfx::DynamicStateFlags> dynamicStates;
     ccstd::optional<ccstd::string> phase;
     ccstd::optional<ccstd::string> pass;
+    ccstd::optional<ccstd::string> subpass;
     // IPassInfo
     ccstd::string program; // auto-generated from 'vert' and 'frag'
     ccstd::optional<MacroRecord> embeddedMacros;
@@ -410,6 +412,7 @@ struct IPassInfoFull final { // cjh } : public IPassInfo {
     // generated part
     index_t passIndex{0};
     uint32_t passID = 0xFFFFFFFF;
+    uint32_t subpassID = 0xFFFFFFFF;
     uint32_t phaseID = 0xFFFFFFFF;
     MacroRecord defines;
     ccstd::optional<PassOverrides> stateOverrides;
@@ -427,6 +430,7 @@ struct IPassInfoFull final { // cjh } : public IPassInfo {
         blendState = o.blendState;
         dynamicStates = o.dynamicStates;
         phase = o.phase;
+        subpass = o.subpass;
         return *this;
     }
 };
@@ -515,8 +519,8 @@ struct IDefineInfo {
     ccstd::optional<ccstd::vector<int32_t>> range; // cjh number is float?  ?: number[];
     ccstd::optional<ccstd::vector<ccstd::string>> options;
     ccstd::optional<ccstd::string> defaultVal;
-    ccstd::optional<ccstd::vector<ccstd::string>> defines;             // NOTE: it's only used in Editor
-    ccstd::optional<ccstd::unordered_map<ccstd::string, bool>> editor; // NOTE: it's only used in Editor
+    ccstd::optional<ccstd::vector<ccstd::string>> defines;                                            // NOTE: it's only used in Editor
+    ccstd::optional<ccstd::unordered_map<ccstd::string, ccstd::variant<ccstd::string, bool>>> editor; // NOTE: it's only used in Editor
 };
 
 struct IBuiltin {
@@ -558,7 +562,7 @@ struct IShaderSource {
 
 struct IShaderInfo {
     ccstd::string name;
-    ccstd::hash_t hash{0xFFFFFFFFU};
+    ccstd::hash_t hash{gfx::INVALID_SHADER_HASH};
     IShaderSource glsl4;
     IShaderSource glsl3;
     IShaderSource glsl1;

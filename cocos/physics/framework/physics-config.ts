@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { IVec3Like } from '../../core';
+import { IVec3Like } from '@base/math';
 
 export interface ICollisionMatrix {
     [x: string]: number;
@@ -43,5 +43,5 @@ export interface IPhysicsConfig {
     collisionGroups?: ICollisionGroup[];
     autoSimulation?: boolean;
     useNodeChains?: boolean;
-    physicsEngine?: 'builtin' | 'cannon.js' | 'ammo.js' | string;
+    physicsEngine?: 'builtin' | 'cannon.js' | 'bullet' | 'physx' | string;
 }

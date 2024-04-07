@@ -1,9 +1,9 @@
-import { find, Node, Scene, Component } from "../../cocos/scene-graph"
-import { Mat4, Vec3 } from "../../cocos/core/math"
-import { CCObject } from "../../cocos/core";
-import { NodeEventType } from "../../cocos/scene-graph/node-event";
-import { ccclass } from "../../cocos/core/data/decorators";
-import {director, game } from '../../cocos/game';
+import { CCObject } from '@base/object';
+import { Mat4, Vec3 } from '@base/math';
+import { find, Node, Scene, Component } from '../../cocos/scene-graph';
+import { NodeEventType } from '../../cocos/scene-graph/node-event';
+import { ccclass } from '../../cocos/core/data/decorators';
+import { director, game } from '../../cocos/game';
 
 describe(`Node`, () => {
 
@@ -255,5 +255,62 @@ describe(`Node`, () => {
         expect(find('test c')).toBeFalsy();
         expect(find('test a')).toBe(nodeA);
         expect(nodeA.hideFlags & CCObject.Flags.DontSave).toBeFalsy();
-    })
+    });
+
+    test('flagChangedVersion', () => {
+        const node = new Node();
+        const val1 = node.flagChangedVersion;
+        expect(val1).toBe(0);
+        node.position = new Vec3(1, 2, 3);
+        const val2 = node.flagChangedVersion;
+        expect(val2).not.toBe(val1);
+        node.position = new Vec3(1, 2, 3);
+        node.scale = new Vec3(1, 2, 3);
+        node.eulerAngles = new Vec3(1, 2, 3);
+        expect(node.flagChangedVersion).toBe(val2);
+        Node.resetHasChangedFlags();
+        node.scale = new Vec3(3, 2, 1);
+        const val3 = node.flagChangedVersion;
+        expect(val3).not.toBe(val2);
+        expect(val3).not.toBe(val1);
+        node.scale = new Vec3(1, 2, 3);
+        expect(node.flagChangedVersion).toBe(val3);
+        Node.resetHasChangedFlags();
+        node.eulerAngles = new Vec3(3, 2, 1);
+        const val4 = node.flagChangedVersion;
+        expect(val4).not.toBe(val3);
+        expect(val4).not.toBe(val2);
+        expect(val4).not.toBe(val1);
+        node.eulerAngles = new Vec3(1, 2, 3);
+        expect(node.flagChangedVersion).toBe(val4);
+    });
+
+    test('setSiblingIndex', () => {
+        // children is [child0, child1, child2]
+        let parent: Node = new Node();
+        let child0: Node = new Node();
+        let child1: Node = new Node();
+        let child2: Node = new Node();
+        parent.addChild(child0);
+        parent.addChild(child1);
+        parent.addChild(child2);
+
+        // children is [child1, child0, child2]
+        child0.setSiblingIndex(1);
+        expect(child0.siblingIndex).toEqual(1);
+        expect(child1.siblingIndex).toEqual(0);
+        expect(child2.siblingIndex).toEqual(2);
+
+        // children is [child1, child2, child0]
+        child0.setSiblingIndex(-1);
+        expect(child0.siblingIndex).toEqual(2);
+        expect(child1.siblingIndex).toEqual(0);
+        expect(child2.siblingIndex).toEqual(1);
+
+        // children is [child1, child2, child0]
+        child0.setSiblingIndex(5);
+        expect(child0.siblingIndex).toEqual(2);
+        expect(child1.siblingIndex).toEqual(0);
+        expect(child2.siblingIndex).toEqual(1);
+    });
 });

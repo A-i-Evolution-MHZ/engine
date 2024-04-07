@@ -21,11 +21,11 @@
 */
 
 import { EDITOR } from 'internal:constants';
+import { errorID } from '@base/debug';
+import { Enum } from '@base/object';
 import { director } from '../game/director';
 import { Game, game } from '../game';
-import { errorID } from '../core/platform/debug';
 import { Settings, settings } from '../core/settings';
-import { Enum } from '../core/value-types';
 
 interface SortingItem {
     id: number;
@@ -145,7 +145,7 @@ export class SortingLayers {
     /**
      * @engineInternal
      */
-    public static init () {
+    public static init (): void {
         let sortingLayers = settings.querySettings<ReadonlyArray<SortingItem>>(Settings.Category.ENGINE, 'sortingLayers');
         if (!sortingLayers || sortingLayers.length === 0) {
             sortingLayers = this.getBuiltinLayers();
@@ -178,7 +178,7 @@ export class SortingLayers {
     /**
      * @engineInternal
      */
-    public static setLayer (layer, layerName, layerIndex) {
+    public static setLayer (layer, layerName, layerIndex): void {
         this.nameMap.set(layer, layerName);
         this.indexMap.set(layer, layerIndex);
     }
@@ -186,7 +186,7 @@ export class SortingLayers {
     /**
      * @engineInternal
      */
-    private static resetState () {
+    private static resetState (): void {
         const oldItem = Object.keys(SortingLayers.Enum);
         for (let i = 0; i < oldItem.length; i++) {
             delete SortingLayers.Enum[SortingLayers.Enum[oldItem[i]]];

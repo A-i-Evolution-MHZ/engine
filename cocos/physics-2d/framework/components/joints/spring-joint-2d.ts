@@ -22,10 +22,12 @@
  THE SOFTWARE.
 */
 
+import { CCBoolean, CCFloat } from '@base/object';
+import { Vec3 } from '@base/math';
 import { Joint2D } from './joint-2d';
 import { ISpringJoint } from '../../../spec/i-physics-joint';
 import { EJoint2DType } from '../../physics-types';
-import { CCBoolean, CCFloat, Vec3, _decorator } from '../../../../core';
+import { _decorator } from '../../../../core';
 import { help, serializable, tooltip, type } from '../../../../core/data/decorators';
 
 const { ccclass, property, menu } = _decorator;
@@ -44,7 +46,7 @@ export class SpringJoint2D extends Joint2D {
      */
     @type(CCFloat)
     @tooltip('i18n:physics2d.joint.frequency')
-    get frequency () {
+    get frequency (): number {
         return this._frequency;
     }
     set frequency (v) {
@@ -62,7 +64,7 @@ export class SpringJoint2D extends Joint2D {
      */
     @type(CCFloat)
     @tooltip('i18n:physics2d.joint.dampingRatio')
-    get dampingRatio () {
+    get dampingRatio (): number {
         return this._dampingRatio;
     }
     set dampingRatio (v) {
@@ -80,7 +82,7 @@ export class SpringJoint2D extends Joint2D {
      */
     @type(CCFloat)
     @tooltip('i18n:physics2d.joint.distance')
-    get distance () {
+    get distance (): number {
         if (this._autoCalcDistance) {
             if (this.connectedBody) {
                 return Vec3.distance(this.node.worldPosition, this.connectedBody.node.worldPosition);
@@ -105,7 +107,7 @@ export class SpringJoint2D extends Joint2D {
      */
     @type(CCBoolean)
     @tooltip('i18n:physics2d.joint.autoCalcDistance')
-    get autoCalcDistance () {
+    get autoCalcDistance (): boolean {
         return this._autoCalcDistance;
     }
     set autoCalcDistance (v) {

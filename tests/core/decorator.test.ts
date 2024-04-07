@@ -1,18 +1,12 @@
+import { js } from '@base/utils';
+import { CCClass, CCBoolean, CCFloat, CCInteger, CCString, PrimitiveType } from '@base/object';
 import { getSerializationMetadata } from '../../cocos/core/data/serialization-metadata';
 import { uniquelyReferenced } from '../../cocos/core/data/decorators/serializable';
-import {
-    visible,
-    editable, tooltip, ccclass, serializable, formerlySerializedAs,
-    readOnly, displayName, group, range, rangeMin, rangeMax, rangeStep,
-    slide, displayOrder, unit, radian, multiline, disallowAnimation,
-    editorOnly,
-    type,
-    float,
-} from '../../cocos/core/data/decorators';
-import { CCClass } from '../../cocos/core/data/class';
+import { visible, editable, tooltip, ccclass, serializable, formerlySerializedAs, readOnly, displayName, group, range, rangeMin, rangeMax, rangeStep, slide, displayOrder, unit, radian, multiline, disallowAnimation, editorOnly, type, float } from '../../cocos/core/data/decorators';
 import { property } from '../../cocos/core/data/decorators/property';
-import { getClassByName, unregisterClass } from '../../cocos/core/utils/js-typed';
 import { LegacyPropertyDecorator } from '../../cocos/core/data/decorators/utils';
+
+const { getClassByName, unregisterClass } = js;
 
 test('Decorators signature', () => {
     class Foo {}
@@ -265,6 +259,72 @@ describe(`Decorators`, () => {
 
         expect(CCClass.Attr.attr(Tooltip, 'boo').tooltip).toBe('i18n:ENGINE.model.shadow_normal_bias');
     });
+
+    describe('@property', () => {
+        describe(`Type and default value specification`, () => {
+            test.each([
+                ['@property explicitly specifying CCString', CCString, '123'],
+                ['@property explicitly specifying CCInteger', CCInteger, 123],
+                ['@property explicitly specifying CCFloat', CCFloat, 1.23],
+                ['@property explicitly specifying CCBoolean', CCBoolean, true],
+            ] as [tile: string, type: PrimitiveType<any>, initializer: any][])(`%s`, (
+                _title: string, type: PrimitiveType<any>, initializer: any,
+            ) => {
+                const arrayInitializer = [];
+
+                @ccclass('Foo')
+                class Foo {
+                    // Having initializer.
+                    @property(type)
+                    public shorthand_form = initializer;
+                    public static readonly shorthand_form_EXPECTED = { type, default: initializer };
+
+                    @property({ type: type })
+                    public full_form = initializer;
+                    public static readonly full_form_EXPECTED = { type, default: initializer };
+
+                    // Having no initializer.
+                    @property(type)
+                    public no_initializer_shorthand_form;
+                    public static readonly no_initializer_shorthand_form_EXPECTED = { type };
+
+                    @property({ type: type })
+                    public no_initializer_full_form;
+                    public static readonly no_initializer_full_form_EXPECTED = { type };
+
+                    // Having array initializer.
+                    @property(type)
+                    public array_initializer_shorthand_form: string[] = arrayInitializer;
+                    public static readonly array_initializer_shorthand_form_EXPECTED = { type, default: arrayInitializer };
+
+                    @property({ type })
+                    public array_initializer_full_form: string[] = arrayInitializer;
+                    public static readonly array_initializer_full_form_EXPECTED = { type, default: arrayInitializer };
+                }
+
+                for (const propertyName of [
+                    'shorthand_form', 'full_form',
+                    'no_initializer_shorthand_form', 'no_initializer_full_form',
+                    'array_initializer_shorthand_form', 'array_initializer_full_form',
+                ]) {
+                    const expectedAttributes = Foo[`${propertyName}_EXPECTED`];
+
+                    const attrs = CCClass.Attr.attr(Foo, propertyName);
+                    expect(Object.keys(attrs)).toHaveLength(Object.keys(expectedAttributes).length);
+    
+                    for (const [attributeName, expectedAttributeValue] of Object.entries(expectedAttributes)) {
+                        const actualAttributeValue = attrs[attributeName];
+                        if (attributeName === 'default' && typeof actualAttributeValue === 'function') {
+                            expect(actualAttributeValue()).toBe(expectedAttributeValue);
+                        } else {
+                            expect(actualAttributeValue).toBe(expectedAttributeValue);
+                        }
+                    }
+                }
+            });
+            
+        });
+    });
 });
 
 describe('Decorated property test', () => {
@@ -314,3 +374,64 @@ describe('Decorated property test', () => {
         });
     });
 });
+
+test(`Property inheritance`, () => {
+    @ccclass
+    class A {
+        @property a = 'a';
+    }
+    
+    @ccclass
+    class B extends A {
+        @property b = 'b';
+    }
+
+    @ccclass
+    class C extends A {
+        @property c = 0;
+    }
+
+    expect(CCClass.isCCClassOrFastDefined(A)).toBe(true);
+    expect(getProps(A)).toStrictEqual(['a']);
+
+    expect(CCClass.isCCClassOrFastDefined(B)).toBe(true);
+    expect(getProps(B)).toStrictEqual(['a', 'b']);
+
+    expect(CCClass.isCCClassOrFastDefined(C)).toBe(true);
+    expect(getProps(C)).toStrictEqual(['a', 'c']);
+
+    unregisterClass(A, B, C);
+});
+
+test('Properties are decorated with @property, but belonging class does not have @ccclass', () => {
+    class A {
+        @property a = 'a';
+    }
+    
+    @ccclass
+    class B extends A {
+        @property b = 'b';
+    }
+
+    @ccclass
+    class C extends A {
+        @property c = 0;
+    }
+
+    expect(CCClass.isCCClassOrFastDefined(A)).toBe(false);
+    expect(getProps(A)).toBeUndefined();
+
+    expect(CCClass.isCCClassOrFastDefined(B)).toBe(true);
+    expect(getProps(B)).toStrictEqual(['b']);
+
+    expect(CCClass.isCCClassOrFastDefined(C)).toBe(true);
+    expect(getProps(C)).toStrictEqual(['c']);
+
+    unregisterClass(A, B, C);
+});
+
+function getProps(cls: Function) {
+    return (cls as {
+        __props__?: string[];
+    }).__props__;
+}

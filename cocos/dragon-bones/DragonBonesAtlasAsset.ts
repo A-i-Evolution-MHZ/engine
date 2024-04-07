@@ -24,10 +24,11 @@
 
 import { JSB } from 'internal:constants';
 import { TextureAtlasData } from '@cocos/dragonbones-js';
+import { cclegacy } from '@base/global';
 import { ArmatureCache } from './ArmatureCache';
 import { ArmatureDisplay } from './ArmatureDisplay';
 import { CCFactory } from './CCFactory';
-import { cclegacy, _decorator } from '../core';
+import { _decorator } from '../core';
 import { Asset, Texture2D } from '../asset/assets';
 import { Node } from '../scene-graph';
 
@@ -51,7 +52,7 @@ export class DragonBonesAtlasAsset extends Asset {
      */
     @serializable
     _atlasJson = '';
-    get atlasJson () {
+    get atlasJson (): string {
         return this._atlasJson;
     }
     set atlasJson (value) {
@@ -83,7 +84,7 @@ export class DragonBonesAtlasAsset extends Asset {
      * @zh 2D 纹理。
      * @property {Texture2D} texture
      */
-    get texture () {
+    get texture (): Texture2D | null {
         return this._texture;
     }
     set texture (value) {
@@ -101,7 +102,7 @@ export class DragonBonesAtlasAsset extends Asset {
      * @en Create a new node with Dragonbones component.
      * @zh 创建一个附带龙骨组件的 node 节点。
      */
-    createNode (callback: (error: Error | null, node: Node) => void) {
+    createNode (callback: (error: Error | null, node: Node) => void): void {
         const node = new Node(this.name);
         const armatureDisplay = node.addComponent('dragonBones.ArmatureDisplay') as ArmatureDisplay;
         armatureDisplay.dragonAtlasAsset = this;
@@ -114,7 +115,7 @@ export class DragonBonesAtlasAsset extends Asset {
      * TextureAtlasData instance, and cache it to the factory.
      * @zh 图集资源初始化。将原始贴图集数据和贴图集对象解析为 TextureAtlasData 实例，并缓存到工厂中。
      */
-    init (factory: CCFactory) {
+    init (factory: CCFactory): void {
         this._factory = factory;
 
         if (!this._atlasJsonData) {
@@ -135,12 +136,12 @@ export class DragonBonesAtlasAsset extends Asset {
      * @en Destroy altas assets.
      * @zh 销毁图集资源。
      */
-    destroy () {
+    destroy (): boolean {
         this._clear();
         return super.destroy();
     }
 
-    protected _clear () {
+    protected _clear (): void {
         if (JSB) return;
         if (this._factory) {
             ArmatureCache.sharedCache.resetArmature(this._uuid);

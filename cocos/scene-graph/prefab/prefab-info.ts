@@ -24,13 +24,13 @@
 
 import { ccclass, serializable, editable, type } from 'cc.decorator';
 import { EDITOR } from 'internal:constants';
-import { cclegacy } from '../../core';
+import { cclegacy } from '@base/global';
+import { CCObject, CCString } from '@base/object';
 import { Prefab } from './prefab';
-import { CCObject } from '../../core/data';
 import { Component } from '../component';
 import { Node } from '../node';
 
-function compareStringArray (array1: string[] | undefined, array2: string[] | undefined) {
+function compareStringArray (array1: string[] | undefined, array2: string[] | undefined): boolean {
     if (!array1 || !array2) {
         return false;
     }
@@ -46,6 +46,7 @@ function compareStringArray (array1: string[] | undefined, array2: string[] | un
 export class TargetInfo {
     // as the target's fileId in prefab asset,used to find the target when prefab expanded.
     @serializable
+    @type([CCString])
     public localID: string[] = [];
 }
 @ccclass('cc.TargetOverrideInfo')
@@ -58,6 +59,7 @@ export class TargetOverrideInfo {
     @type(TargetInfo)
     public sourceInfo: TargetInfo | null = null;
     @serializable
+    @type([CCString])
     public propertyPath: string[] = [];
     @serializable
     @type(Node)
@@ -82,12 +84,13 @@ export class PropertyOverrideInfo {
     @type(TargetInfo)
     public targetInfo: TargetInfo | null = null;
     @serializable
+    @type([CCString])
     public propertyPath: string[] = [];
     @serializable
     public value: any;
 
     // eslint-disable-next-line consistent-return
-    public isTarget (localID: string[], propPath: string[]) {
+    public isTarget (localID: string[], propPath: string[]): boolean | undefined {
         if (EDITOR) {
             return compareStringArray(this.targetInfo?.localID, localID)
                 && compareStringArray(this.propertyPath, propPath);
@@ -105,7 +108,7 @@ export class MountedChildrenInfo {
     public nodes: Node[] = [];
 
     // eslint-disable-next-line consistent-return
-    public isTarget (localID: string[]) {
+    public isTarget (localID: string[]): boolean | undefined {
         if (EDITOR) {
             return compareStringArray(this.targetInfo?.localID, localID);
         }
@@ -122,7 +125,7 @@ export class MountedComponentsInfo {
     public components: Component[] = [];
 
     // eslint-disable-next-line consistent-return
-    public isTarget (localID: string[]) {
+    public isTarget (localID: string[]): boolean | undefined {
         if (EDITOR) {
             return compareStringArray(this.targetInfo?.localID, localID);
         }
@@ -164,7 +167,7 @@ export class PrefabInstance {
     @type([TargetInfo])
     public removedComponents: TargetInfo[] = [];
 
-    public targetMap: Record<string, any | Node | Component> = {};
+    public targetMap: TargetMap = {};
 
     /**
      * make sure prefab instance expand only once
@@ -173,7 +176,7 @@ export class PrefabInstance {
     public expanded = false;
 
     // eslint-disable-next-line consistent-return
-    public findPropertyOverride (localID: string[], propPath: string[]) {
+    public findPropertyOverride (localID: string[], propPath: string[]): Prefab._utils.PropertyOverrideInfo | null | undefined {
         if (EDITOR) {
             for (let i = 0; i < this.propertyOverrides.length; i++) {
                 const propertyOverride = this.propertyOverrides[i];
@@ -185,7 +188,7 @@ export class PrefabInstance {
         }
     }
 
-    public removePropertyOverride (localID: string[], propPath: string[]) {
+    public removePropertyOverride (localID: string[], propPath: string[]): void {
         if (EDITOR) {
             for (let i = 0; i < this.propertyOverrides.length; i++) {
                 const propertyOverride = this.propertyOverrides[i];
@@ -197,6 +200,8 @@ export class PrefabInstance {
         }
     }
 }
+
+export interface TargetMap { [k: string]: TargetMap | Node | Component }
 
 @ccclass('cc.PrefabInfo')
 export class PrefabInfo {

@@ -21,8 +21,8 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-import { sys } from "../core";
 import { NATIVE } from 'internal:constants';
+import { sys } from "../core";
 
 const globalJsb: any = globalThis.jsb ?? {};
 declare const ScriptNativeBridge: any;
@@ -156,4 +156,5 @@ export const native = {
     Manifest: globalJsb.Manifest,
     saveImageData: globalJsb.saveImageData,
     process: globalJsb.process,
+    monitor: globalJsb.monitor,
 };

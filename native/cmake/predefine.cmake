@@ -157,11 +157,15 @@ if(ANDROID)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsigned-char -ffunction-sections -fdata-sections -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsigned-char -ffunction-sections -fdata-sections -fstrict-aliasing -frtti -fexceptions")
 
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fvisibility=default -fno-omit-frame-pointer")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fvisibility=default -fno-omit-frame-pointer")
-    if(NOT DEFINED HIDE_SYMBOLS OR HIDE_SYMBOLS) # hidden by default
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fvisibility=hidden")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fvisibility=hidden -fvisibility-inlines-hidden")
+    
+    if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=default -fno-omit-frame-pointer")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=default -fno-omit-frame-pointer")
+    else()
+        if(NOT DEFINED HIDE_SYMBOLS OR HIDE_SYMBOLS) # hidden by default
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
+        endif()
     endif()
 endif()
 
@@ -297,7 +301,6 @@ function(cc_gen_swig_files cfg_directory output_dir)
 
         set(dep_files)
         get_filename_component(mod_name ${cfg} NAME_WE)
-        file(MAKE_DIRECTORY ${output_dir}/temp)
         set(output_file_tmp ${output_dir}/temp/jsb_${mod_name}_auto.cpp)
         set(output_file ${output_dir}/jsb_${mod_name}_auto.cpp)
 
@@ -311,6 +314,7 @@ function(cc_gen_swig_files cfg_directory output_dir)
                 ${output_hfile}
                 ${output_file}
             COMMAND ${CMAKE_COMMAND} -E echo "Running swig with config file ${cfg} ..."
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${output_dir}/temp
             COMMAND ${SWIG_EXEC} ${SWIG_ARGS}
                 ${output_file_tmp}
                 ${cfg}

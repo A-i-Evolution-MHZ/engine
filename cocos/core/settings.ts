@@ -21,8 +21,8 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-import { HTML5, TAOBAO, TAOBAO_MINIGAME } from 'internal:constants';
-import { legacyCC } from './global-exports';
+import { HTML5, NATIVE, TAOBAO, TAOBAO_MINIGAME } from 'internal:constants';
+import { cclegacy } from '@base/global';
 
 declare const fsUtils: any;
 declare const require: (path: string) =>  Promise<void>;
@@ -76,16 +76,24 @@ export class Settings {
         }
         if (!path) return Promise.resolve();
 
-        if (window.oh) {
-            // TODO(qgh):OpenHarmony temporarily does not support reading json that is not in the resource directory
-            this._settings = require('../settings.json');
-            return Promise.resolve();
+        if (NATIVE) {
+            if (window.oh && window.scriptEngineType === 'napi') {
+                return new Promise((resolve, reject): void => {
+                    // TODO: to support a virtual module of settings.
+                    // For now, we use a system module context to dynamically import the relative path of module.
+                    const settingsModule = '../settings.js';
+                    import(settingsModule).then((res): void => {
+                        this._settings = res.default;
+                        resolve();
+                    }).catch((e): void => reject(e));
+                });
+            }
         }
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve, reject): void => {
             if (!HTML5 && !path.startsWith('http')) {
                 // TODO: readJsonSync not working on Taobao IDE
                 if (TAOBAO || TAOBAO_MINIGAME) {
-                    globalThis.fsUtils.readJson(path, (err, result) => {
+                    globalThis.fsUtils.readJson(path, (err, result): void => {
                         if (err) {
                             reject(err);
                             return;
@@ -106,11 +114,11 @@ export class Settings {
                 const xhr = new XMLHttpRequest();
                 xhr.open('GET', path);
                 xhr.responseType = 'text';
-                xhr.onload = () => {
+                xhr.onload = (): void => {
                     this._settings = JSON.parse(xhr.response);
                     resolve();
                 };
-                xhr.onerror = () => {
+                xhr.onerror = (): void => {
                     reject(new Error('request settings failed!'));
                 };
                 xhr.send(null);
@@ -131,12 +139,12 @@ export class Settings {
      *
      * @example
      * ```ts
-     * console.log(settings.querySettings(Settings.Category.ASSETS, 'server')); // print https://www.cocos.com
+     * log(settings.querySettings(Settings.Category.ASSETS, 'server')); // print https://www.cocos.com
      * settings.overrideSettings(Settings.Category.ASSETS, 'server', 'http://www.test.com');
-     * console.log(settings.querySettings(Settings.Category.ASSETS, 'server')); // print http://www.test.com
+     * log(settings.querySettings(Settings.Category.ASSETS, 'server')); // print http://www.test.com
      * ```
      */
-    overrideSettings<T = any> (category: Category | string, name: string, value: T) {
+    overrideSettings<T = any> (category: Category | string, name: string, value: T): void {
         if (!(category in this._override)) {
             this._override[category] = {};
         }
@@ -156,7 +164,7 @@ export class Settings {
      *
      * @example
      * ```ts
-     * console.log(settings.querySettings(Settings.Category.ENGINE, 'debug')); // print false
+     * log(settings.querySettings(Settings.Category.ENGINE, 'debug')); // print false
      * ```
      */
     querySettings<T = any> (category: Category | string, name: string): T | null {
@@ -190,4 +198,4 @@ export declare namespace Settings {
  * Settings module singleton, through this you can access the configuration data in settings.json.
  */
 export const settings = new Settings();
-legacyCC.settings = settings;
+cclegacy.settings = settings;

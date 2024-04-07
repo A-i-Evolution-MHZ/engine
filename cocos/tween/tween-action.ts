@@ -22,13 +22,14 @@
  THE SOFTWARE.
 */
 
-import { warnID, warn, easing } from '../core';
+import { warnID, warn } from '@base/debug';
+import { VERSION } from '@base/global';
+import { easing } from '../core';
 import { ActionInterval } from './actions/action-interval';
 import { ITweenOption } from './export-api';
-import { VERSION } from '../core/global-exports';
 
 /** adapter */
-function TweenEasingAdapter (easingName: string) {
+function TweenEasingAdapter (easingName: string): string {
     const initialChar = easingName.charAt(0);
     if (/[A-Z]/.test(initialChar)) {
         easingName = easingName.replace(initialChar, initialChar.toLowerCase());
@@ -69,7 +70,7 @@ function TweenEasingAdapter (easingName: string) {
 }
 
 /** checker */
-function TweenOptionChecker (opts: ITweenOption) {
+function TweenOptionChecker (opts: ITweenOption): void {
     const header = ' [Tween:] ';
     const message = ` option is not support in v + ${VERSION}`;
     const _opts = opts as unknown as any;
@@ -158,13 +159,13 @@ export class TweenAction extends ActionInterval {
         this.initWithDuration(duration);
     }
 
-    clone () {
+    clone (): TweenAction {
         const action = new TweenAction(this._duration, this._originProps, this._opts);
         this._cloneDecoration(action);
         return action;
     }
 
-    startWithTarget (target: Record<string, unknown>) {
+    startWithTarget (target: Record<string, unknown>): void {
         ActionInterval.prototype.startWithTarget.call(this, target);
 
         const relative = !!this._opts.relative;
@@ -199,7 +200,7 @@ export class TweenAction extends ActionInterval {
         if (this._opts.onStart) { this._opts.onStart(this.target); }
     }
 
-    update (t: number) {
+    update (t: number): void {
         const target = this.target;
         if (!target) return;
 
@@ -238,7 +239,7 @@ export class TweenAction extends ActionInterval {
         if (t === 1 && opts.onComplete) { opts.onComplete(this.target); }
     }
 
-    progress (start: number, end: number, current: number, t: number) {
+    progress (start: number, end: number, current: number, t: number): number {
         return current = start + (end - start) * t;
     }
 }

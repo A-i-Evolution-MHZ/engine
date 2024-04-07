@@ -1,13 +1,88 @@
 'use strict';
 
-const { materialTechniquePolyfill } = require('../utils/material');
-const { setDisabled, setReadonly, setHidden, loopSetAssetDumpDataReadonly } = require('../utils/prop');
 const { join, sep, normalize } = require('path');
+module.paths.push(join(Editor.App.path, 'node_modules'));
+
+const { materialTechniquePolyfill } = require('../utils/material');
+const { setDisabled, setReadonly, setHidden, loopSetAssetDumpDataReadonly, injectionStyle } = require('../utils/prop');
+const { escape } = require('lodash');
+
+const effectGroupNameRE = /^db:\/\/(\w+)\//i; // match root DB name
+const effectDirRE = /^effects\//i;
+
+/**
+ * @param {string} label
+ */
+function formatOptionLabel(label) {
+    // 1. remove group name if matched
+    // 2. remove prefix 'effects'(after 'db://' prefix removed)
+    // 3. escape label string because it will be used as html template string
+    return escape(label.replace(effectGroupNameRE, '').replace(effectDirRE, ''));
+}
+
+/**
+ * 
+ * @param {{name: string; uuid: string; assetPath: string}[]} effects 
+ * @returns html template
+ */
+function renderGroupEffectOptions(effects) {
+    // group effects by group name, and no longer rely on the ordering of the input `effects`.
+    const groups = {};
+
+    /**
+     * ungrouped options. html template string.
+     * @type {string[]} 
+     */
+    const extras = [];
+
+    for (const effect of effects) {
+        const groupName = effectGroupNameRE.exec(effect.assetPath)?.[1] ?? '';
+
+        if (groupName !== '') {
+            let group = groups[groupName];
+            // group not found yet, init it
+            if (!Array.isArray(group)) {
+                group = [];
+                groups[groupName] = group;
+            }
+
+            const label = formatOptionLabel(effect.assetPath);
+
+            group.push(`<option value="${effect.name}" data-uuid="${effect.uuid}">${label}</option>`);
+
+            continue;
+        }
+
+        // no group name, add to extras and render as ungrouped(before grouped options)
+        const label = formatOptionLabel(effect.name);
+        extras.push(`<option value="${effect.name}" data-uuid="${effect.uuid}">${label}</option>`);
+    }
+
+    let htmlTemplate = '';
+
+    for (const extra of extras) {
+        htmlTemplate += extra;
+    }
+
+    for (const name in groups) {
+        const options = groups[name];
+        htmlTemplate += `<optgroup label="${name}">${options.join('')}</optgroup>`;
+    }
+
+    return htmlTemplate;
+}
 
 exports.style = `
-.invalid { display: none; }
+.invalid { display: none; text-align: center; margin-top: 8px; }
 .invalid[active] { display: block; }
 .invalid[active] ~ * { display: none; }
+
+:host > .header {
+    padding-right: 4px;
+}
+:host > .default > .section {
+    padding-right: 4px;
+}
 
 .custom[src] + .default { display: none; }
 
@@ -84,6 +159,7 @@ exports.methods = {
     },
 
     async abort() {
+        this.reset();
         await Editor.Message.request('scene', 'preview-material', this.asset.uuid);
     },
 
@@ -104,22 +180,16 @@ exports.methods = {
 
     async updateEffect() {
         const effectMap = await Editor.Message.request('scene', 'query-all-effects');
-        this.effects = Object.keys(effectMap).sort().filter((name) => {
-            const effect = effectMap[name];
-            return !effect.hideInEditor;
-        }).map((name) => {
-            const effect = effectMap[name];
-            return {
-                name,
-                uuid: effect.uuid,
-            };
-        });
+        // see: https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Intl/Collator
+        const collator = new Intl.Collator(undefined, { numeric: true });
 
-        let effectOption = '';
-        for (let effect of this.effects) {
-            effectOption += `<option>${effect.name}</option>`;
-        }
-        this.$.effect.innerHTML = effectOption;
+        this.effects = Object.values(effectMap)
+            .filter((effect) => !effect.hideInEditor)
+            .sort((a, b) => collator.compare(a.name, b.name));
+
+        const effectOptionsHTML = renderGroupEffectOptions(this.effects);
+
+        this.$.effect.innerHTML = effectOptionsHTML;
 
         this.$.effect.value = this.material.effect;
         setDisabled(this.asset.readonly, this.$.effect);
@@ -149,6 +219,7 @@ exports.methods = {
 
                 const filePath = join(packagePath, relatePath.split(name)[1]);
                 if (this.$.custom.getAttribute('src') !== filePath) {
+                    this.$.custom.injectionStyle(injectionStyle);
                     this.$.custom.setAttribute('src', filePath);
                 }
 
@@ -216,6 +287,8 @@ exports.methods = {
 
                 $container.$children[i] = document.createElement('ui-prop');
                 $container.$children[i].setAttribute('type', 'dump');
+                $container.$children[i].setAttribute('ui-section-config', '');
+                $container.$children[i].setAttribute('pass-index', i);
                 $container.appendChild($container.$children[i]);
                 $container.$children[i].render(pass);
 
@@ -244,12 +317,13 @@ exports.methods = {
                 $container.$children[i].querySelectorAll('ui-prop').forEach(($prop) => {
                     const dump = $prop.dump;
                     if (dump && dump.childMap && dump.children.length) {
-                        if (!$prop.$children) {
-                            $prop.$children = document.createElement('section');
-                            $prop.$children.setAttribute(
+                        if (!$prop.$childMap) {
+                            $prop.$childMap = document.createElement('section');
+                            $prop.$childMap.setAttribute(
                                 'style',
-                                'border: 1px dashed var(--color-normal-border); padding: 10px; margin: 5px 0;',
+                                'margin-left: var(--ui-prop-margin-left, unset);',
                             );
+                            $prop.$childMap.$props = {};
 
                             for (const childName in dump.childMap) {
                                 if (dump.childMap[childName].value === undefined) {
@@ -260,29 +334,29 @@ exports.methods = {
                                     loopSetAssetDumpDataReadonly(dump.childMap[childName]);
                                 }
 
-                                $prop.$children[childName] = document.createElement('ui-prop');
-                                $prop.$children[childName].setAttribute('type', 'dump');
-                                $prop.$children[childName].render(dump.childMap[childName]);
-                                $prop.$children.appendChild($prop.$children[childName]);
+                                $prop.$childMap.$props[childName] = document.createElement('ui-prop');
+                                $prop.$childMap.$props[childName].setAttribute('type', 'dump');
+                                $prop.$childMap.$props[childName].render(dump.childMap[childName]);
+                                $prop.$childMap.appendChild($prop.$childMap.$props[childName]);
                             }
 
-                            if (Array.from($prop.$children.children).length) {
-                                $prop.after($prop.$children);
+                            if (Array.from($prop.$childMap.children).length) {
+                                $prop.after($prop.$childMap);
                             }
 
                             $prop.addEventListener('change-dump', (e) => {
                                 if (e.target.dump.value) {
-                                    $prop.$children.removeAttribute('hidden');
+                                    $prop.$childMap.removeAttribute('hidden');
                                 } else {
-                                    $prop.$children.setAttribute('hidden', '');
+                                    $prop.$childMap.setAttribute('hidden', '');
                                 }
                             });
                         }
 
                         if (dump.value) {
-                            $prop.$children.removeAttribute('hidden');
+                            $prop.$childMap.removeAttribute('hidden');
                         } else {
-                            $prop.$children.setAttribute('hidden', '');
+                            $prop.$childMap.setAttribute('hidden', '');
                         }
                     }
                 });
@@ -291,7 +365,11 @@ exports.methods = {
             // when passes length more than one, the ui-section of pipeline state collapse
             if (technique.passes.length > 1) {
                 $container.querySelectorAll('[cache-expand$="PassStates"]').forEach(($pipelineState) => {
-                    $pipelineState.removeAttribute('expand');
+                    const cacheExpand = $pipelineState.getAttribute('cache-expand');
+                    if (!this.defaultCollapsePasses[cacheExpand]) {
+                        $pipelineState.expand = false;
+                        this.defaultCollapsePasses[cacheExpand] = true;
+                    }
                 });
             }
         }
@@ -335,7 +413,6 @@ exports.methods = {
             'children',
             'defines',
             'extends',
-            'pipelineStates',
         ];
 
         const cacheData = this.cacheData;
@@ -344,10 +421,10 @@ exports.methods = {
                 return;
             }
 
-            cacheProperty(pass.value);
+            cacheProperty(pass.value, i);
         });
 
-        function cacheProperty(prop) {
+        function cacheProperty(prop, passIndex) {
             for (const name in prop) {
                 // 这些字段是基础类型或配置性的数据，不需要变动
                 if (excludeNames.includes(name)) {
@@ -355,22 +432,29 @@ exports.methods = {
                 }
 
                 if (prop[name] && typeof prop[name] === 'object') {
-                    if (!(name in cacheData)) {
-                        const { type, value } = prop[name];
-                        if (type) {
-                            if (value !== undefined) {
-                                cacheData[name] = { type };
-                                if (value && typeof value === 'object') {
-                                    cacheData[name].value = JSON.parse(JSON.stringify(value));
-                                } else {
-                                    cacheData[name].value = value;
-                                }
+                    if (!cacheData[name]) {
+                        cacheData[name] = {};
+                    }
+
+                    const { type, value, isObject } = prop[name];
+                    if (type && value !== undefined) {
+                        if (!cacheData[name][passIndex]) {
+                            if (name === 'USE_INSTANCING' && passIndex !== 0) {
+                                continue;
+                            }
+                            cacheData[name][passIndex] = { type };
+                            if (value && typeof value === 'object') {
+                                cacheData[name][passIndex].value = JSON.parse(JSON.stringify(value));
+                            } else {
+                                cacheData[name][passIndex].value = value;
                             }
                         }
                     }
 
-                    if (prop[name].childMap && typeof prop[name].childMap === 'object') {
-                        cacheProperty(prop[name].childMap);
+                    if (isObject) {
+                        cacheProperty(value, passIndex);
+                    } else if (prop[name].childMap && typeof prop[name].childMap === 'object') {
+                        cacheProperty(prop[name].childMap, passIndex);
                     }
                 }
             }
@@ -380,13 +464,19 @@ exports.methods = {
         this.updateInstancing();
     },
 
-    storeCache(dump) {
+    storeCache(dump, passIndex) {
         const { name, type, value, default: defaultValue } = dump;
 
         if (JSON.stringify(value) === JSON.stringify(defaultValue)) {
-            delete this.cacheData[name];
+            if (this.cacheData[name] && this.cacheData[name][passIndex] !== undefined) {
+                delete this.cacheData[name][passIndex];
+            }
         } else {
-            this.cacheData[name] = JSON.parse(JSON.stringify({ type, value }));
+            const cacheData = this.cacheData;
+            if (!cacheData[name]) {
+                cacheData[name] = {};
+            }
+            cacheData[name][passIndex] = JSON.parse(JSON.stringify({ type, value }));
         }
     },
 
@@ -397,25 +487,30 @@ exports.methods = {
                 return;
             }
 
-            updateProperty(pass.value);
+            updateProperty(pass.value, i);
         });
 
-        function updateProperty(prop) {
+        function updateProperty(prop, passIndex) {
             for (const name in prop) {
                 if (prop[name] && typeof prop[name] === 'object') {
                     if (name in cacheData) {
-                        const { type, value } = cacheData[name];
-                        if (prop[name].type === type && JSON.stringify(prop[name].value) !== JSON.stringify(value)) {
-                            if (value && typeof value === 'object') {
-                                prop[name].value = JSON.parse(JSON.stringify(value));
-                            } else {
-                                prop[name].value = value;
+                        const passItem = cacheData[name][passIndex];
+                        if (passItem) {
+                            const { type, value } = passItem;
+                            if (prop[name].type === type && JSON.stringify(prop[name].value) !== JSON.stringify(value)) {
+                                if (value && typeof value === 'object') {
+                                    prop[name].value = JSON.parse(JSON.stringify(value));
+                                } else {
+                                    prop[name].value = value;
+                                }
                             }
                         }
                     }
 
-                    if (prop[name].childMap && typeof prop[name].childMap === 'object') {
-                        updateProperty(prop[name].childMap);
+                    if (prop[name].isObject) {
+                        updateProperty(prop[name].value, passIndex);
+                    } else if (prop[name].childMap && typeof prop[name].childMap === 'object') {
+                        updateProperty(prop[name].childMap, passIndex);
                     }
                 }
             }
@@ -489,6 +584,7 @@ exports.update = async function(assetList, metaList) {
  * Method of initializing the panel
  */
 exports.ready = function() {
+    this.defaultCollapsePasses = {};
     this.canUpdatePreview = false;
     // Used to determine whether the material has been modified in isDirty()
     this.dirtyData = {
@@ -532,7 +628,7 @@ exports.ready = function() {
     // The event is triggered when the useInstancing is modified
     this.$.useInstancing.addEventListener('change-dump', (event) => {
         this.changeInstancing(event.target.dump.value);
-        this.storeCache(event.target.dump);
+        this.storeCache(event.target.dump, 0);
         this.change();
         this.snapshot();
     });
@@ -541,7 +637,15 @@ exports.ready = function() {
     this.$.materialDump.addEventListener('change-dump', (event) => {
         const dump = event.target.dump;
 
-        this.storeCache(dump);
+        let passIndex = 0;
+        for (let element of event.path) {
+            if (element instanceof HTMLElement && element.hasAttribute('pass-index')) {
+                passIndex = Number(element.getAttribute('pass-index'));
+                break;
+            }
+        }
+
+        this.storeCache(dump, passIndex);
         this.change();
     });
 

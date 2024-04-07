@@ -41,11 +41,15 @@ CCEffect %{
       phase: shadow-add
       propertyIndex: 0
       rasterizerState:
-        cullMode: back
+        cullMode: none
     - &reflect-map
       vert: terrain-vs
       frag: reflect-map-fs
       phase: reflect-map
+      propertyIndex: 0
+    - vert: terrain-vs
+      frag: terrain-fs
+      phase: deferred-forward
       propertyIndex: 0
 }%
 
@@ -62,10 +66,10 @@ CCProgram macro-remapping %{
   #define CC_SURFACES_USE_TANGENT_SPACE USE_NORMALMAP
 }%
 
-CCProgram surface-vertex %{  
+CCProgram surface-vertex %{
   #define CC_SURFACES_VERTEX_MODIFY_WORLD_POS
   vec3 SurfacesVertexModifyWorldPos(in SurfacesStandardVertexIntermediate In)
-  { 
+  {
     vec3 worldPos;
     worldPos.x = cc_matWorld[3][0] + In.position.x;
     worldPos.y = cc_matWorld[3][1] + In.position.y;
@@ -133,8 +137,14 @@ CCProgram surface-fragment %{
     #endif
     surfaceData.baseColor = vec4(SRGBToLinear(baseColor.rgb), 1.0);
 
-    vec4 baseNormal = vec4(0, 0, 0, 0);
+    vec3 normal = FSInput_worldNormal;
+    vec3 tangent = vec3(1.0, 0.0, 0.0);
+    vec3 binormal = vec3(0.0, 0.0, 1.0);
+    binormal = cross(tangent, normal);
+    tangent = cross(normal, binormal);
+
     #if USE_NORMALMAP
+      vec4 baseNormal = vec4(0, 0, 0, 0);
       #if LAYERS == 1
         baseNormal = texture(normalMap0, uv0);
       #elif LAYERS == 2
@@ -153,20 +163,12 @@ CCProgram surface-fragment %{
         baseNormal = texture(normalMap0, uv0);
       #endif
 
-      vec3 tangent = vec3(1.0, 0.0, 0.0);
-      vec3 binormal = vec3(0.0, 0.0, 1.0);
-
-      binormal = cross(tangent, FSInput_worldNormal);
-      tangent = cross(FSInput_worldNormal, binormal);
-
       vec3 nmmp = baseNormal.xyz - vec3(0.5);
-      surfaceData.worldNormal =
-        nmmp.x * normalize(tangent) +
-        nmmp.y * normalize(binormal) +
-        nmmp.z * normalize(FSInput_worldNormal);
-    #else
-      surfaceData.worldNormal = FSInput_worldNormal;
+      normal = CalculateNormalFromTangentSpace(nmmp, 1.0, normalize(normal.xyz), normalize(tangent), 1.0);
     #endif
+    surfaceData.worldNormal = normalize(normal);
+    surfaceData.worldTangent = normalize(tangent);
+    surfaceData.worldBinormal = normalize(binormal);
 
     float roughnessValue = 1.0;
     float metallicValue = 0.0;

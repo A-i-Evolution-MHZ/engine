@@ -25,14 +25,13 @@
 
 import { ccclass, help, executionOrder, menu, requireComponent, tooltip, type, slide, range, serializable } from 'cc.decorator';
 import { EDITOR } from 'internal:constants';
+import { cclegacy } from '@base/global';
+import { ccenum } from '@base/object';
+import { Vec3, clamp01 } from '@base/math';
 import { Component, EventHandler } from '../scene-graph';
 import { UITransform } from '../2d/framework';
 import { EventTouch, Touch } from '../input/types';
-import { Vec3 } from '../core/math';
-import { ccenum } from '../core/value-types/enum';
-import { clamp01 } from '../core/math/utils';
 import { Sprite } from '../2d/components/sprite';
-import { legacyCC } from '../core/global-exports';
 import { NodeEventType } from '../scene-graph/node-event';
 import { XrUIPressEvent, XrUIPressEventType } from '../xr/event/xr-event-handle';
 
@@ -87,7 +86,7 @@ export class Slider extends Component {
      */
     @type(Sprite)
     @tooltip('i18n:slider.handle')
-    get handle () {
+    get handle (): Sprite | null {
         return this._handle;
     }
 
@@ -111,7 +110,7 @@ export class Slider extends Component {
      */
     @type(Direction)
     @tooltip('i18n:slider.direction')
-    get direction () {
+    get direction (): number {
         return this._direction;
     }
 
@@ -134,7 +133,7 @@ export class Slider extends Component {
     @slide
     @range([0, 1, 0.01])
     @tooltip('i18n:slider.progress')
-    get progress () {
+    get progress (): number {
         return this._progress;
     }
 
@@ -173,13 +172,13 @@ export class Slider extends Component {
     private _handleLocalPos = new Vec3();
     private _touchPos = new Vec3();
 
-    public __preload () {
+    public __preload (): void {
         this._updateHandlePosition();
     }
 
     // 注册事件
 
-    public onEnable () {
+    public onEnable (): void {
         this._updateHandlePosition();
 
         this.node.on(NodeEventType.TOUCH_START, this._onTouchBegan, this);
@@ -197,7 +196,7 @@ export class Slider extends Component {
         }
     }
 
-    public onDisable () {
+    public onDisable (): void {
         this.node.off(NodeEventType.TOUCH_START, this._onTouchBegan, this);
         this.node.off(NodeEventType.TOUCH_MOVE, this._onTouchMoved, this);
         this.node.off(NodeEventType.TOUCH_END, this._onTouchEnded, this);
@@ -213,7 +212,7 @@ export class Slider extends Component {
         }
     }
 
-    protected _onHandleDragStart (event?: EventTouch) {
+    protected _onHandleDragStart (event?: EventTouch): void {
         if (!event || !this._handle || !this._handle.node._uiProps.uiTransformComp) {
             return;
         }
@@ -227,7 +226,7 @@ export class Slider extends Component {
         event.propagationStopped = true;
     }
 
-    protected _onTouchBegan (event?: EventTouch) {
+    protected _onTouchBegan (event?: EventTouch): void {
         if (!this._handle || !event) {
             return;
         }
@@ -240,7 +239,7 @@ export class Slider extends Component {
         event.propagationStopped = true;
     }
 
-    protected _onTouchMoved (event?: EventTouch) {
+    protected _onTouchMoved (event?: EventTouch): void {
         if (!this._dragging || !event) {
             return;
         }
@@ -249,7 +248,7 @@ export class Slider extends Component {
         event.propagationStopped = true;
     }
 
-    protected _onTouchEnded (event?: EventTouch) {
+    protected _onTouchEnded (event?: EventTouch): void {
         this._dragging = false;
         this._touchHandle = false;
         this._offset = new Vec3();
@@ -259,24 +258,24 @@ export class Slider extends Component {
         }
     }
 
-    protected _onTouchCancelled (event?: EventTouch) {
+    protected _onTouchCancelled (event?: EventTouch): void {
         this._dragging = false;
         if (event) {
             event.propagationStopped = true;
         }
     }
 
-    protected _handleSliderLogic (touch: Touch | null) {
+    protected _handleSliderLogic (touch: Touch | null): void {
         this._updateProgress(touch);
         this._emitSlideEvent();
     }
 
-    protected _emitSlideEvent () {
+    protected _emitSlideEvent (): void {
         EventHandler.emitEvents(this.slideEvents, this);
         this.node.emit('slide', this);
     }
 
-    protected _updateProgress (touch: Touch | null) {
+    protected _updateProgress (touch: Touch | null): void {
         if (!this._handle || !touch) {
             return;
         }
@@ -292,7 +291,7 @@ export class Slider extends Component {
         }
     }
 
-    protected _updateHandlePosition () {
+    protected _updateHandlePosition (): void {
         if (!this._handle) {
             return;
         }
@@ -307,7 +306,7 @@ export class Slider extends Component {
         this._handle.node.setPosition(this._handleLocalPos);
     }
 
-    private _changeLayout () {
+    private _changeLayout (): void {
         const uiTrans = this.node._uiProps.uiTransformComp!;
         const contentSize = uiTrans.contentSize;
         uiTrans.setContentSize(contentSize.height, contentSize.width);
@@ -323,7 +322,7 @@ export class Slider extends Component {
         }
     }
 
-    protected _xrHandleProgress (point: Vec3) {
+    protected _xrHandleProgress (point: Vec3): void {
         if (!this._touchHandle) {
             const uiTrans = this.node._uiProps.uiTransformComp!;
             uiTrans.convertToNodeSpaceAR(point, _tempPos);
@@ -335,7 +334,7 @@ export class Slider extends Component {
         }
     }
 
-    protected _xrClick (event: XrUIPressEvent) {
+    protected _xrClick (event: XrUIPressEvent): void {
         if (!this._handle) {
             return;
         }
@@ -344,12 +343,12 @@ export class Slider extends Component {
         this._emitSlideEvent();
     }
 
-    protected _xrUnClick () {
+    protected _xrUnClick (): void {
         this._dragging = false;
         this._touchHandle = false;
     }
 
-    protected _xrHoverStay (event: XrUIPressEvent) {
+    protected _xrHoverStay (event: XrUIPressEvent): void {
         if (!this._dragging) {
             return;
         }
@@ -367,4 +366,4 @@ export class Slider extends Component {
  * @param {Slider} slider - The slider component.
  */
 
-legacyCC.Slider = Slider;
+cclegacy.Slider = Slider;

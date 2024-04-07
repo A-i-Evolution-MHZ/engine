@@ -48,6 +48,38 @@ class Material;
 
 namespace scene {
 
+/**
+ * @en Use Reflection probe
+ * @zh 使用反射探针。
+ */
+enum class UseReflectionProbeType {
+    /**
+     * @en Use the default skybox.
+     * @zh 使用默认天空盒。
+     */
+    NONE,
+    /**
+     * @en Cubemap generate by probe.
+     * @zh Probe烘焙的cubemap。
+     */
+    BAKED_CUBEMAP,
+    /**
+     * @en Realtime planar reflection.
+     * @zh 实时平面反射。
+     */
+    PLANAR_REFLECTION,
+    /**
+     * @en Mixing between reflection probe.
+     * @zh 反射探针之间进行混合。
+     */
+    BLEND_PROBES,
+    /**
+     * @en Mixing between reflection probe and skybox.
+     * @zh 反射探针之间混合或反射探针和天空盒之间混合。
+     */
+    BLEND_PROBES_AND_SKYBOX,
+};
+
 // SubModel.h -> Define.h -> Model.h, so do not include SubModel.h here.
 class SubModel;
 // RenderScene.h <-> Model.h, so do not include RenderScene.h here.
@@ -117,6 +149,7 @@ public:
     void updateReflectionProbePlanarMap(gfx::Texture *texture);
     void updateReflectionProbeId();
     void updateReflectionProbeDataMap(Texture2D *texture);
+    void updateReflectionProbeBlendCubemap(TextureCube *texture);
 
     inline void attachToScene(RenderScene *scene) {
         _scene = scene;
@@ -161,13 +194,20 @@ public:
     inline void setBakeToReflectionProbe(bool val) {
         _bakeToReflectionProbe = val;
     }
-    inline int32_t getReflectionProbeType() const { return _reflectionProbeType; }
-    void setReflectionProbeType(int32_t val);
+    inline UseReflectionProbeType getReflectionProbeType() const { return _reflectionProbeType; }
+    void setReflectionProbeType(UseReflectionProbeType val);
     inline int32_t getReflectionProbeId() const { return _reflectionProbeId; }
     inline void setReflectionProbeId(int32_t reflectionProbeId) {
         _reflectionProbeId = reflectionProbeId;
         _shadowBias.z = reflectionProbeId;
     }
+    inline int32_t getReflectionProbeBlendId() const { return _reflectionProbeBlendId; }
+    inline void setReflectionProbeBlendId(int32_t reflectionProbeId) {
+        _reflectionProbeBlendId = reflectionProbeId;
+        _shadowBias.w = reflectionProbeId;
+    }
+    inline float getReflectionProbeBlendWeight() const { return _reflectionProbeBlendWeight; }
+    inline void setReflectionProbeBlendWeight(float weight) { _reflectionProbeBlendWeight = weight; }
     inline int32_t getTetrahedronIndex() const { return _tetrahedronIndex; }
     inline void setTetrahedronIndex(int32_t index) { _tetrahedronIndex = index; }
     inline bool showTetrahedron() const { return isLightProbeAvailable(); }
@@ -192,6 +232,8 @@ public:
     inline bool isDynamicBatching() const { return _isDynamicBatching; }
     inline float getShadowBias() const { return _shadowBias.x; }
     inline float getShadowNormalBias() const { return _shadowBias.y; }
+    inline Vec4 getShadowBiasParam() const { return _shadowBias; }
+    inline Vec4 getLightmapUVParam() const { return _lightmapUVParam; }
     inline uint32_t getPriority() const { return _priority; }
     inline void setPriority(uint32_t value) { _priority = value; }
     inline bool isReceiveDirLight() const { return _receiveDirLight; }
@@ -199,6 +241,7 @@ public:
         _receiveDirLight = value;
         onMacroPatchesStateChanged();
     }
+    inline void invalidateLocalData() { _localDataUpdated = true; }
 
     // For JS
     inline void setCalledFromJS(bool v) { _isCalledFromJS = v; }
@@ -209,6 +252,8 @@ public:
     }
     inline void setModelBounds(geometry::AABB *bounds) { _modelBounds = bounds; }
     inline bool isModelImplementedInJS() const { return (_type != Type::DEFAULT && _type != Type::SKINNING && _type != Type::BAKED_SKINNING); };
+    inline void setGPUDrivenEnabled(bool b) { _gpuDrivenEnabled = b; }
+    inline bool isGPUDrivenEnabled() const { return _gpuDrivenEnabled; }
 
 protected:
     static SubModel *createSubModel();
@@ -216,17 +261,22 @@ protected:
     void updateAttributesAndBinding(index_t subModelIndex);
     bool isLightProbeAvailable() const;
     void updateSHBuffer();
+    bool supportGPUDriven(index_t subModelIndex) const;
+    bool isInGPUScene(index_t subModelIndex) const;
 
     // Please declare variables in descending order of memory size occupied by variables.
     Type _type{Type::DEFAULT};
     Layers::Enum _visFlags{Layers::Enum::NONE};
 
-    int32_t _reflectionProbeType{0};
+    UseReflectionProbeType _reflectionProbeType{UseReflectionProbeType::NONE};
     int32_t _tetrahedronIndex{-1};
     uint32_t _descriptorSetCount{1};
     uint32_t _priority{0};
     uint32_t _updateStamp{0};
     int32_t _reflectionProbeId{-1};
+    int32_t _reflectionProbeBlendId{-1};
+    float _reflectionProbeBlendWeight{0.F};
+    bool _gpuDrivenEnabled{true};
 
     OctreeNode *_octreeNode{nullptr};
     RenderScene *_scene{nullptr};
@@ -248,7 +298,7 @@ protected:
     bool _inited{false};
     bool _localDataUpdated{false};
     bool _worldBoundsDirty{true};
-    bool _useLightProbe = false;
+    bool _useLightProbe{false};
     bool _bakeToReflectionProbe{true};
     bool _receiveDirLight{true};
     // For JS
@@ -256,7 +306,7 @@ protected:
 
     Vec3 _lastWorldBoundCenter{INFINITY, INFINITY, INFINITY};
 
-    Vec4 _shadowBias;
+    Vec4 _shadowBias{0.F, 0.F, -1.F, -1.F};
     Vec4 _lightmapUVParam;
 
     // For JS

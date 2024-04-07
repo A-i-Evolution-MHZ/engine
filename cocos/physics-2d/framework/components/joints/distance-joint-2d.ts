@@ -22,10 +22,12 @@
  THE SOFTWARE.
 */
 
+import { CCBoolean, CCFloat } from '@base/object';
+import { Vec3 } from '@base/math';
 import { Joint2D } from './joint-2d';
 import { IDistanceJoint } from '../../../spec/i-physics-joint';
 import { EJoint2DType } from '../../physics-types';
-import { CCBoolean, CCFloat, Vec3, _decorator } from '../../../../core';
+import { _decorator } from '../../../../core';
 import { help, serializable, tooltip, type } from '../../../../core/data/decorators';
 
 const { ccclass, menu, property } = _decorator;
@@ -44,7 +46,7 @@ export class DistanceJoint2D extends Joint2D {
      */
     @type(CCFloat)
     @tooltip('i18n:physics2d.joint.maxLength')
-    get maxLength () {
+    get maxLength (): number {
         if (this._autoCalcDistance) {
             if (this.connectedBody) {
                 return Vec3.distance(this.node.worldPosition, this.connectedBody.node.worldPosition);
@@ -69,7 +71,7 @@ export class DistanceJoint2D extends Joint2D {
      */
     @type(CCBoolean)
     @tooltip('i18n:physics2d.joint.autoCalcDistance')
-    get autoCalcDistance () {
+    get autoCalcDistance (): boolean {
         return this._autoCalcDistance;
     }
     set autoCalcDistance (v) {

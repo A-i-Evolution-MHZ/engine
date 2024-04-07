@@ -23,12 +23,10 @@
 ****************************************************************************/
 
 #include "ReflectionProbeBatchedQueue.h"
-#include "BatchedBuffer.h"
 #include "Define.h"
 #include "InstancedBuffer.h"
 #include "PipelineSceneData.h"
 #include "PipelineStateManager.h"
-#include "RenderBatchedQueue.h"
 #include "RenderInstancedQueue.h"
 #include "core/geometry/AABB.h"
 #include "core/geometry/Intersect.h"
@@ -43,14 +41,12 @@
 #include "scene/Skybox.h"
 namespace cc {
 namespace pipeline {
-const static uint32_t REFLECTION_PROBE_DEFAULT_MASK = ~static_cast<uint32_t>(LayerList::UI_2D) & ~static_cast<uint32_t>(LayerList::PROFILER) & ~static_cast<uint32_t>(LayerList::UI_3D) & ~static_cast<uint32_t>(LayerList::GIZMOS) & ~static_cast<uint32_t>(LayerList::SCENE_GIZMO) & ~static_cast<uint32_t>(LayerList::EDITOR);
 const ccstd::string CC_USE_RGBE_OUTPUT = "CC_USE_RGBE_OUTPUT";
 const cc::scene::IMacroPatch MACRO_PATCH_RGBE_OUTPUT{CC_USE_RGBE_OUTPUT, true};
 ReflectionProbeBatchedQueue::ReflectionProbeBatchedQueue(RenderPipeline *pipeline)
 : _phaseID(getPhaseID("default")), _phaseReflectMapID(getPhaseID("reflect-map")) {
     _pipeline = pipeline;
     _instancedQueue = ccnew RenderInstancedQueue;
-    _batchedQueue = ccnew RenderBatchedQueue;
 }
 
 ReflectionProbeBatchedQueue::~ReflectionProbeBatchedQueue() {
@@ -58,7 +54,6 @@ ReflectionProbeBatchedQueue::~ReflectionProbeBatchedQueue() {
 }
 
 void ReflectionProbeBatchedQueue::destroy() {
-    CC_SAFE_DELETE(_batchedQueue)
     CC_SAFE_DELETE(_instancedQueue)
 }
 
@@ -84,25 +79,23 @@ void ReflectionProbeBatchedQueue::gatherRenderObjects(const scene::Camera *camer
             continue;
         }
         if (!node || !model->isEnabled() || !worldBounds || !model->getBakeToReflectionProbe()) continue;
-        uint32_t visibility = probe->getCamera()->getVisibility();
+
+        uint32_t visibility = probe->getVisibility();
+        if (((visibility & node->getLayer()) != node->getLayer()) && (!(visibility & static_cast<uint32_t>(model->getVisFlags())))) {
+            continue;
+        }
         if (probe->getProbeType() == scene::ReflectionProbe::ProbeType::CUBE) {
-            if (((visibility & node->getLayer()) == node->getLayer()) ||
-                (visibility & static_cast<uint32_t>(model->getVisFlags()))) {
-                if (aabbWithAABB(*worldBounds, *probe->getBoundingBox())) {
-                    add(model);
-                }
+            if (aabbWithAABB(*worldBounds, *probe->getBoundingBox())) {
+                add(model);
             }
         } else {
-            if (((node->getLayer() & REFLECTION_PROBE_DEFAULT_MASK) == node->getLayer()) || (REFLECTION_PROBE_DEFAULT_MASK & static_cast<uint32_t>(model->getVisFlags()))) {
-                if (worldBounds->aabbFrustum(probe->getCamera()->getFrustum())) {
-                    add(model);
-                }
+            if (worldBounds->aabbFrustum(probe->getCamera()->getFrustum())) {
+                add(model);
             }
         }
     }
 
     _instancedQueue->uploadBuffers(cmdBuffer);
-    _batchedQueue->uploadBuffers(cmdBuffer);
 }
 
 void ReflectionProbeBatchedQueue::clear() {
@@ -111,11 +104,16 @@ void ReflectionProbeBatchedQueue::clear() {
     _passes.clear();
     _rgbeSubModels.clear();
     if (_instancedQueue) _instancedQueue->clear();
-    if (_batchedQueue) _batchedQueue->clear();
 }
 
 void ReflectionProbeBatchedQueue::add(const scene::Model *model) {
     for (const auto &subModel : model->getSubModels()) {
+        // Filter transparent objects
+        const bool isTransparent = subModel->getPass(0)->getBlendState()->targets[0].blend;
+        if (isTransparent) {
+            continue;
+        }
+
         auto passIdx = getReflectMapPassIndex(subModel);
         bool bUseReflectPass = true;
         if (passIdx == -1) {
@@ -130,9 +128,12 @@ void ReflectionProbeBatchedQueue::add(const scene::Model *model) {
         const auto batchingScheme = pass->getBatchingScheme();
 
         if (!bUseReflectPass) {
-            auto patches = const_cast<ccstd::vector<cc::scene::IMacroPatch> &>(subModel->getPatches());
-            patches.emplace_back(MACRO_PATCH_RGBE_OUTPUT);
-            subModel->onMacroPatchesStateChanged(patches);
+            _patches.clear();
+            for (const auto &patch : subModel->getPatches()) {
+                _patches.push_back(patch);
+            }
+            _patches.emplace_back(MACRO_PATCH_RGBE_OUTPUT);
+            subModel->onMacroPatchesStateChanged(_patches);
             _rgbeSubModels.emplace_back(subModel);
         }
 
@@ -140,10 +141,6 @@ void ReflectionProbeBatchedQueue::add(const scene::Model *model) {
             auto *instancedBuffer = subModel->getPass(passIdx)->getInstancedBuffer();
             instancedBuffer->merge(subModel, passIdx);
             _instancedQueue->add(instancedBuffer);
-        } else if (batchingScheme == scene::BatchingSchemes::VB_MERGING) {
-            auto *batchedBuffer = subModel->getPass(passIdx)->getBatchedBuffer();
-            batchedBuffer->merge(subModel, passIdx, model);
-            _batchedQueue->add(batchedBuffer);
         } else { // standard draw
             _subModels.emplace_back(subModel);
             _shaders.emplace_back(subModel->getShader(passIdx));
@@ -152,9 +149,8 @@ void ReflectionProbeBatchedQueue::add(const scene::Model *model) {
     }
 }
 
-void ReflectionProbeBatchedQueue::recordCommandBuffer(gfx::Device *device, gfx::RenderPass *renderPass, gfx::CommandBuffer *cmdBuffer) const {
+void ReflectionProbeBatchedQueue::recordCommandBuffer(gfx::Device *device, gfx::RenderPass *renderPass, gfx::CommandBuffer *cmdBuffer) {
     _instancedQueue->recordCommandBuffer(device, renderPass, cmdBuffer);
-    _batchedQueue->recordCommandBuffer(device, renderPass, cmdBuffer);
 
     for (size_t i = 0; i < _subModels.size(); i++) {
         const auto *const subModel = _subModels[i];
@@ -171,15 +167,17 @@ void ReflectionProbeBatchedQueue::recordCommandBuffer(gfx::Device *device, gfx::
     }
     resetMacro();
     if (_instancedQueue) _instancedQueue->clear();
-    if (_batchedQueue) _batchedQueue->clear();
 }
-void ReflectionProbeBatchedQueue::resetMacro() const {
+void ReflectionProbeBatchedQueue::resetMacro() {
     for (const auto &subModel : _rgbeSubModels) {
-        auto patches = const_cast<ccstd::vector<cc::scene::IMacroPatch> &>(subModel->getPatches());
-        for (auto iter = patches.begin(); iter != patches.end(); iter++) {
+        _patches.clear();
+        for (const auto &patch : subModel->getPatches()) {
+            _patches.push_back(patch);
+        }
+        for (auto iter = _patches.begin(); iter != _patches.end(); iter++) {
             if (iter->name == CC_USE_RGBE_OUTPUT) {
-                patches.erase(iter);
-                const_cast<scene::SubModel *>(subModel)->onMacroPatchesStateChanged(patches);
+                _patches.erase(iter);
+                const_cast<scene::SubModel *>(subModel)->onMacroPatchesStateChanged(_patches);
                 break;
             }
         }
@@ -193,7 +191,7 @@ bool ReflectionProbeBatchedQueue::isUseReflectMapPass(const scene::SubModel *sub
 
 int ReflectionProbeBatchedQueue::getDefaultPassIndex(const scene::SubModel *subModel) const {
     int i = 0;
-    for (const auto &pass : subModel->getPasses()) {
+    for (const auto &pass : *(subModel->getPasses())) {
         if (pass->getPhase() == _phaseID) {
             return i;
         }
@@ -204,7 +202,7 @@ int ReflectionProbeBatchedQueue::getDefaultPassIndex(const scene::SubModel *subM
 
 int ReflectionProbeBatchedQueue::getReflectMapPassIndex(const scene::SubModel *subModel) const {
     int i = 0;
-    for (const auto &pass : subModel->getPasses()) {
+    for (const auto &pass : *(subModel->getPasses())) {
         if (pass->getPhase() == _phaseReflectMapID) {
             return i;
         }

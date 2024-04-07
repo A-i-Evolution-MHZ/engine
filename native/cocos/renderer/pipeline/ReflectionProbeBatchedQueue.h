@@ -26,6 +26,7 @@
 
 #include "Define.h"
 #include "cocos/base/Macros.h"
+#include "scene/Define.h"
 namespace cc {
 namespace scene {
 class Camera;
@@ -35,7 +36,6 @@ class ReflectionProbe;
 namespace pipeline {
 struct RenderObject;
 class RenderInstancedQueue;
-class RenderBatchedQueue;
 class RenderPipeline;
 
 //const uint32_t phaseID(PassPhase::getPhaseID("shadow-caster"));
@@ -49,9 +49,9 @@ public:
     void clear();
     void gatherRenderObjects(const scene::Camera *, gfx::CommandBuffer *, const scene::ReflectionProbe *probe);
     void add(const scene::Model *);
-    void recordCommandBuffer(gfx::Device *, gfx::RenderPass *, gfx::CommandBuffer *) const;
+    void recordCommandBuffer(gfx::Device *, gfx::RenderPass *, gfx::CommandBuffer *);
 
-    void resetMacro() const;
+    void resetMacro();
 
     bool isUseReflectMapPass(const scene::SubModel *subModel) const;
 
@@ -69,11 +69,10 @@ private:
     ccstd::vector<gfx::Shader *> _shaders;
     // manage memory manually
     RenderInstancedQueue *_instancedQueue{nullptr};
-    // manage memory manually
-    RenderBatchedQueue *_batchedQueue{nullptr};
     uint32_t _phaseID{0};
     uint32_t _phaseReflectMapID{0};
     ccstd::vector<const scene::SubModel *> _rgbeSubModels;
+    ccstd::vector<scene::IMacroPatch> _patches;
 };
 
 } // namespace pipeline

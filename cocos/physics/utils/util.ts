@@ -22,8 +22,9 @@
  THE SOFTWARE.
 */
 
-import { equals, Vec3, IVec3Like } from '../../core';
-import { Collider, CollisionEventType, IContactEquation, TriggerEventType } from '../framework';
+import { equals, Vec3, IVec3Like } from '@base/math';
+import { murmurhash2_32_gc } from '../../core';
+import { CharacterController, CharacterTriggerEventType, Collider, CollisionEventType, IContactEquation, TriggerEventType } from '../framework';
 
 export { cylinder } from '../../primitive';
 
@@ -31,15 +32,15 @@ interface IWrapped<T> {
     __cc_wrapper__: T;
 }
 
-export function setWrap<Wrapper> (object: any, wrapper: Wrapper) {
+export function setWrap<Wrapper> (object: any, wrapper: Wrapper): void {
     (object as IWrapped<Wrapper>).__cc_wrapper__ = wrapper;
 }
 
-export function getWrap<Wrapper> (object: any) {
+export function getWrap<Wrapper> (object: any): Wrapper {
     return (object as IWrapped<Wrapper>).__cc_wrapper__;
 }
 
-export function maxComponent (v: IVec3Like) {
+export function maxComponent (v: IVec3Like): number {
     return Math.max(v.x, Math.max(v.y, v.z));
 }
 
@@ -49,6 +50,13 @@ export const TriggerEventObject = {
     type: 'onTriggerEnter' as TriggerEventType,
     selfCollider: null as Collider | null,
     otherCollider: null as Collider | null,
+    impl: null as any,
+};
+
+export const CharacterTriggerEventObject = {
+    type: 'onControllerTriggerEnter' as CharacterTriggerEventType,
+    collider: null as Collider | null,
+    characterController: null as CharacterController | null,
     impl: null as any,
 };
 
@@ -62,23 +70,21 @@ export const CollisionEventObject = {
 
 export function shrinkPositions (buffer: Float32Array | number[]): number[] {
     const pos: number[] = [];
+    const posHashMap = {};
     if (buffer.length >= 3) {
-        // eslint-disable-next-line no-unused-expressions
-        pos[0] = buffer[0], pos[1] = buffer[1], pos[2] = buffer[2];
+        pos[0] = buffer[0];
+        pos[1] = buffer[1];
+        pos[2] = buffer[2];
         const len = buffer.length;
         for (let i = 3; i < len; i += 3) {
             const p0 = buffer[i];
             const p1 = buffer[i + 1];
             const p2 = buffer[i + 2];
-            const len2 = pos.length;
-            let isNew = true;
-            for (let j = 0; j < len2; j += 3) {
-                if (equals(p0, pos[j]) && equals(p1, pos[j + 1]) && equals(p2, pos[j + 2])) {
-                    isNew = false;
-                    break;
-                }
-            }
-            if (isNew) {
+            const str = String(p0) +  String(p1) + String(p2);
+            //todo: directly use buffer as input
+            const hash = murmurhash2_32_gc(str, 666);
+            if (posHashMap[hash] !== str) {
+                posHashMap[hash] = str;
                 pos.push(p0); pos.push(p1); pos.push(p2);
             }
         }
@@ -86,7 +92,7 @@ export function shrinkPositions (buffer: Float32Array | number[]): number[] {
     return pos;
 }
 
-export function absolute (v: Vec3) {
+export function absolute (v: Vec3): Vec3 {
     v.x = Math.abs(v.x);
     v.y = Math.abs(v.y);
     v.z = Math.abs(v.z);

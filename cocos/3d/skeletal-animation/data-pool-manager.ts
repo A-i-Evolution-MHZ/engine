@@ -22,11 +22,11 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import type { AnimationClip } from '../../animation/animation-clip';
 import type { Skeleton } from '../assets';
 import { Device } from '../../gfx';
 import { JointAnimationInfo, JointTexturePool } from './skeletal-animation-utils';
-import { cclegacy } from '../../core';
 
 export class DataPoolManager {
     public jointTexturePool: JointTexturePool;
@@ -37,15 +37,15 @@ export class DataPoolManager {
         this.jointAnimationInfo = new JointAnimationInfo(device);
     }
 
-    public releaseSkeleton (skeleton: Skeleton) {
+    public releaseSkeleton (skeleton: Skeleton): void {
         this.jointTexturePool.releaseSkeleton(skeleton);
     }
 
-    public releaseAnimationClip (clip: AnimationClip) {
+    public releaseAnimationClip (clip: AnimationClip): void {
         this.jointTexturePool.releaseAnimationClip(clip);
     }
 
-    public clear () {
+    public clear (): void {
         this.jointTexturePool.clear();
         this.jointAnimationInfo.clear();
     }

@@ -22,7 +22,8 @@
  THE SOFTWARE.
 */
 
-import { Vec2, Size, _decorator } from '../../../../core';
+import { Vec2, Size } from '@base/math';
+import { _decorator } from '../../../../core';
 import { Collider2D } from './collider-2d';
 import { ECollider2DType } from '../../physics-types';
 import { IBoxShape } from '../../../spec/i-physics-shape';
@@ -43,7 +44,7 @@ export class BoxCollider2D extends Collider2D {
      */
     @type(Size)
     @tooltip('i18n:physics2d.collider.size')
-    get size () {
+    get size (): Size {
         return this._size;
     }
     set size (v) {

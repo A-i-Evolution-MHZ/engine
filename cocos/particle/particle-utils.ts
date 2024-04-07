@@ -22,8 +22,9 @@
  THE SOFTWARE.
 */
 
+import { memop } from '@base/utils';
+import { CCObject } from '@base/object';
 import { instantiate } from '../serialization';
-import { CCObject, Pool } from '../core';
 import { Director, director } from '../game/director';
 import { Node } from '../scene-graph';
 import { ParticleSystem } from './particle-system';
@@ -39,14 +40,14 @@ export class ParticleUtils {
      * @en Instantiate particle system from prefab.
      * @zh 从 prefab 实例化粒子系统。
      */
-    public static instantiate (prefab) {
+    public static instantiate (prefab): CCObject {
         if (!this.registeredSceneEvent) {
             director.on(Director.EVENT_BEFORE_SCENE_LAUNCH, this.onSceneUnload, this);
             this.registeredSceneEvent = true;
         }
         if (!this.particleSystemPool.has(prefab._uuid)) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            this.particleSystemPool.set(prefab._uuid, new Pool<CCObject>(() => instantiate(prefab) || new Node(), 1, (prefab) => prefab.destroy()));
+            this.particleSystemPool.set(prefab._uuid, new memop.Pool<CCObject>((): any => instantiate(prefab) || new Node(), 1, (prefab): boolean => prefab.destroy()));
         }
         return this.particleSystemPool.get(prefab._uuid)!.alloc();
     }
@@ -56,7 +57,7 @@ export class ParticleUtils {
      * @zh 销毁创建出来的粒子系统prefab。
      * @param prefab @en Particle system prefab to destroy. @zh 要销毁的粒子系统prefab。
      */
-    public static destroy (prefab) {
+    public static destroy (prefab): void {
         if (this.particleSystemPool.has(prefab._prefab.asset._uuid)) {
             this.stop(prefab);
             this.particleSystemPool.get(prefab._prefab.asset._uuid)!.free(prefab);
@@ -68,7 +69,7 @@ export class ParticleUtils {
      * @zh 播放粒子系统。
      * @param rootNode @en Root node contains the particle system. @zh 包含粒子系统的根节点。
      */
-    public static play (rootNode: Node) {
+    public static play (rootNode: Node): void {
         for (const ps of rootNode.getComponentsInChildren(ParticleSystem)) {
             (ps).play();
         }
@@ -79,17 +80,17 @@ export class ParticleUtils {
      * @zh 停止播放粒子系统。
      * @param rootNode @en Root node contains the particle system. @zh 包含粒子系统的根节点。
      */
-    public static stop (rootNode: Node) {
+    public static stop (rootNode: Node): void {
         for (const ps of rootNode.getComponentsInChildren(ParticleSystem)) {
             (ps).stop();
         }
     }
 
-    private static particleSystemPool: Map<string, Pool<CCObject>> = new Map<string, Pool<CCObject>>();
+    private static particleSystemPool: Map<string, memop.Pool<CCObject>> = new Map<string, memop.Pool<CCObject>>();
     private static registeredSceneEvent = false;
 
-    private static onSceneUnload () {
-        this.particleSystemPool.forEach((value) => value.destroy());
+    private static onSceneUnload (): void {
+        this.particleSystemPool.forEach((value): void => value.destroy());
         this.particleSystemPool.clear();
     }
 }

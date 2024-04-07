@@ -22,18 +22,18 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import { Material } from '../../asset/assets/material';
 import { Texture, Sampler, InputAssembler, DescriptorSet, Shader } from '../../gfx';
 import { Node } from '../../scene-graph';
 import { Model } from '../../render-scene/scene/model';
 import { Layers } from '../../scene-graph/layers';
-import { cclegacy } from '../../core';
 import { Pass } from '../../render-scene/core/pass';
 import { IBatcher } from './i-batcher';
 
 const UI_VIS_FLAG = Layers.Enum.NONE | Layers.Enum.UI_3D;
 export class DrawBatch2D {
-    public get inputAssembler () {
+    public get inputAssembler (): InputAssembler | null {
         return this._inputAssembler;
     }
 
@@ -41,7 +41,7 @@ export class DrawBatch2D {
         this._inputAssembler = ia;
     }
 
-    public get descriptorSet () {
+    public get descriptorSet (): DescriptorSet | null {
         return this._descriptorSet;
     }
 
@@ -49,18 +49,18 @@ export class DrawBatch2D {
         this._descriptorSet = ds;
     }
 
-    public get visFlags () {
+    public get visFlags (): number {
         return this._visFlags;
     }
     public set visFlags (vis) {
         this._visFlags = vis;
     }
 
-    get passes () {
+    get passes (): Pass[] {
         return this._passes;
     }
 
-    public get shaders () {
+    public get shaders (): Shader[] {
         return this._shaders;
     }
 
@@ -71,7 +71,6 @@ export class DrawBatch2D {
     public texture: Texture | null = null;
     public sampler: Sampler | null = null;
     public useLocalData: Node | null = null;
-    public isStatic = false; // use less,remove when remove Static batch
     public textureHash = 0;
     public samplerHash = 0;
     private _passes: Pass[] = [];
@@ -81,11 +80,11 @@ export class DrawBatch2D {
     private _descriptorSet: DescriptorSet | null = null;
     //private declare _nativeObj: any;
 
-    public destroy (ui: IBatcher) {
+    public destroy (ui: IBatcher): void {
         this._passes = [];
     }
 
-    public clear () {
+    public clear (): void {
         // this.bufferBatch = null;
         this._inputAssembler = null;
         this._descriptorSet = null;
@@ -95,14 +94,13 @@ export class DrawBatch2D {
         this.textureHash = 0;
         this.samplerHash = 0;
         this.model = null;
-        this.isStatic = false;
         this.useLocalData = null;
         this.visFlags = UI_VIS_FLAG;
         // this.renderScene = null;
     }
 
     // object version
-    public fillPasses (mat: Material | null, dss, dssHash, patches) {
+    public fillPasses (mat: Material | null, dss, dssHash, patches): void {
         if (mat) {
             const passes = mat.passes;
             if (!passes) { return; }

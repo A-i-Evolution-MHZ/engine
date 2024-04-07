@@ -35,6 +35,9 @@ public:
     void end() override;
     void beginRenderPass(RenderPass *renderPass, Framebuffer *fbo, const Rect &renderArea, const Color *colors, float depth, uint32_t stencil, CommandBuffer *const *secondaryCBs, uint32_t secondaryCBCount) override;
     void endRenderPass() override;
+    void insertMarker(const MarkerInfo &marker) override;
+    void beginMarker(const MarkerInfo &marker) override;
+    void endMarker() override;
     void bindPipelineState(PipelineState *pso) override;
     void bindDescriptorSet(uint32_t set, DescriptorSet *descriptorSet, uint32_t dynamicOffsetCount, const uint32_t *dynamicOffsets) override;
     void bindInputAssembler(InputAssembler *ia) override;
@@ -48,9 +51,14 @@ public:
     void setStencilCompareMask(StencilFace face, uint32_t ref, uint32_t mask) override;
     void nextSubpass() override;
     void draw(const DrawInfo &info) override;
+    void drawIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) override;
+    void drawIndexedIndirect(Buffer *buffer, uint32_t offset, uint32_t count, uint32_t stride) override;
     void updateBuffer(Buffer *buff, const void *data, uint32_t size) override;
     void copyBuffersToTexture(const uint8_t *const *buffers, Texture *texture, const BufferTextureCopy *regions, uint32_t count) override;
     void blitTexture(Texture *srcTexture, Texture *dstTexture, const TextureBlit *regions, uint32_t count, Filter filter) override;
+    void copyTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) override;
+    void resolveTexture(Texture *srcTexture, Texture *dstTexture, const TextureCopy *regions, uint32_t count) override;
+    void copyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, const BufferCopy *regions, uint32_t count) override;
     void execute(CommandBuffer *const *cmdBuffs, uint32_t count) override;
     void dispatch(const DispatchInfo &info) override;
     void pipelineBarrier(const GeneralBarrier *barrier, const BufferBarrier *const *bufferBarriers, const Buffer *const *buffers, uint32_t bufferCount, const TextureBarrier *const *textureBarriers, const Texture *const *textures, uint32_t textureBarrierCount) override;

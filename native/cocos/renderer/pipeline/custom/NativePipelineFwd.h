@@ -29,30 +29,31 @@
  */
 // clang-format off
 #pragma once
+#include "cocos/base/std/hash/hash.h"
 #include "cocos/base/std/variant.h"
 #include "cocos/renderer/pipeline/InstancedBuffer.h"
 #include "cocos/renderer/pipeline/custom/NativeFwd.h"
-#include "cocos/renderer/pipeline/custom/RenderGraphFwd.h"
 
 namespace cc {
 
 namespace render {
 
-class NativeRasterQueueBuilder;
-class NativeRasterSubpassBuilder;
+class NativeRenderNode;
+class NativeSetter;
+class NativeRenderSubpassBuilderImpl;
+class NativeRenderQueueBuilder;
+class NativeRenderSubpassBuilder;
+class NativeMultisampleRenderSubpassBuilder;
 class NativeComputeSubpassBuilder;
-class NativeRasterPassBuilder;
+class NativeRenderPassBuilder;
+class NativeMultisampleRenderPassBuilder;
 class NativeComputeQueueBuilder;
 class NativeComputePassBuilder;
-class NativeMovePassBuilder;
-class NativeCopyPassBuilder;
-class NativeSceneTransversal;
 struct RenderInstancingQueue;
+struct GPUDrivenQueue;
 struct DrawInstance;
 struct RenderDrawQueue;
 struct NativeRenderQueue;
-class DefaultSceneVisitor;
-class DefaultForwardLightingTransversal;
 struct ResourceGroup;
 struct BufferPool;
 struct DescriptorSetPool;
@@ -60,15 +61,32 @@ struct UniformBlockResource;
 struct ProgramResource;
 struct LayoutGraphNodeResource;
 struct QuadResource;
+
+enum class ResourceType;
+
+struct SceneResource;
+struct CullingKey;
+struct CullingQueries;
+struct NativeRenderQueueDesc;
+struct SceneCulling;
 struct NativeRenderContext;
 class NativeProgramLibrary;
+struct PipelineCustomization;
 class NativePipeline;
 class NativeProgramProxy;
 class NativeRenderingModule;
-class NativeSetter;
 
 } // namespace render
 
 } // namespace cc
+
+namespace ccstd {
+
+template <>
+struct hash<cc::render::CullingKey> {
+    hash_t operator()(const cc::render::CullingKey& val) const noexcept;
+};
+
+} // namespace ccstd
 
 // clang-format on

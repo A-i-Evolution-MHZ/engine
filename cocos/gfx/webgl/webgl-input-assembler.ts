@@ -22,6 +22,7 @@
  THE SOFTWARE.
 */
 
+import { error } from '@base/debug';
 import { InputAssemblerInfo } from '../base/define';
 import { InputAssembler } from '../base/input-assembler';
 import { WebGLBuffer } from './webgl-buffer';
@@ -36,9 +37,9 @@ export class WebGLInputAssembler extends InputAssembler {
 
     private _gpuInputAssembler: IWebGLGPUInputAssembler | null = null;
 
-    public initialize (info: Readonly<InputAssemblerInfo>) {
+    public initialize (info: Readonly<InputAssemblerInfo>): void {
         if (info.vertexBuffers.length === 0) {
-            console.error('InputAssemblerInfo.vertexBuffers is null.');
+            error('InputAssemblerInfo.vertexBuffers is null.');
             return;
         }
 
@@ -59,8 +60,6 @@ export class WebGLInputAssembler extends InputAssembler {
         this._drawInfo.instanceCount = 0;
         this._drawInfo.firstInstance = 0;
 
-        this._indirectBuffer = info.indirectBuffer || null;
-
         const gpuVertexBuffers: IWebGLGPUBuffer[] = new Array<IWebGLGPUBuffer>(info.vertexBuffers.length);
         for (let i = 0; i < info.vertexBuffers.length; ++i) {
             const vb = info.vertexBuffers[i] as WebGLBuffer;
@@ -79,22 +78,16 @@ export class WebGLInputAssembler extends InputAssembler {
                 case 2: glIndexType = 0x1403; break; // WebGLRenderingContext.UNSIGNED_SHORT
                 case 4: glIndexType = 0x1405; break; // WebGLRenderingContext.UNSIGNED_INT
                 default: {
-                    console.error('Error index buffer stride.');
+                    error('Error index buffer stride.');
                 }
                 }
             }
-        }
-
-        let gpuIndirectBuffer: IWebGLGPUBuffer | null = null;
-        if (info.indirectBuffer) {
-            gpuIndirectBuffer = (info.indirectBuffer as WebGLBuffer).gpuBuffer;
         }
 
         this._gpuInputAssembler = {
             attributes: info.attributes,
             gpuVertexBuffers,
             gpuIndexBuffer,
-            gpuIndirectBuffer,
 
             glAttribs: [],
             glIndexType,
@@ -104,7 +97,7 @@ export class WebGLInputAssembler extends InputAssembler {
         WebGLCmdFuncCreateInputAssember(WebGLDeviceManager.instance, this._gpuInputAssembler);
     }
 
-    public destroy () {
+    public destroy (): void {
         const device = WebGLDeviceManager.instance;
         if (this._gpuInputAssembler && device.extensions.useVAO) {
             WebGLCmdFuncDestroyInputAssembler(device, this._gpuInputAssembler);

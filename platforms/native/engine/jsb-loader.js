@@ -55,7 +55,7 @@ function downloadScript (url, options, onComplete) {
     if (loadedScripts[url]) return onComplete && onComplete();
 
     download(url, (src, options, onComplete) => {
-        if (window.oh) {
+        if (window.oh && window.scriptEngineType === 'napi') {
             // TODO(qgh):OpenHarmony does not currently support dynamic require expressions
             window.oh.loadModule(src);
         } else if (__EDITOR__) {
@@ -119,7 +119,7 @@ function download (url, func, options, onFileProgress, onComplete) {
 function transformUrl (url, options) {
     let inLocal = false;
     let inCache = false;
-    if (REGEX.test(url)) {
+    if (REGEX.test(url) && !url.startsWith('file://')) {
         if (options.reload) {
             return { url };
         } else {
@@ -131,6 +131,9 @@ function transformUrl (url, options) {
         }
     } else {
         inLocal = true;
+        if (url.startsWith('file://')) {
+            url = url.replace(/^file:\/\//, '');
+        }
     }
     return { url, inLocal, inCache };
 }
@@ -216,46 +219,6 @@ function downloadBundle (nameOrUrl, options, onComplete) {
     });
 }
 
-const downloadCCON = (url, options, onComplete) => {
-    downloadJson(url, options, (err, json) => {
-        if (err) {
-            onComplete(err);
-            return;
-        }
-        const cconPreface = cc.internal.parseCCONJson(json);
-        const chunkPromises = Promise.all(cconPreface.chunks.map((chunk) => new Promise((resolve, reject) => {
-            downloadArrayBuffer(`${cc.path.mainFileName(url)}${chunk}`, {}, (errChunk, chunkBuffer) => {
-                if (errChunk) {
-                    reject(errChunk);
-                } else {
-                    resolve(new Uint8Array(chunkBuffer));
-                }
-            });
-        })));
-        chunkPromises.then((chunks) => {
-            const ccon = new cc.internal.CCON(cconPreface.document, chunks);
-            onComplete(null, ccon);
-        }).catch((err) => {
-            onComplete(err);
-        });
-    });
-};
-
-const downloadCCONB = (url, options, onComplete) => {
-    downloadArrayBuffer(url, options, (err, arrayBuffer) => {
-        if (err) {
-            onComplete(err);
-            return;
-        }
-        try {
-            const ccon = cc.internal.decodeCCONBinary(new Uint8Array(arrayBuffer));
-            onComplete(null, ccon);
-        } catch (err) {
-            onComplete(err);
-        }
-    });
-};
-
 function downloadArrayBuffer (url, options, onComplete) {
     download(url, parseArrayBuffer, options, options.onFileProgress, onComplete);
 }
@@ -288,6 +251,8 @@ parser.parsePKMTex = downloader.downloadDomImage;
 parser.parseASTCTex = downloader.downloadDomImage;
 parser.parsePlist = parsePlist;
 downloader.downloadScript = downloadScript;
+downloader._downloadArrayBuffer = downloadArrayBuffer;
+downloader._downloadJson = downloadJson;
 
 function loadAudioPlayer (url, options, onComplete) {
     cc.AudioPlayer.load(url).then((player) => {
@@ -327,9 +292,6 @@ downloader.register({
     '.ogg': downloadAsset,
     '.wav': downloadAsset,
     '.m4a': downloadAsset,
-
-    '.ccon': downloadCCON,
-    '.cconb': downloadCCONB,
 
     // Video
     '.mp4': downloadAsset,
@@ -422,21 +384,22 @@ parser.register({
 
     '.ExportJson': parseJson,
 });
-
-cc.assetManager.transformPipeline.append((task) => {
-    const input = task.output = task.input;
-    for (let i = 0, l = input.length; i < l; i++) {
-        const item = input[i];
-        if (item.config) {
-            item.options.__cacheBundleRoot__ = item.config.name;
+if (CC_BUILD) {
+    cc.assetManager.transformPipeline.append((task) => {
+        const input = task.output = task.input;
+        for (let i = 0, l = input.length; i < l; i++) {
+            const item = input[i];
+            if (item.config) {
+                item.options.__cacheBundleRoot__ = item.config.name;
+            }
+            if (item.ext === '.cconb') {
+                item.url = item.url.replace(item.ext, '.bin');
+            } else if (item.ext === '.ccon') {
+                item.url = item.url.replace(item.ext, '.json');
+            }
         }
-        if (item.ext === '.cconb') {
-            item.url = item.url.replace(item.ext, '.bin');
-        } else if (item.ext === '.ccon') {
-            item.url = item.url.replace(item.ext, '.json');
-        }
-    }
-});
+    });
+}
 
 const originInit = cc.assetManager.init;
 cc.assetManager.init = function (options) {

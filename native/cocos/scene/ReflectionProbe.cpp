@@ -25,8 +25,10 @@
 #include "scene/ReflectionProbe.h"
 #include "Define.h"
 #include "core/scene-graph/Scene.h"
+#include "core/scene-graph/SceneGlobals.h"
 #include "math/Quaternion.h"
 #include "scene/ReflectionProbeManager.h"
+#include "scene/Skybox.h"
 namespace cc {
 namespace scene {
 // right left up down front back
@@ -99,7 +101,6 @@ void ReflectionProbe::syncCameraParams(const Camera* camera) {
     _camera->setNearClip(camera->getNearClip());
     _camera->setFarClip(camera->getFarClip());
     _camera->setFov(camera->getFov());
-    _camera->setVisibility(camera->getVisibility());
     _camera->setClearFlag(camera->getClearFlag());
     _camera->setClearColor(camera->getClearColor());
     _camera->setPriority(camera->getPriority() - 1);
@@ -144,7 +145,7 @@ void ReflectionProbe::transformReflectionCamera(const Camera* sourceCamera) {
     _camera->update(true);
 
     // Transform the plane from world space to reflection camera space use the inverse transpose matrix
-    Vec4 viewSpaceProbe{ _node->getUp().x, _node->getUp().y, _node->getUp().z, -Vec3::dot(_node->getUp(), _node->getWorldPosition())};
+    Vec4 viewSpaceProbe{_node->getUp().x, _node->getUp().y, _node->getUp().z, -Vec3::dot(_node->getUp(), _node->getWorldPosition())};
     Mat4 matView = _camera->getMatView();
     matView.inverse();
     matView.transpose();
@@ -173,8 +174,7 @@ void ReflectionProbe::updatePlanarTexture(const scene::RenderScene* scene) {
     if (!scene) return;
     for (const auto& model : scene->getModels()) {
         // filter model by view visibility
-        auto useProbeType = static_cast<uint32_t>(scene::ReflectionProbe::UseProbeType::PLANAR_REFLECTION);
-        if (model->isEnabled() && model->getReflectionProbeType() == useProbeType) {
+        if (model->isEnabled() && model->getReflectionProbeType() == scene::UseReflectionProbeType::PLANAR_REFLECTION) {
             const auto visibility = _camera->getVisibility();
             const auto* const node = model->getNode();
             if ((model->getNode() && ((visibility & node->getLayer()) == node->getLayer())) ||
@@ -266,7 +266,7 @@ void ReflectionProbe::updateCameraDir(int32_t faceIdx) {
     _camera->update(true);
 }
 
-Vec2 ReflectionProbe::getRenderArea() const {
+Vec2 ReflectionProbe::renderArea() const {
     if (_probeType == ProbeType::PLANAR) {
         return Vec2(_realtimePlanarTexture->getWidth(), _realtimePlanarTexture->getHeight());
     }
@@ -290,6 +290,17 @@ void ReflectionProbe::packBackgroundColor() {
     Vec3 stepVec3 = sub < Vec3(0.5F, 0.5F, 0.5F) ? Vec3(0.5F, 0.5F, 0.5F) : sub;
     Vec3 encodeRounded(fVec3 + stepVec3);
     _camera->setClearColor(gfx::Color{encodeRounded.x / 255.F, encodeRounded.y / 255.F, encodeRounded.z / 255.F, e / 255.F});
+}
+
+bool ReflectionProbe::isRGBE() const {
+    if (_cubemap) {
+        return _cubemap->isRGBE;
+    }
+    // no baking will reflect the skybox
+    if (_node && _node->getScene() && _node->getScene()->getSceneGlobals()->getSkyboxInfo()->getEnvmap()) {
+        return _node->getScene()->getSceneGlobals()->getSkyboxInfo()->getEnvmap()->isRGBE;
+    }
+    return true;
 }
 
 } // namespace scene

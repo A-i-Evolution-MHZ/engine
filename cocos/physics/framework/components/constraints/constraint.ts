@@ -23,11 +23,11 @@
  THE SOFTWARE.
 */
 
-import { ccclass, requireComponent, displayOrder, type, readOnly, serializable } from 'cc.decorator';
-import { EDITOR } from 'internal:constants';
+import { ccclass, requireComponent, displayOrder, type, readOnly, serializable, tooltip } from 'cc.decorator';
+import { EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { Eventify } from '@base/event';
 import { Component } from '../../../../scene-graph';
 import { RigidBody } from '../rigid-body';
-import { Eventify, cclegacy } from '../../../../core';
 import { IBaseConstraint } from '../../../spec/i-physics-constraint';
 import { selector, createConstraint } from '../../physics-selector';
 import { EConstraintType } from '../../physics-enum';
@@ -58,6 +58,7 @@ export class Constraint extends Eventify(Component) {
     @type(RigidBody)
     @readOnly
     @displayOrder(-2)
+    @tooltip('i18n:physics3d.constraint.attachedBody')
     get attachedBody (): RigidBody | null {
         return this.getComponent(RigidBody);
     }
@@ -70,13 +71,14 @@ export class Constraint extends Eventify(Component) {
      */
     @type(RigidBody)
     @displayOrder(-1)
+    @tooltip('i18n:physics3d.constraint.connectedBody')
     get connectedBody (): RigidBody | null {
         return this._connectedBody;
     }
 
     set connectedBody (v: RigidBody | null) {
         this._connectedBody = v;
-        if (!EDITOR || cclegacy.GAME_VIEW) {
+        if (!EDITOR_NOT_IN_PREVIEW) {
             if (this._constraint) this._constraint.setConnectedBody(v);
         }
     }
@@ -88,13 +90,14 @@ export class Constraint extends Eventify(Component) {
      * 获取或设置关节连接的两刚体之间是否开启碰撞。
      */
     @displayOrder(0)
-    get enableCollision () {
+    @tooltip('i18n:physics3d.constraint.enableCollision')
+    get enableCollision (): boolean {
         return this._enableCollision;
     }
 
     set enableCollision (v) {
         this._enableCollision = v;
-        if (!EDITOR || cclegacy.GAME_VIEW) {
+        if (!EDITOR_NOT_IN_PREVIEW) {
             if (this._constraint) this._constraint.setEnableCollision(v);
         }
     }
@@ -124,25 +127,25 @@ export class Constraint extends Eventify(Component) {
 
     /// COMPONENT LIFECYCLE ///
 
-    protected onLoad () {
+    protected onLoad (): void {
         if (!selector.runInEditor) return;
         this._constraint = createConstraint(this.TYPE);
         this._constraint.initialize(this);
     }
 
-    protected onEnable () {
+    protected onEnable (): void {
         if (this._constraint) {
             this._constraint.onEnable!();
         }
     }
 
-    protected onDisable () {
+    protected onDisable (): void {
         if (this._constraint) {
             this._constraint.onDisable!();
         }
     }
 
-    protected onDestroy () {
+    protected onDestroy (): void {
         if (this._constraint) {
             this._constraint.onDestroy!();
         }

@@ -22,7 +22,9 @@
  THE SOFTWARE.
 */
 
-import { CCFloat, Vec2, _decorator } from '../../../../core';
+import { CCFloat } from '@base/object';
+import { Vec2 } from '@base/math';
+import { _decorator } from '../../../../core';
 import { Collider2D } from './collider-2d';
 import { ECollider2DType } from '../../physics-types';
 import { ICircleShape } from '../../../spec/i-physics-shape';
@@ -43,7 +45,7 @@ export class CircleCollider2D extends Collider2D {
      */
     @type(CCFloat)
     @tooltip('i18n:physics2d.collider.radius')
-    get radius () {
+    get radius (): number {
         return this._radius;
     }
     set radius (v) {

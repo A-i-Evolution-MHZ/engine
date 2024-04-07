@@ -42,6 +42,7 @@ struct GLES2GPUConstantRegistry {
     bool useDrawInstanced = false;
     bool useInstancedArrays = false;
     bool useDiscardFramebuffer = false;
+    bool debugMarker = false;
 };
 
 class GLES2GPUStateCache;
@@ -98,7 +99,6 @@ struct GLES2GPUBuffer {
     GLenum glTarget = 0;
     GLuint glBuffer = 0;
     uint8_t *buffer = nullptr;
-    DrawInfoList indirects;
 };
 using GLES2GPUBufferList = ccstd::vector<GLES2GPUBuffer *>;
 
@@ -118,10 +118,10 @@ struct GLES2GPUTexture {
     uint32_t size{0};
     uint32_t arrayLayer{1};
     uint32_t mipLevel{1};
-    SampleCount samples{SampleCount::ONE};
+    SampleCount samples{SampleCount::X1};
     TextureFlags flags{TextureFlagBit::NONE};
     bool isPowerOf2{false};
-    bool memoryless{false};
+    bool memoryAllocated{true}; // false if swapchain image or implicit ms render buffer.
     GLenum glTarget{0};
     GLenum glInternalFmt{0};
     GLenum glFormat{0};
@@ -134,6 +134,7 @@ struct GLES2GPUTexture {
     GLenum glWrapT{0};
     GLenum glMinFilter{0};
     GLenum glMagFilter{0};
+    GLenum glReduction{0};
     GLES2GPUSwapchain *swapchain{nullptr};
 };
 
@@ -156,11 +157,13 @@ struct GLES2GPUSampler {
     Address addressU = Address::CLAMP;
     Address addressV = Address::CLAMP;
     Address addressW = Address::CLAMP;
+    Reduction reduction = Reduction::WEIGHTED_AVERAGE;
     GLenum glMinFilter = 0;
     GLenum glMagFilter = 0;
     GLenum glWrapS = 0;
     GLenum glWrapT = 0;
     GLenum glWrapR = 0;
+    GLenum glReduction = 0;
 };
 
 struct GLES2GPUInput {
@@ -251,7 +254,6 @@ struct GLES2GPUInputAssembler {
     AttributeList attributes;
     GLES2GPUBufferList gpuVertexBuffers;
     GLES2GPUBuffer *gpuIndexBuffer = nullptr;
-    GLES2GPUBuffer *gpuIndirectBuffer = nullptr;
     GLES2GPUAttributeList glAttribs;
     GLenum glIndexType = 0;
     ccstd::unordered_map<size_t, GLuint> glVAOs;

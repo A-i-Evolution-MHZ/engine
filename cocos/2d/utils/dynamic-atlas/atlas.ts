@@ -22,11 +22,12 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
+import { warn } from '@base/debug';
 import { PixelFormat } from '../../../asset/assets/asset-enum';
 import { ImageAsset } from '../../../asset/assets/image-asset';
 import { Texture2D } from '../../../asset/assets/texture-2d';
 import { BufferTextureCopy } from '../../../gfx';
-import { cclegacy } from '../../../core';
 import { SpriteFrame } from '../../assets/sprite-frame';
 
 const space = 2;
@@ -70,7 +71,11 @@ export class Atlas {
      * @method insertSpriteFrame
      * @param spriteFrame  the sprite frame that will be inserted in the atlas.
      */
-    public insertSpriteFrame (spriteFrame: SpriteFrame) {
+    public insertSpriteFrame (spriteFrame: SpriteFrame): {
+        x: number;
+        y: number;
+        texture: DynamicAtlasTexture;
+    } | null {
         const rect = spriteFrame.rect;
         // Todo:No renderTexture
         const texture = spriteFrame.texture as Texture2D;
@@ -151,7 +156,7 @@ export class Atlas {
      * @method deleteAtlasTexture
      * @param texture  the texture that will be removed from the atlas.
      */
-    public deleteInnerTexture (texture: Texture2D) {
+    public deleteInnerTexture (texture: Texture2D): void {
         if (texture && this._innerTextureInfos[texture.getId()]) {
             delete this._innerTextureInfos[texture.getId()];
             this._count--;
@@ -167,7 +172,7 @@ export class Atlas {
      *
      * @method isEmpty
      */
-    public isEmpty () {
+    public isEmpty (): boolean {
         return this._count <= 0;
     }
 
@@ -180,7 +185,7 @@ export class Atlas {
      *
      * @method reset
     */
-    public reset () {
+    public reset (): void {
         this._x = space;
         this._y = space;
         this._nexty = space;
@@ -206,7 +211,7 @@ export class Atlas {
      *
      * @method destroy
     */
-    public destroy () {
+    public destroy (): void {
         this.reset();
         this._texture.destroy();
     }
@@ -222,7 +227,7 @@ export class DynamicAtlasTexture extends Texture2D {
      *
      * @method initWithSize
      */
-    public initWithSize (width: number, height: number, format: number = PixelFormat.RGBA8888) {
+    public initWithSize (width: number, height: number, format: number = PixelFormat.RGBA8888): void {
         this.reset({
             width,
             height,
@@ -242,7 +247,7 @@ export class DynamicAtlasTexture extends Texture2D {
      * @param {Number} x
      * @param {Number} y
      */
-    public drawTextureAt (image: ImageAsset, x: number, y: number) {
+    public drawTextureAt (image: ImageAsset, x: number, y: number): void {
         const gfxTexture = this.getGFXTexture();
         if (!image || !gfxTexture) {
             return;
@@ -250,7 +255,7 @@ export class DynamicAtlasTexture extends Texture2D {
 
         const gfxDevice = this._getGFXDevice();
         if (!gfxDevice) {
-            console.warn('Unable to get device');
+            warn('Unable to get device');
             return;
         }
 
@@ -259,6 +264,6 @@ export class DynamicAtlasTexture extends Texture2D {
         region.texOffset.y = y;
         region.texExtent.width = image.width;
         region.texExtent.height = image.height;
-        gfxDevice.copyTexImagesToTexture([image.data as HTMLCanvasElement], gfxTexture, [region]);
+        gfxDevice.copyImageDatasToTexture([image.imageData], gfxTexture, [region]);
     }
 }

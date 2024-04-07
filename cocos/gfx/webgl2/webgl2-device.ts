@@ -21,8 +21,9 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-
-import { systemInfo } from 'pal/system-info';
+import { ImageData } from 'pal/image';
+import { systemInfo, BrowserType, OS } from '@pal/system-info';
+import { debug, error } from '@base/debug';
 import { DescriptorSet } from '../base/descriptor-set';
 import { DescriptorSetLayout } from '../base/descriptor-set-layout';
 import { PipelineLayout } from '../base/pipeline-layout';
@@ -52,40 +53,35 @@ import { WebGL2Sampler } from './states/webgl2-sampler';
 import { WebGL2Shader } from './webgl2-shader';
 import { WebGL2Swapchain, getExtensions, getContext } from './webgl2-swapchain';
 import { WebGL2Texture } from './webgl2-texture';
-import {
-    CommandBufferType, DescriptorSetLayoutInfo, DescriptorSetInfo,
-    PipelineLayoutInfo, BufferViewInfo, CommandBufferInfo, BufferInfo, FramebufferInfo, InputAssemblerInfo,
-    QueueInfo, RenderPassInfo, SamplerInfo, ShaderInfo, TextureInfo, TextureViewInfo, DeviceInfo, GeneralBarrierInfo, TextureBarrierInfo,
-    BufferBarrierInfo, QueueType, API, Feature, BufferTextureCopy, SwapchainInfo, FormatFeature, Format, FormatFeatureBit,
-} from '../base/define';
+import { CommandBufferType, DescriptorSetLayoutInfo, DescriptorSetInfo, PipelineLayoutInfo, BufferViewInfo, CommandBufferInfo, BufferInfo, FramebufferInfo, InputAssemblerInfo, QueueInfo, RenderPassInfo, SamplerInfo, ShaderInfo, TextureInfo, TextureViewInfo, DeviceInfo, GeneralBarrierInfo, TextureBarrierInfo, BufferBarrierInfo, QueueType, API, Feature, BufferTextureCopy, SwapchainInfo, FormatFeature, Format, FormatFeatureBit } from '../base/define';
 import { WebGL2CmdFuncCopyTextureToBuffers, WebGL2CmdFuncCopyBuffersToTexture, WebGL2CmdFuncCopyTexImagesToTexture } from './webgl2-commands';
 import { GeneralBarrier } from '../base/states/general-barrier';
 import { TextureBarrier } from '../base/states/texture-barrier';
 import { BufferBarrier } from '../base/states/buffer-barrier';
-import { debug, sys } from '../../core';
+import { sys } from '../../core';
 import { Swapchain } from '../base/swapchain';
 import { IWebGL2Extensions, WebGL2DeviceManager } from './webgl2-define';
-import { IWebGL2BindingMapping } from './webgl2-gpu-objects';
-import { BrowserType, OS } from '../../../pal/system-info/enum-type';
+import { IWebGL2BindingMapping, IWebGL2BlitManager } from './webgl2-gpu-objects';
+import type { WebGL2StateCache } from './webgl2-state-cache';
 
 export class WebGL2Device extends Device {
-    get gl () {
+    get gl (): WebGL2RenderingContext {
         return this._context!;
     }
 
-    get extensions () {
+    get extensions (): IWebGL2Extensions {
         return this._swapchain!.extensions;
     }
 
-    get stateCache () {
+    get stateCache (): WebGL2StateCache {
         return this._swapchain!.stateCache;
     }
 
-    get nullTex2D () {
+    get nullTex2D (): WebGL2Texture {
         return this._swapchain!.nullTex2D;
     }
 
-    get nullTexCube () {
+    get nullTexCube (): WebGL2Texture {
         return this._swapchain!.nullTexCube;
     }
 
@@ -93,11 +89,11 @@ export class WebGL2Device extends Device {
         return this._textureExclusive;
     }
 
-    get bindingMappings () {
+    get bindingMappings (): IWebGL2BindingMapping {
         return this._bindingMappings!;
     }
 
-    get blitManager () {
+    get blitManager (): IWebGL2BlitManager | null {
         return this._swapchain!.blitManager;
     }
 
@@ -138,7 +134,7 @@ export class WebGL2Device extends Device {
         const gl = this._context = getContext(Device.canvas);
 
         if (!gl) {
-            console.error('This device does not support WebGL.');
+            error('This device does not support WebGL2.');
             return false;
         }
 
@@ -253,11 +249,11 @@ export class WebGL2Device extends Device {
         this._swapchain = null;
     }
 
-    public flushCommands (cmdBuffs: Readonly<CommandBuffer[]>) {}
+    public flushCommands (cmdBuffs: Readonly<CommandBuffer[]>): void {}
 
-    public acquire (swapchains: Readonly<Swapchain[]>) {}
+    public acquire (swapchains: Readonly<Swapchain[]>): void {}
 
-    public present () {
+    public present (): void {
         const queue = (this._queue as WebGL2Queue);
         this._numDrawCalls = queue.numDrawCalls;
         this._numInstances = queue.numInstances;
@@ -265,7 +261,7 @@ export class WebGL2Device extends Device {
         queue.clear();
     }
 
-    protected initFormatFeatures (exts: IWebGL2Extensions) {
+    protected initFormatFeatures (exts: IWebGL2Extensions): void {
         this._formatFeatures.fill(FormatFeatureBit.NONE);
 
         this._textureExclusive.fill(true);
@@ -576,7 +572,7 @@ export class WebGL2Device extends Device {
         return [this._swapchain as Swapchain];
     }
 
-    public getGeneralBarrier (info: Readonly<GeneralBarrierInfo>) {
+    public getGeneralBarrier (info: Readonly<GeneralBarrierInfo>): GeneralBarrier {
         const hash = GeneralBarrier.computeHash(info);
         if (!this._generalBarrierss.has(hash)) {
             this._generalBarrierss.set(hash, new GeneralBarrier(info, hash));
@@ -584,7 +580,7 @@ export class WebGL2Device extends Device {
         return this._generalBarrierss.get(hash)!;
     }
 
-    public getTextureBarrier (info: Readonly<TextureBarrierInfo>) {
+    public getTextureBarrier (info: Readonly<TextureBarrierInfo>): TextureBarrier {
         const hash = TextureBarrier.computeHash(info);
         if (!this._textureBarriers.has(hash)) {
             this._textureBarriers.set(hash, new TextureBarrier(info, hash));
@@ -592,7 +588,7 @@ export class WebGL2Device extends Device {
         return this._textureBarriers.get(hash)!;
     }
 
-    public getBufferBarrier (info: Readonly<BufferBarrierInfo>) {
+    public getBufferBarrier (info: Readonly<BufferBarrierInfo>): BufferBarrier {
         const hash = BufferBarrier.computeHash(info);
         if (!this._bufferBarriers.has(hash)) {
             this._bufferBarriers.set(hash, new BufferBarrier(info, hash));
@@ -600,7 +596,7 @@ export class WebGL2Device extends Device {
         return this._bufferBarriers.get(hash)!;
     }
 
-    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>) {
+    public copyBuffersToTexture (buffers: Readonly<ArrayBufferView[]>, texture: Texture, regions: Readonly<BufferTextureCopy[]>): void {
         WebGL2CmdFuncCopyBuffersToTexture(
             this,
             buffers,
@@ -609,7 +605,7 @@ export class WebGL2Device extends Device {
         );
     }
 
-    public copyTextureToBuffers (texture: Readonly<Texture>, buffers: ArrayBufferView[], regions: Readonly<BufferTextureCopy[]>) {
+    public copyTextureToBuffers (texture: Readonly<Texture>, buffers: ArrayBufferView[], regions: Readonly<BufferTextureCopy[]>): void {
         WebGL2CmdFuncCopyTextureToBuffers(
             this,
             (texture as WebGL2Texture).gpuTexture,
@@ -622,12 +618,44 @@ export class WebGL2Device extends Device {
         texImages: Readonly<TexImageSource[]>,
         texture: Texture,
         regions: Readonly<BufferTextureCopy[]>,
-    ) {
+    ): void {
         WebGL2CmdFuncCopyTexImagesToTexture(
             this,
             texImages,
             (texture as WebGL2Texture).gpuTexture,
             regions,
         );
+    }
+
+    public copyImageDatasToTexture (
+        imageDatas: Readonly<ImageData[]>,
+        texture: Texture,
+        regions: Readonly<BufferTextureCopy[]>,
+    ): void {
+        const texImages: TexImageSource[] = [];
+        const buffers: ArrayBufferView[] = [];
+        imageDatas.forEach((item) => {
+            if ('_data' in item.source && ArrayBuffer.isView(item.data)) {
+                buffers.push(item.data);
+            } else {
+                texImages.push(item.source as TexImageSource);
+            }
+        });
+        if (texImages.length > 0) {
+            WebGL2CmdFuncCopyTexImagesToTexture(
+                this,
+                texImages,
+                (texture as WebGL2Texture).gpuTexture,
+                regions,
+            );
+        }
+        if (buffers.length > 0) {
+            WebGL2CmdFuncCopyBuffersToTexture(
+                this,
+                buffers,
+                (texture as WebGL2Texture).gpuTexture,
+                regions,
+            );
+        }
     }
 }

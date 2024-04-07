@@ -23,8 +23,9 @@
 */
 
 import { Pass } from '../render-scene';
-import { IInstancedAttributeBlock, SubModel } from '../render-scene/scene';
-import { UNIFORM_LIGHTMAP_TEXTURE_BINDING, UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING, UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING } from './define';
+import { SubModel } from '../render-scene/scene';
+import { UNIFORM_LIGHTMAP_TEXTURE_BINDING, UNIFORM_REFLECTION_PROBE_BLEND_CUBEMAP_BINDING, UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING,
+    UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING } from './define';
 import { BufferUsageBit, MemoryUsageBit, Device, Texture, InputAssembler, InputAssemblerInfo,
     Attribute, Buffer, BufferInfo, CommandBuffer, Shader, DescriptorSet  } from '../gfx';
 
@@ -41,6 +42,7 @@ export interface IInstancedItem {
     reflectionProbeCubemap: Texture;
     reflectionProbePlanarMap: Texture;
     useReflectionProbeType: number;
+    reflectionProbeBlendCubemap: Texture;
 }
 
 const INITIAL_CAPACITY = 32;
@@ -58,7 +60,7 @@ export class InstancedBuffer {
         this.pass = pass;
     }
 
-    public destroy () {
+    public destroy (): void {
         for (let i = 0; i < this.instances.length; ++i) {
             const instance = this.instances[i];
             instance.vb.destroy();
@@ -67,7 +69,7 @@ export class InstancedBuffer {
         this.instances.length = 0;
     }
 
-    public merge (subModel: SubModel, passIdx: number, shaderImplant: Shader | null = null) {
+    public merge (subModel: SubModel, passIdx: number, shaderImplant: Shader | null = null): void {
         const attrs = subModel.instancedAttributeBlock;
         const stride = attrs.buffer.length;
         if (!stride) { return; } // we assume per-instance attributes are always present
@@ -75,6 +77,7 @@ export class InstancedBuffer {
         const lightingMap = subModel.descriptorSet.getTexture(UNIFORM_LIGHTMAP_TEXTURE_BINDING);
         const reflectionProbeCubemap = subModel.descriptorSet.getTexture(UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING);
         const reflectionProbePlanarMap = subModel.descriptorSet.getTexture(UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING);
+        const reflectionProbeBlendCubemap = subModel.descriptorSet.getTexture(UNIFORM_REFLECTION_PROBE_BLEND_CUBEMAP_BINDING);
         const useReflectionProbeType = subModel.useReflectionProbeType;
         let shader = shaderImplant;
         if (!shader) {
@@ -92,13 +95,15 @@ export class InstancedBuffer {
 
             if (instance.useReflectionProbeType !== useReflectionProbeType) {
                 continue;
-            } else {
-                if (instance.reflectionProbeCubemap.objectID !== reflectionProbeCubemap.objectID) {
-                    continue;
-                }
-                if (instance.reflectionProbePlanarMap.objectID !== reflectionProbePlanarMap.objectID) {
-                    continue;
-                }
+            }
+            if (instance.reflectionProbeCubemap.objectID !== reflectionProbeCubemap.objectID) {
+                continue;
+            }
+            if (instance.reflectionProbePlanarMap.objectID !== reflectionProbePlanarMap.objectID) {
+                continue;
+            }
+            if (instance.reflectionProbeBlendCubemap.objectID !== reflectionProbeBlendCubemap.objectID) {
+                continue;
             }
 
             if (instance.stride !== stride) {
@@ -143,11 +148,12 @@ export class InstancedBuffer {
         vertexBuffers.push(vb);
         const iaInfo = new InputAssemblerInfo(attributes, vertexBuffers, indexBuffer);
         const ia = this._device.createInputAssembler(iaInfo);
-        this.instances.push({ count: 1, capacity: INITIAL_CAPACITY, vb, data, ia, stride, shader, descriptorSet, lightingMap, reflectionProbeCubemap, reflectionProbePlanarMap, useReflectionProbeType });
+        // eslint-disable-next-line max-len
+        this.instances.push({ count: 1, capacity: INITIAL_CAPACITY, vb, data, ia, stride, shader, descriptorSet, lightingMap, reflectionProbeCubemap, reflectionProbePlanarMap, useReflectionProbeType, reflectionProbeBlendCubemap });
         this.hasPendingModels = true;
     }
 
-    public uploadBuffers (cmdBuff: CommandBuffer) {
+    public uploadBuffers (cmdBuff: CommandBuffer): void {
         for (let i = 0; i < this.instances.length; ++i) {
             const instance = this.instances[i];
             if (!instance.count) { continue; }
@@ -156,7 +162,7 @@ export class InstancedBuffer {
         }
     }
 
-    public clear () {
+    public clear (): void {
         for (let i = 0; i < this.instances.length; ++i) {
             const instance = this.instances[i];
             instance.count = 0;

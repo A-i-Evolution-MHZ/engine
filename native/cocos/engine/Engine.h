@@ -48,6 +48,7 @@ class DebugRenderer;
 class Profiler;
 class BuiltinResMgr;
 class ProgramLib;
+class IXRInterface;
 
 #define NANOSECONDS_PER_SECOND 1000000000
 #define NANOSECONDS_60FPS      16666667L
@@ -102,17 +103,26 @@ public:
 
     bool isInited() const override { return _inited; }
 
+    /**
+     * @brief Set the blocking timeout for tick function,
+     */
+    int32_t getBlockingTimeout() const { return _blockingTimeoutMS; }
+
+    /**
+     * @brief The timeout value, in milliseconds, for blocking detection.
+     * If set to 0, the blocking detection mechanism will be disabled.
+     * Otherwise, the system will monitor the execution time of the operation
+     */
+    void setBlockingTimeout(int32_t timeout) { _blockingTimeoutMS = timeout; }
+
 private:
     void destroy();
     void tick();
     bool redirectWindowEvent(const WindowEvent &ev);
     void doRestart();
 
-    bool _close{false};
-    bool _pause{false};
-    bool _resune{false};
     SchedulerPtr _scheduler{nullptr};
-    int64_t _prefererredNanosecondsPerFrame{NANOSECONDS_60FPS};
+    int64_t _preferredNanosecondsPerFrame{NANOSECONDS_60FPS};
     uint _totalFrames{0};
     cc::Vec2 _viewLogicalSize{0, 0};
     bool _needRestart{false};
@@ -134,7 +144,12 @@ private:
 
     events::WindowEvent::Listener _windowEventListener;
 
+    // The timeout value, in milliseconds, for blocking detection.
+    int32_t _blockingTimeoutMS{0};
+
     CC_DISALLOW_COPY_MOVE_ASSIGN(Engine);
+
+    IXRInterface *_xr{nullptr};
 };
 
 } // namespace cc

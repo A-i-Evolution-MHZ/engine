@@ -59,12 +59,14 @@ gfx::DescriptorSet* getOrCreatePerPassDescriptorSet(
 
 void generateConstantMacros(
     gfx::Device* device,
-    ccstd::string& constantMacros,
-    bool clusterEnabled);
+    ccstd::string& constantMacros);
 
 void printLayoutGraphData(
     const LayoutGraphData& lg, std::ostream& oss,
     boost::container::pmr::memory_resource* scratch);
+
+gfx::TextureType getTextureType(ResourceDimension dimension, uint32_t arraySize);
+ResourceDimension getResourceDimension(gfx::TextureType type);
 
 } // namespace render
 

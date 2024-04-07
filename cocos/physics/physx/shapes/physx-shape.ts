@@ -23,13 +23,11 @@
 */
 
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { IVec3Like, Quat, Vec3, geometry } from '../../../core';
+import { IVec3Like, Quat, Vec3 } from '@base/math';
+import { geometry } from '../../../core';
 import { Collider, RigidBody, PhysicsMaterial, PhysicsSystem } from '../../framework';
 import { IBaseShape } from '../../spec/i-physics-shape';
-import {
-    addReference, getShapeFlags, getShapeMaterials, getShapeWorldBounds, getTempTransform,
-    PX, removeReference, _trans,
-} from '../physx-adapter';
+import { addReference, getShapeFlags, getShapeMaterials, getShapeWorldBounds, getTempTransform, PX, removeReference, _trans } from '../physx-adapter';
 import { EFilterDataWord3 } from '../physx-enum';
 import { PhysXSharedBody } from '../physx-shared-body';
 import { PhysXWorld } from '../physx-world';
@@ -208,7 +206,7 @@ export class PhysXShape implements IBaseShape {
         this._sharedBody.removeMask(v);
     }
 
-    updateFilterData (filterData: any) {
+    updateFilterData (filterData: any): void {
         this._word3 = EFilterDataWord3.DETECT_CONTACT_CCD;
         if (this._collider.needTriggerEvent) {
             this._word3 |= EFilterDataWord3.DETECT_TRIGGER_EVENT;
@@ -216,16 +214,16 @@ export class PhysXShape implements IBaseShape {
         if (this._collider.needCollisionEvent) {
             this._word3 |= EFilterDataWord3.DETECT_CONTACT_EVENT | EFilterDataWord3.DETECT_CONTACT_POINT;
         }
-        filterData.word2 = this.id;
+        //filterData.word2 = this.id;//useless
         filterData.word3 = this._word3;
         this.setFilerData(filterData);
     }
 
-    updateEventListener () {
+    updateEventListener (): void {
         if (this._sharedBody) this.updateFilterData(this._sharedBody.filterData);
     }
 
-    updateByReAdd () {
+    updateByReAdd (): void {
         if (this._isEnabled) {
             this.removeFromBody();
             this.addToBody();
@@ -233,18 +231,18 @@ export class PhysXShape implements IBaseShape {
     }
 
     // virtual
-    setFilerData (filterData: any) {
+    setFilerData (filterData: any): void {
         this._impl.setQueryFilterData(filterData);
         this._impl.setSimulationFilterData(filterData);
     }
 
     // virtual
-    addToBody () {
+    addToBody (): void {
         this._sharedBody.addShape(this);
     }
 
     // virtual
-    removeFromBody () {
+    removeFromBody (): void {
         this._sharedBody.removeShape(this);
     }
 }

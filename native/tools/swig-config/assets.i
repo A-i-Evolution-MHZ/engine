@@ -4,6 +4,9 @@
 // Note: doesn't support number prefix
 %module(target_namespace="jsb") assets
 
+// Disable some swig warnings, find warning number reference here ( https://www.swig.org/Doc4.1/Warnings.html )
+#pragma SWIG nowarn=503,302,401,317,402
+
 // Insert code at the beginning of generated header file (.h)
 %insert(header_file) %{
 #pragma once
@@ -123,6 +126,7 @@
 //  4. 'Attribute Section' should be placed before 'Import Section' and 'Include Section'
 //
 %attribute(cc::Asset, ccstd::string&, _uuid, getUuid, setUuid);
+%attribute(cc::Asset, ccstd::string&, uuid, getUuid);
 %attribute(cc::Asset, ccstd::string, nativeUrl, getNativeUrl);
 %attribute(cc::Asset, cc::NativeDep, _nativeDep, getNativeDep);
 %attribute(cc::Asset, bool, isDefault, isDefault);

@@ -23,23 +23,26 @@
 */
 
 /* eslint-disable @typescript-eslint/no-unsafe-return */
+import { error } from '@base/debug';
+import { js, memop } from '@base/utils';
+import { IVec3Like, IQuatLike, Vec3, Quat } from '@base/math';
 import { IPhysicsWorld, IRaycastOptions } from '../spec/i-physics-world';
-import { PhysicsMaterial, PhysicsRayResult, CollisionEventType, TriggerEventType } from '../framework';
-import { error, RecyclePool, js, IVec3Like, geometry } from '../../core';
+import { PhysicsMaterial, PhysicsRayResult, CollisionEventType, TriggerEventType, CharacterTriggerEventType, CharacterControllerContact } from '../framework';
+import { geometry } from '../../core';
 import { IBaseConstraint } from '../spec/i-physics-constraint';
 import { PhysXRigidBody } from './physx-rigid-body';
-import {
-    addActorToScene, raycastAll, simulateScene, initializeWorld, raycastClosest,
-    gatherEvents, getWrapShape, PX, getContactDataOrByteOffset,
-} from './physx-adapter';
+import { addActorToScene, raycastAll, simulateScene, initializeWorld, raycastClosest, sweepClosest, gatherEvents, getWrapShape, PX, getContactDataOrByteOffset, sweepAll } from './physx-adapter';
 import { PhysXSharedBody } from './physx-shared-body';
 import { TupleDictionary } from '../utils/tuple-dictionary';
 import { PhysXContactEquation } from './physx-contact-equation';
-import { CollisionEventObject, TriggerEventObject } from '../utils/util';
+import { CollisionEventObject, TriggerEventObject, CharacterTriggerEventObject, VEC3_0 } from '../utils/util';
 import { PhysXShape } from './shapes/physx-shape';
 import { EFilterDataWord3 } from './physx-enum';
 import { PhysXInstance } from './physx-instance';
 import { Node } from '../../scene-graph';
+import { PhysXCharacterController } from './character-controllers/physx-character-controller';
+
+const CC_QUAT_0 = new Quat();
 
 export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
     setAllowSleep (_v: boolean): void { }
@@ -52,8 +55,15 @@ export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
     readonly scene: any;
     readonly callback = PhysXCallback;
     readonly wrappedBodies: PhysXSharedBody[] = [];
+    readonly ccts: PhysXCharacterController[] = [];
+
+    controllerManager: any;
 
     private _isNeedFetch = false;
+
+    private static _sweepBoxGeometry: any;
+    private static _sweepSphereGeometry: any;
+    private static _sweepCapsuleGeometry: any;
 
     constructor () {
         super();
@@ -77,14 +87,14 @@ export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
         }
     }
 
-    private _simulate (dt: number) {
+    private _simulate (dt: number): void {
         if (!this._isNeedFetch) {
             simulateScene(this.scene, dt);
             this._isNeedFetch = true;
         }
     }
 
-    private _fetchResults () {
+    private _fetchResults (): void {
         if (this._isNeedFetch) {
             this.scene.fetchResults(true);
             this._isNeedFetch = false;
@@ -95,6 +105,12 @@ export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
         for (let i = 0; i < this.wrappedBodies.length; i++) {
             const body = this.wrappedBodies[i];
             body.syncSceneToPhysics();
+        }
+        const ccts = this.ccts;
+        const length = ccts.length;
+        for (let i = 0; i < length; i++) {
+            const cct = ccts[i];
+            cct.syncSceneToPhysics();
         }
     }
 
@@ -134,11 +150,25 @@ export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
         }
     }
 
+    addCCT (cct: PhysXCharacterController): void {
+        const index = this.ccts.indexOf(cct);
+        if (index < 0) {
+            this.ccts.push(cct);
+        }
+    }
+
+    removeCCT (cct: PhysXCharacterController): void {
+        const index = this.ccts.indexOf(cct);
+        if (index >= 0) {
+            js.array.fastRemoveAt(this.ccts, index);
+        }
+    }
+
     addConstraint (_constraint: IBaseConstraint): void { }
 
     removeConstraint (_constraint: IBaseConstraint): void { }
 
-    raycast (worldRay: geometry.Ray, options: IRaycastOptions, pool: RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+    raycast (worldRay: geometry.Ray, options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
         return raycastAll(this, worldRay, options, pool, results);
     }
 
@@ -146,10 +176,76 @@ export class PhysXWorld extends PhysXInstance implements IPhysicsWorld {
         return raycastClosest(this, worldRay, options, result);
     }
 
+    sweepBox (worldRay: geometry.Ray, halfExtent: IVec3Like, orientation: IQuatLike,
+        options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        if (!PhysXWorld._sweepBoxGeometry) {
+            PhysXWorld._sweepBoxGeometry = new PX.BoxGeometry(halfExtent);
+        }
+        PhysXWorld._sweepBoxGeometry.setHalfExtents(halfExtent);
+        return sweepAll(this, worldRay, PhysXWorld._sweepBoxGeometry, orientation, options, pool, results);
+    }
+
+    sweepBoxClosest (worldRay: geometry.Ray, halfExtent: IVec3Like, orientation: IQuatLike,
+        options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        if (!PhysXWorld._sweepBoxGeometry) {
+            PhysXWorld._sweepBoxGeometry = new PX.BoxGeometry(halfExtent);
+        }
+        PhysXWorld._sweepBoxGeometry.setHalfExtents(halfExtent);
+        return sweepClosest(this, worldRay, PhysXWorld._sweepBoxGeometry, orientation, options, result);
+    }
+
+    sweepSphere (worldRay: geometry.Ray, radius: number,
+        options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        if (!PhysXWorld._sweepSphereGeometry) {
+            PhysXWorld._sweepSphereGeometry = new PX.SphereGeometry(radius);
+        }
+        PhysXWorld._sweepSphereGeometry.setRadius(radius);
+        return sweepAll(this, worldRay, PhysXWorld._sweepSphereGeometry, Quat.IDENTITY, options, pool, results);
+    }
+
+    sweepSphereClosest (worldRay: geometry.Ray, radius: number,
+        options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        if (!PhysXWorld._sweepSphereGeometry) {
+            PhysXWorld._sweepSphereGeometry = new PX.SphereGeometry(radius);
+        }
+        PhysXWorld._sweepSphereGeometry.setRadius(radius);
+        return sweepClosest(this, worldRay, PhysXWorld._sweepSphereGeometry, Quat.IDENTITY, options, result);
+    }
+
+    sweepCapsule (worldRay: geometry.Ray, radius: number, height: number, orientation: IQuatLike,
+        options: IRaycastOptions, pool: memop.RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+        if (!PhysXWorld._sweepCapsuleGeometry) {
+            PhysXWorld._sweepCapsuleGeometry = new PX.CapsuleGeometry(radius, height / 2);
+        }
+        PhysXWorld._sweepCapsuleGeometry.setRadius(radius);
+        PhysXWorld._sweepCapsuleGeometry.setHalfHeight(height / 2);
+        //add an extra 90 degree rotation to PxCapsuleGeometry whose axis is originally along the X axis
+        const finalOrientation = CC_QUAT_0;
+        Quat.fromEuler(finalOrientation, 0, 0, 90);
+        Quat.multiply(finalOrientation, orientation, finalOrientation);
+        return sweepAll(this, worldRay, PhysXWorld._sweepCapsuleGeometry, finalOrientation, options, pool, results);
+    }
+
+    sweepCapsuleClosest (worldRay: geometry.Ray, radius: number, height: number, orientation: IQuatLike,
+        options: IRaycastOptions, result: PhysicsRayResult): boolean {
+        if (!PhysXWorld._sweepCapsuleGeometry) {
+            PhysXWorld._sweepCapsuleGeometry = new PX.CapsuleGeometry(radius, height / 2);
+        }
+        PhysXWorld._sweepCapsuleGeometry.setRadius(radius);
+        PhysXWorld._sweepCapsuleGeometry.setHalfHeight(height / 2);
+        //add an extra 90 degree rotation to PxCapsuleGeometry whose axis is originally along the X axis
+        const finalOrientation = CC_QUAT_0;
+        Quat.fromEuler(finalOrientation, 0, 0, 90);
+        Quat.multiply(finalOrientation, orientation, finalOrientation);
+        return sweepClosest(this, worldRay, PhysXWorld._sweepCapsuleGeometry, finalOrientation, options, result);
+    }
+
     emitEvents (): void {
         gatherEvents(this);
         PhysXCallback.emitTriggerEvent();
         PhysXCallback.emitCollisionEvent();
+        PhysXCallback.emitCCTCollisionEvent();
+        PhysXCallback.emitCCTTriggerEvent();
     }
 }
 
@@ -172,12 +268,24 @@ interface ICollisionEventItem {
     offset: number,
 }
 
+interface ITriggerEventItemCCT {
+    a: PhysXShape,
+    b: PhysXCharacterController,
+    times: number,
+}
+
 const triggerEventBeginDic = new TupleDictionary();
 const triggerEventEndDic = new TupleDictionary();
 const triggerEventsPool: ITriggerEventItem[] = [];
 const contactEventDic = new TupleDictionary();
 const contactEventsPool: ICollisionEventItem[] = [];
 const contactsPool: [] = [];
+const cctShapeEventDic = new TupleDictionary();
+const emitHit = new CharacterControllerContact();
+const cctTriggerEventBeginDic = new TupleDictionary();
+const cctTriggerEventEndDic = new TupleDictionary();
+const cctTriggerEventsPool: ITriggerEventItemCCT[] = [];
+
 const PhysXCallback = {
     eventCallback: {
         onContactBegin: (a: any, b: any, c: any, d: any, o: number): void => {
@@ -196,14 +304,26 @@ const PhysXCallback = {
             PhysXCallback.onCollision('onCollisionStay', wpa, wpb, c, d, o);
         },
         onTriggerBegin: (a: any, b: any): void => {
-            const wpa = getWrapShape<PhysXShape>(a);
-            const wpb = getWrapShape<PhysXShape>(b);
-            PhysXCallback.onTrigger('onTriggerEnter', wpa, wpb, true);
+            const wpa = getWrapShape<any>(a);
+            const wpb = getWrapShape<any>(b);
+            if (wpa instanceof PhysXShape && wpb instanceof PhysXShape) {
+                PhysXCallback.onTrigger('onTriggerEnter', wpa, wpb, true);
+            } else if (wpa instanceof PhysXShape && wpb instanceof PhysXCharacterController) {
+                PhysXCallback.onTriggerCCT('onControllerTriggerEnter', wpa, wpb, true);
+            } else if (wpa instanceof PhysXCharacterController && wpb instanceof PhysXShape) {
+                PhysXCallback.onTriggerCCT('onControllerTriggerEnter', wpb, wpa, true);
+            }
         },
         onTriggerEnd: (a: any, b: any): void => {
-            const wpa = getWrapShape<PhysXShape>(a);
-            const wpb = getWrapShape<PhysXShape>(b);
-            PhysXCallback.onTrigger('onTriggerExit', wpa, wpb, false);
+            const wpa = getWrapShape<any>(a);
+            const wpb = getWrapShape<any>(b);
+            if (wpa instanceof PhysXShape && wpb instanceof PhysXShape) {
+                PhysXCallback.onTrigger('onTriggerExit', wpa, wpb, false);
+            } else if (wpa instanceof PhysXShape && wpb instanceof PhysXCharacterController) {
+                PhysXCallback.onTriggerCCT('onControllerTriggerExit', wpa, wpb, false);
+            } else if (wpa instanceof PhysXCharacterController && wpb instanceof PhysXShape) {
+                PhysXCallback.onTriggerCCT('onControllerTriggerExit', wpb, wpa, false);
+            }
         },
     },
 
@@ -249,7 +369,26 @@ const PhysXCallback = {
         }
     },
 
-    emitTriggerEvent () {
+    onTriggerCCT (type: CharacterTriggerEventType, wpa: PhysXShape, cct: PhysXCharacterController, isEnter: boolean): void {
+        if (wpa && cct) {
+            if (wpa.collider.needTriggerEvent) {
+                let tE: ITriggerEventItemCCT;
+                if (cctTriggerEventsPool.length > 0) {
+                    tE = cctTriggerEventsPool.pop() as ITriggerEventItemCCT;
+                    tE.a = wpa; tE.b = cct; tE.times = 0;
+                } else {
+                    tE = { a: wpa, b: cct, times: 0 };
+                }
+                if (isEnter) {
+                    cctTriggerEventBeginDic.set(wpa.id, cct.id, tE);
+                } else {
+                    cctTriggerEventEndDic.set(wpa.id, cct.id, tE);
+                }
+            }
+        }
+    },
+
+    emitTriggerEvent (): void {
         let len = triggerEventEndDic.getLength();
         while (len--) {
             const key = triggerEventEndDic.getKeyByIndex(len);
@@ -364,5 +503,99 @@ const PhysXCallback = {
             }
         }
         contactEventDic.reset();
+    },
+    controllerHitReportCB: {
+        onShapeHit (hit: any): void { //PX.ControllerShapeHit
+            const cct = getWrapShape<PhysXCharacterController>(hit.getCurrentController());
+            const s = getWrapShape<PhysXShape>(hit.getTouchedShape());
+            let item = cctShapeEventDic.get<any>(hit.getCurrentController(), hit.getTouchedShape());
+            if (!item) {
+                const worldPos = new Vec3();
+                worldPos.set(hit.worldPos.x, hit.worldPos.y, hit.worldPos.z);
+                const worldNormal = new Vec3();
+                worldNormal.set(hit.worldNormal.x, hit.worldNormal.y, hit.worldNormal.z);
+                const motionDir = new Vec3();
+                motionDir.set(hit.dir.x, hit.dir.y, hit.dir.z);
+                const motionLength = hit.length;
+                item = cctShapeEventDic.set(hit.getCurrentController(), hit.getTouchedShape(),
+                    { PhysXCharacterController: cct, PhysXShape: s, worldPos, worldNormal, motionDir, motionLength });
+            }
+        },
+        onControllerHit (hit: any): void { //PX.ControllersHit
+        },
+    },
+    emitCCTCollisionEvent (): void {
+        let dicL = cctShapeEventDic.getLength();
+        while (dicL--) {
+            const key = cctShapeEventDic.getKeyByIndex(dicL);
+            const data = cctShapeEventDic.getDataByKey<any>(key);
+            const cct = data.PhysXCharacterController.characterController;
+            const collider = data.PhysXShape.collider;
+            if (cct && cct.isValid && collider && collider.isValid) {
+                emitHit.controller = cct;
+                emitHit.collider = collider;
+                emitHit.worldPosition.set(data.worldPos);
+                emitHit.worldNormal.set(data.worldNormal);
+                emitHit.motionDirection.set(data.motionDir);
+                emitHit.motionLength = data.motionLength;
+                cct.emit('onControllerColliderHit', emitHit);
+            }
+        }
+        cctShapeEventDic.reset();
+    },
+    emitCCTTriggerEvent (): void {
+        let len = cctTriggerEventEndDic.getLength();
+        while (len--) {
+            const key = cctTriggerEventEndDic.getKeyByIndex(len);
+            const data = cctTriggerEventEndDic.getDataByKey<ITriggerEventItemCCT>(key);
+            cctTriggerEventsPool.push(data);
+            const dataBeg = cctTriggerEventBeginDic.getDataByKey<ITriggerEventItemCCT>(key);
+            if (dataBeg) {
+                cctTriggerEventsPool.push(dataBeg);
+                cctTriggerEventBeginDic.set(data.a.id, data.b.id, null);
+            }
+            const collider = data.a.collider;
+            const characterController = data.b.characterController;
+            if (collider && characterController) {
+                const type: CharacterTriggerEventType = 'onControllerTriggerExit';
+                CharacterTriggerEventObject.type = type;
+                if (collider.needTriggerEvent) {
+                    CharacterTriggerEventObject.collider = collider;
+                    CharacterTriggerEventObject.characterController = characterController;
+                    collider.emit(type, CharacterTriggerEventObject);
+                }
+                if (characterController.needTriggerEvent) {
+                    CharacterTriggerEventObject.collider = collider;
+                    CharacterTriggerEventObject.characterController = characterController;
+                    characterController.emit(type, CharacterTriggerEventObject);
+                }
+            }
+        }
+        cctTriggerEventEndDic.reset();
+
+        len = cctTriggerEventBeginDic.getLength();
+        while (len--) {
+            const key = cctTriggerEventBeginDic.getKeyByIndex(len);
+            const data = cctTriggerEventBeginDic.getDataByKey<ITriggerEventItemCCT>(key);
+            const collider = data.a.collider;
+            const characterController = data.b.characterController;
+            if (!collider || !collider.isValid || !characterController || !characterController.isValid) {
+                cctTriggerEventsPool.push(data);
+                cctTriggerEventBeginDic.set(data.a.id, data.b.id, null);
+            } else {
+                const type: CharacterTriggerEventType = data.times++ ? 'onControllerTriggerStay' : 'onControllerTriggerEnter';
+                CharacterTriggerEventObject.type = type;
+                if (collider.needTriggerEvent) {
+                    CharacterTriggerEventObject.collider = collider;
+                    CharacterTriggerEventObject.characterController = characterController;
+                    collider.emit(type, CharacterTriggerEventObject);
+                }
+                if (characterController.needTriggerEvent) {
+                    CharacterTriggerEventObject.collider = collider;
+                    CharacterTriggerEventObject.characterController = characterController;
+                    characterController.emit(type, CharacterTriggerEventObject);
+                }
+            }
+        }
     },
 };

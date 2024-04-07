@@ -26,7 +26,7 @@
 */
 
 import { EDITOR, MINIGAME, NATIVE, PREVIEW, RUNTIME_BASED } from 'internal:constants';
-import { legacyCC } from '../global-exports';
+import { cclegacy } from '@base/global';
 import { Settings, settings } from '../settings';
 
 const SUPPORT_TEXTURE_FORMATS = ['.astc', '.pkm', '.pvr', '.webp', '.jpg', '.jpeg', '.bmp', '.png'];
@@ -874,12 +874,16 @@ interface Macro {
     /**
      * @en One angle in radian, equals to PI / 180
      * @zh 弧度制中的单位角度，等同于 PI / 180
+     *
+     * @deprecated since v3.9.0, please use `math.toRadian` instead.
      */
     RAD: number;
 
     /**
      * @en One radian in angle, equals to 180 / PI
      * @zh 角度制中的单位弧度，等同于 180 / PI
+     *
+     * @deprecated since v3.9.0, please use `math.toDegree` instead.
      */
     DEG: number;
 
@@ -987,21 +991,12 @@ interface Macro {
 
     /**
      * @en
-     * Used to set FXAA post-processing anti-aliasing, the default value is false.
+     * Used to set float output, the default value is false.
      * @zh
-     * 用于开启 FXAA 后处理抗锯齿, 默认值为 false。
+     * 用于开启浮点格式的输出, 默认值为 false。
      * @default false
      */
-    ENABLE_ANTIALIAS_FXAA: boolean;
-
-    /**
-     * @en
-     * Used to set bloom, the default value is false.
-     * @zh
-     * 用于开启 bloom, 默认值为 false。
-     * @default false
-     */
-    ENABLE_BLOOM: boolean;
+    ENABLE_FLOAT_OUTPUT: boolean;
 
     /**
      * @en
@@ -1082,6 +1077,15 @@ interface Macro {
     CUSTOM_PIPELINE_NAME: string;
 
     /**
+     * @en
+     * Whether to enable GPU Driven.
+     * @zh
+     * 是否开启 GPU Driven
+     * @default false
+     */
+    ENABLE_GPU_DRIVEN: boolean;
+
+    /**
      * @internal
      */
     init (): void;
@@ -1107,14 +1111,14 @@ const macro: Macro = {
     TOUCH_TIMEOUT: 5000,
     ENABLE_TRANSPARENT_CANVAS: false,
     ENABLE_WEBGL_ANTIALIAS: true,
-    ENABLE_ANTIALIAS_FXAA: false,
-    ENABLE_BLOOM: false,
+    ENABLE_FLOAT_OUTPUT: false,
     CLEANUP_IMAGE_CACHE: false,
     ENABLE_MULTI_TOUCH: true,
     MAX_LABEL_CANVAS_POOL_SIZE: 20,
     ENABLE_WEBGL_HIGHP_STRUCT_VALUES: false,
     BATCHER2D_MEM_INCREMENT: 144,
     CUSTOM_PIPELINE_NAME: '',
+    ENABLE_GPU_DRIVEN: false,
     init () {
         if (NATIVE || MINIGAME || RUNTIME_BASED) {
             this.CLEANUP_IMAGE_CACHE = true;
@@ -1134,6 +1138,6 @@ const macro: Macro = {
     },
 };
 
-legacyCC.macro = macro;
+cclegacy.macro = macro;
 export { macro };
 export type { Macro };

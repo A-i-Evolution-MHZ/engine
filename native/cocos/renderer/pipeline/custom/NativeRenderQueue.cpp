@@ -27,7 +27,12 @@
 #include "NativePipelineTypes.h"
 #include "cocos/renderer/pipeline/Define.h"
 #include "cocos/renderer/pipeline/PipelineStateManager.h"
-#include "details/GslUtils.h"
+#include "cocos/renderer/pipeline/custom/details/GslUtils.h"
+#include "cocos/renderer/pipeline/custom/RenderGraphGraphs.h"
+#include "scene/gpu-scene/GPUBatchPool.h"
+#include "scene/gpu-scene/GPUScene.h"
+#include "scene/RenderScene.h"
+#include "renderer/gfx-base/GFXDevice.h"
 
 namespace cc {
 
@@ -82,19 +87,57 @@ void RenderDrawQueue::recordCommandBuffer(
     }
 }
 
-void RenderInstancingQueue::add(pipeline::InstancedBuffer &instancedBuffer) {
-    batches.emplace(&instancedBuffer);
+bool RenderInstancingQueue::empty() const noexcept {
+    CC_EXPECTS(!passInstances.empty() || sortedBatches.empty());
+    return passInstances.empty();
+}
+
+void RenderInstancingQueue::clear() {
+    sortedBatches.clear();
+    passInstances.clear();
+    for (auto &buffer : instanceBuffers) {
+        buffer->clear();
+    }
+}
+
+void RenderInstancingQueue::add(
+    const scene::Pass &pass,
+    scene::SubModel &submodel, uint32_t passID) {
+    auto iter = passInstances.find(&pass);
+    if (iter == passInstances.end()) {
+        const auto instanceBufferID = static_cast<uint32_t>(passInstances.size());
+        if (instanceBufferID >= instanceBuffers.size()) {
+            CC_EXPECTS(instanceBufferID == instanceBuffers.size());
+            instanceBuffers.emplace_back(ccnew pipeline::InstancedBuffer(nullptr));
+        }
+        bool added = false;
+        std::tie(iter, added) = passInstances.emplace(&pass, instanceBufferID);
+        CC_ENSURES(added);
+
+        CC_ENSURES(iter->second < instanceBuffers.size());
+        const auto &instanceBuffer = instanceBuffers[iter->second];
+        instanceBuffer->setPass(&pass);
+        const auto &instances = instanceBuffer->getInstances();
+        for (const auto &item : instances) {
+            CC_EXPECTS(item.drawInfo.instanceCount == 0);
+        }
+    }
+    auto &instancedBuffer = *instanceBuffers[iter->second];
+    instancedBuffer.merge(&submodel, passID);
 }
 
 void RenderInstancingQueue::sort() {
-    sortedBatches.reserve(batches.size());
-    std::copy(batches.begin(), batches.end(), std::back_inserter(sortedBatches));
+    sortedBatches.reserve(passInstances.size());
+    for (const auto &[pass, bufferID] : passInstances) {
+        sortedBatches.emplace_back(instanceBuffers[bufferID]);
+    }
 }
 
 void RenderInstancingQueue::uploadBuffers(gfx::CommandBuffer *cmdBuffer) const {
-    for (const auto *instanceBuffer : batches) {
-        if (instanceBuffer->hasPendingModels()) {
-            instanceBuffer->uploadBuffers(cmdBuffer);
+    for (const auto &[pass, bufferID] : passInstances) {
+        const auto &ib = instanceBuffers[bufferID];
+        if (ib->hasPendingModels()) {
+            ib->uploadBuffers(cmdBuffer);
         }
     }
 }
@@ -112,7 +155,7 @@ void RenderInstancingQueue::recordCommandBuffer(
         cmdBuffer->bindDescriptorSet(pipeline::materialSet, drawPass->getDescriptorSet());
         gfx::PipelineState *lastPSO = nullptr;
         for (const auto &instance : instances) {
-            if (!instance.count) {
+            if (!instance.drawInfo.instanceCount) {
                 continue;
             }
             auto *pso = pipeline::PipelineStateManager::getOrCreatePipelineState(
@@ -131,6 +174,91 @@ void RenderInstancingQueue::recordCommandBuffer(
             }
             cmdBuffer->bindInputAssembler(instance.ia);
             cmdBuffer->draw(instance.ia);
+        }
+    }
+}
+
+void GPUDrivenQueue::recordCommandBuffer(
+    const ResourceGraph& resg,
+    gfx::Device *device, const scene::Camera *camera, 
+    gfx::RenderPass *renderPass, gfx::CommandBuffer *cmdBuffer, uint32_t phaseLayoutID, SceneFlags sceneFlags, uint32_t cullingID) const {
+    if (!any(sceneFlags & SceneFlags::GPU_DRIVEN)) {
+        return;
+    }
+
+    auto *gpuScene = camera->getScene() ? camera->getScene()->getGPUScene() : nullptr;
+    if (!gpuScene) {
+        return;
+    }
+
+    const bool bDrawBlend = any(sceneFlags & SceneFlags::TRANSPARENT_OBJECT);
+    const bool bDrawOpaqueOrMask = any(sceneFlags & (SceneFlags::OPAQUE_OBJECT | SceneFlags::CUTOUT_OBJECT));
+    const bool bDrawShadowCaster = any(sceneFlags & SceneFlags::SHADOW_CASTER);
+    if (!bDrawShadowCaster && !bDrawBlend && !bDrawOpaqueOrMask) {
+        return; // nothing to draw
+    }
+
+    CC_EXPECTS(cullingID != 0xFFFFFFFF);
+    ccstd::pmr::string indirectName("CCDrawIndirectBuffer", get_allocator());
+    indirectName.append(std::to_string(cullingID));
+    auto indirectResID = findVertex(indirectName, resg);
+    const auto &indirectBuffer = get(ManagedBufferTag{}, indirectResID, resg).buffer.get();
+
+    // Draw visible instances
+    const auto supportFirstInstance = device->getCapabilities().supportFirstInstance;
+    auto *batchPool = gpuScene->getBatchPool();
+    gfx::PipelineState *lastPSO = nullptr;
+    const auto indirectStride = scene::GPUBatchPool::getIndirectStride();
+
+    for (const auto &iter : batchPool->getBatches()) {
+        const auto *batch = iter.second;
+        if (batch->empty()) {
+            continue;
+        }
+
+        const auto *drawPass = batch->getPass();
+        if (phaseLayoutID != drawPass->getPhaseID()) {
+            continue;
+        }
+
+        const bool bBlend = drawPass->isBlend();
+        const bool bOpaqueOrMask = !bBlend;
+        if (!bDrawBlend && bBlend) {
+            // skip transparent object
+            continue;
+        }
+        if (!bDrawOpaqueOrMask && bOpaqueOrMask) {
+            // skip opaque object
+            continue;
+        }
+
+        cmdBuffer->bindDescriptorSet(pipeline::materialSet, drawPass->getDescriptorSet());
+
+        const auto &items = batch->getItems();
+        for (const auto &item : items) {
+            if (!item.count) {
+                continue;
+            }
+
+            auto *pso = pipeline::PipelineStateManager::getOrCreatePipelineState(
+                drawPass, item.shader, item.inputAssembler, renderPass);
+
+            if (lastPSO != pso) {
+                cmdBuffer->bindPipelineState(pso);
+                lastPSO = pso;
+            }
+
+            cmdBuffer->bindInputAssembler(item.inputAssembler);
+            cmdBuffer->bindDescriptorSet(pipeline::localSet, item.descriptorSet);
+
+            if (supportFirstInstance) {
+                cmdBuffer->drawIndexedIndirect(indirectBuffer, item.first * indirectStride, item.count, indirectStride);
+            } else {
+                for (auto i = 0; i < item.count; i++) {
+                    // Stanley TODO: bindDescriptorSet for cc_drawInstances with dynamicOffsets here.
+                    cmdBuffer->drawIndexedIndirect(indirectBuffer, (item.first + i) * indirectStride, 1, indirectStride);
+                }
+            }
         }
     }
 }

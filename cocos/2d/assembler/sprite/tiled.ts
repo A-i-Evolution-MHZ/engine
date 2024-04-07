@@ -23,8 +23,9 @@
 */
 
 import { JSB } from 'internal:constants';
+import { error } from '@base/debug';
+import { Mat4, Vec3, Color } from '@base/math';
 import { IUV, SpriteFrame } from '../../assets/sprite-frame';
-import { Mat4, Vec3, Color } from '../../../core';
 import { IRenderData, RenderData } from '../../renderer/render-data';
 import { IBatcher } from '../../renderer/i-batcher';
 import { Sprite } from '../../components/sprite';
@@ -43,9 +44,9 @@ let topInner: IUV;
 let topOuter: IUV;
 let tempRenderDataLength = 0;
 const tempRenderData: IRenderData[] = [];
-let QUAD_INDICES;
+let QUAD_INDICES: Uint16Array | null = null;
 
-function has9SlicedOffsetVertexCount (spriteFrame: SpriteFrame) {
+function has9SlicedOffsetVertexCount (spriteFrame: SpriteFrame): number {
     if (spriteFrame) {
         if (spriteFrame.insetTop > 0
         || spriteFrame.insetBottom > 0
@@ -109,7 +110,7 @@ export const tiled: IAssembler = {
         if (JSB) {
             const indexCount = renderData.indexCount;
             this.createQuadIndices(indexCount);
-            renderData.chunk.setIndexBuffer(QUAD_INDICES);
+            renderData.chunk.setIndexBuffer(QUAD_INDICES!);
             // may can update color & uv here
             // need dirty
             this.updateWorldUVData(sprite);
@@ -119,9 +120,9 @@ export const tiled: IAssembler = {
         renderData.updateRenderData(sprite, frame);
     },
 
-    createQuadIndices (indexCount) {
+    createQuadIndices (indexCount: number) {
         if (indexCount % 6 !== 0) {
-            console.error('illegal index count!');
+            error('illegal index count!');
             return;
         }
         const quadCount = indexCount / 6;
@@ -150,9 +151,10 @@ export const tiled: IAssembler = {
         const node = sprite.node;
         const renderData: RenderData = sprite.renderData!;
         const chunk = renderData.chunk;
-        if (node.hasChangedFlags || renderData.vertDirty) {
+        if (sprite._flagChangedVersion !== node.flagChangedVersion || renderData.vertDirty) {
             this.updateWorldVertexAndUVData(sprite, chunk);
             renderData.vertDirty = false;
+            sprite._flagChangedVersion = node.flagChangedVersion;
         }
 
         // forColor
@@ -253,6 +255,7 @@ export const tiled: IAssembler = {
         }
 
         // 临时变量存前置数据
+        tempRenderData.length = 0;
         tempRenderDataLength = Math.max(row + 1, col + 1);
         for (let i = 0; i < tempRenderDataLength; i++) {
             tempRenderData.push({ x: 0, y: 0, z: 0, u: 0, v: 0, color: new Color() });
@@ -511,5 +514,6 @@ export const tiled: IAssembler = {
 
     // Too early
     updateColor (sprite: Sprite) {
+        // Update color by updateColorLate
     },
 };

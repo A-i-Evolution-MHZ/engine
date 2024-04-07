@@ -22,10 +22,8 @@
  THE SOFTWARE.
 */
 
-import {
-    FormatSurfaceSize, TextureInfo, IsPowerOf2, TextureViewInfo, ISwapchainTextureInfo,
-    FormatInfos, TextureUsageBit,
-} from '../base/define';
+import { log } from '@base/debug';
+import { FormatSurfaceSize, TextureInfo, IsPowerOf2, TextureViewInfo, ISwapchainTextureInfo, FormatInfos, TextureUsageBit } from '../base/define';
 import { Texture } from '../base/texture';
 import { WebGL2CmdFuncCreateTexture, WebGL2CmdFuncDestroyTexture, WebGL2CmdFuncResizeTexture } from './webgl2-commands';
 import { WebGL2DeviceManager } from './webgl2-define';
@@ -43,7 +41,7 @@ export class WebGL2Texture extends Texture {
         return this._gpuTextureView!;
     }
 
-    public initialize (info: Readonly<TextureInfo> | Readonly<TextureViewInfo>, isSwapchainTexture?: boolean) {
+    public initialize (info: Readonly<TextureInfo> | Readonly<TextureViewInfo>, isSwapchainTexture?: boolean): void {
         let texInfo = info as Readonly<TextureInfo>;
         const viewInfo = info as Readonly<TextureViewInfo>;
 
@@ -113,7 +111,7 @@ export class WebGL2Texture extends Texture {
             this._gpuTexture = (viewInfo.texture as WebGL2Texture)._gpuTexture;
 
             if (this._gpuTexture?.format !== texInfo.format) {
-                console.log('GPU memory alias is not supported');
+                log('GPU memory alias is not supported');
                 return;
             }
 
@@ -127,7 +125,7 @@ export class WebGL2Texture extends Texture {
         }
     }
 
-    public destroy () {
+    public destroy (): void {
         if (!this._isTextureView && this._gpuTexture) {
             WebGL2CmdFuncDestroyTexture(WebGL2DeviceManager.instance, this._gpuTexture);
             WebGL2DeviceManager.instance.memoryStatus.textureSize -= this._size;
@@ -135,7 +133,7 @@ export class WebGL2Texture extends Texture {
         }
     }
 
-    public getGLTextureHandle () : number {
+    public getGLTextureHandle (): number {
         const gpuTexture = this._gpuTexture;
         if (!gpuTexture) {
             return 0;
@@ -150,7 +148,7 @@ export class WebGL2Texture extends Texture {
         return 0;
     }
 
-    public resize (width: number, height: number) {
+    public resize (width: number, height: number): void {
         if (this._info.width === width && this._info.height === height) {
             return;
         }
@@ -184,7 +182,7 @@ export class WebGL2Texture extends Texture {
     /**
      * @engineInternal
      */
-    public initAsSwapchainTexture (info: Readonly<ISwapchainTextureInfo>) {
+    public initAsSwapchainTexture (info: Readonly<ISwapchainTextureInfo>): void {
         const texInfo = new TextureInfo();
         texInfo.format = info.format;
         texInfo.usage = FormatInfos[info.format].hasDepth ? TextureUsageBit.DEPTH_STENCIL_ATTACHMENT : TextureUsageBit.COLOR_ATTACHMENT;

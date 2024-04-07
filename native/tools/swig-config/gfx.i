@@ -4,6 +4,9 @@
 // Note: doesn't support number prefix
 %module(target_namespace="gfx") gfx
 
+// Disable some swig warnings, find warning number reference here ( https://www.swig.org/Doc4.1/Warnings.html )
+#pragma SWIG nowarn=503,302,401,317,402
+
 // Insert code at the beginning of generated header file (.h)
 %insert(header_file) %{
 #pragma once
@@ -62,7 +65,10 @@ namespace cc { namespace gfx {
 
 %ignore CommandBuffer::execute;
 %ignore CommandBuffer::updateBuffer;
+%ignore CommandBuffer::resolveTexture;
 %ignore CommandBuffer::copyBuffersToTexture;
+%ignore CommandBuffer::drawIndirect;
+%ignore CommandBuffer::drawIndexedIndirect;
 %rename(drawWithInfo) CommandBuffer::draw(const DrawInfo&);
 
 %ignore DescriptorSetLayout::getBindingIndices;
@@ -179,7 +185,6 @@ namespace cc { namespace gfx {
 %attribute(cc::gfx::InputAssembler, cc::gfx::BufferList&, vertexBuffers, getVertexBuffers);
 %attribute(cc::gfx::InputAssembler, cc::gfx::AttributeList&, attributes, getAttributes);
 %attribute(cc::gfx::InputAssembler, cc::gfx::Buffer*, indexBuffer, getIndexBuffer);
-%attribute(cc::gfx::InputAssembler, cc::gfx::Buffer*, indirectBuffer, getIndirectBuffer);
 %attribute(cc::gfx::InputAssembler, uint32_t, attributesHash, getAttributesHash);
 
 %attribute(cc::gfx::InputAssembler, cc::gfx::DrawInfo&, drawInfo, getDrawInfo, setDrawInfo);

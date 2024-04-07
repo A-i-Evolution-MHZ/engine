@@ -23,10 +23,11 @@
 */
 
 import { ccclass, type, serializable, editable } from 'cc.decorator';
+import { cclegacy } from '@base/global';
+import { ccenum } from '@base/object';
 import { createMesh } from '../3d/misc';
 import { Mesh } from '../3d/assets/mesh';
 import * as primitives from '.';
-import { ccenum, cclegacy } from '../core';
 
 enum PrimitiveType {
     BOX = 0,
@@ -80,7 +81,7 @@ export class Primitive extends Mesh {
      * @zh
      * 根据`type`和`info`构建相应的网格。
      */
-    public onLoaded () {
+    public onLoaded (): void {
         createMesh(primitives[PrimitiveType[this.type].toLowerCase()](this.info), this);
     }
 }

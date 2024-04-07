@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { IVec3Like, Quat, Vec3 } from '../../../core';
+import { IVec3Like, Quat, Vec3 } from '@base/math';
 import { PointToPointConstraint } from '../../framework';
 import { IPointToPointConstraint } from '../../spec/i-physics-constraint';
 import { PX, _trans, getTempTransform, _pxtrans } from '../physx-adapter';
@@ -51,8 +51,8 @@ export class PhysXSphericalJoint extends PhysXJoint implements IPointToPointCons
         } else {
             const node = cs.node;
             Vec3.multiply(pos, node.worldScale, cs.pivotA);
+            Vec3.transformQuat(pos, pos, node.worldRotation);
             Vec3.add(pos, pos, node.worldPosition);
-            Vec3.add(pos, pos, cs.pivotB);
             Quat.multiply(rot, rot, node.worldRotation);
         }
         this._impl.setLocalPose(1, getTempTransform(pos, rot));
@@ -68,11 +68,11 @@ export class PhysXSphericalJoint extends PhysXJoint implements IPointToPointCons
         this.setPivotB(this.constraint.pivotB);
     }
 
-    updateScale0 () {
+    updateScale0 (): void {
         this.setPivotA(this.constraint.pivotA);
     }
 
-    updateScale1 () {
+    updateScale1 (): void {
         this.setPivotB(this.constraint.pivotB);
     }
 }

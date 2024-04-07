@@ -22,20 +22,14 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    help,
-    executeInEditMode,
-    menu,
-    type,
-    serializable,
-    tooltip,
-} from 'cc.decorator';
+import { ccclass, help, executeInEditMode, menu, type, serializable, tooltip } from 'cc.decorator';
+import { warnID } from '@base/debug';
 import { Collider } from './collider';
 import { ITerrainShape } from '../../../spec/i-physics-shape';
 import { ITerrainAsset } from '../../../spec/i-external';
 import { TerrainAsset } from '../../../../terrain/terrain-asset';
-import { EColliderType } from '../../physics-enum';
+import { EColliderType, ERigidBodyType } from '../../physics-enum';
+import { RigidBody } from '../rigid-body';
 
 /**
  * @en
@@ -58,7 +52,7 @@ export class TerrainCollider extends Collider {
      */
     @type(TerrainAsset)
     @tooltip('i18n:physics3d.collider.terrain_terrain')
-    get terrain () {
+    get terrain (): ITerrainAsset | null {
         return this._terrain;
     }
 
@@ -73,8 +67,19 @@ export class TerrainCollider extends Collider {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    get shape () {
+    get shape (): ITerrainShape {
         return this._shape as ITerrainShape;
+    }
+
+    protected onEnable (): void {
+        super.onEnable();
+
+        if (this.node) {
+            const body = this.node.getComponent(RigidBody);
+            if (body && body.isValid && (body.type === ERigidBodyType.DYNAMIC)) {
+                warnID(9630, this.node.name);
+            }
+        }
     }
 
     /// PRIVATE PROPERTY ///

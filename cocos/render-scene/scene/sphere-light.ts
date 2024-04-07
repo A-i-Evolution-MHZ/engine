@@ -22,7 +22,9 @@
  THE SOFTWARE.
 */
 
-import { Vec3, cclegacy, geometry } from '../../core';
+import { cclegacy } from '@base/global';
+import { Vec3 } from '@base/math';
+import { geometry } from '../../core';
 import { Light, LightType, nt2lm } from './light';
 
 /**
@@ -35,7 +37,7 @@ export class SphereLight extends Light {
      * @en The world position of the light source
      * @zh 光源中心点的世界坐标
      */
-    get position () {
+    get position (): Vec3 {
         return this._pos;
     }
 
@@ -90,7 +92,7 @@ export class SphereLight extends Light {
      * @en The luminance of the light source in HDR mode
      * @zh HDR 模式下光源的亮度
      */
-    get luminanceHDR () {
+    get luminanceHDR (): number {
         return this._luminanceHDR;
     }
     set luminanceHDR (value: number) {
@@ -109,7 +111,7 @@ export class SphereLight extends Light {
      * @en The AABB bounding box of the lighting area
      * @zh 受光源影响范围的 AABB 包围盒
      */
-    get aabb () {
+    get aabb (): geometry.AABB {
         return this._aabb;
     }
 
@@ -128,7 +130,7 @@ export class SphereLight extends Light {
         this._type = LightType.SPHERE;
     }
 
-    public initialize () {
+    public initialize (): void {
         super.initialize();
 
         const size = 0.15;
@@ -142,7 +144,7 @@ export class SphereLight extends Light {
      * @en Update the lighting area
      * @zh 更新光源影响范围
      */
-    public update () {
+    public update (): void {
         if (this._node && (this._node.hasChangedFlags || this._needUpdate)) {
             this._node.getWorldPosition(this._pos);
             const range = this._range;

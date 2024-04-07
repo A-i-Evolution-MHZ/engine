@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { CachedArray } from '../../core';
+import { memop } from '@base/utils';
 import {
     WebGLCmdBeginRenderPass,
     WebGLCmdBindStates,
@@ -37,11 +37,11 @@ import {
 export class WebGLCommandPool<T extends WebGLCmdObject> {
     private _frees: (T|null)[];
     private _freeIdx = 0;
-    private _freeCmds: CachedArray<T>;
+    private _freeCmds: memop.CachedArray<T>;
 
     constructor (Clazz: new() => T, count: number) {
         this._frees = new Array(count);
-        this._freeCmds = new CachedArray(count);
+        this._freeCmds = new memop.CachedArray(count);
         for (let i = 0; i < count; ++i) {
             this._frees[i] = new Clazz();
         }
@@ -78,13 +78,13 @@ export class WebGLCommandPool<T extends WebGLCmdObject> {
         return cmd;
     }
 
-    public free (cmd: T) {
+    public free (cmd: T): void {
         if (--cmd.refCount === 0) {
             this._freeCmds.push(cmd);
         }
     }
 
-    public freeCmds (cmds: CachedArray<T>) {
+    public freeCmds (cmds: memop.CachedArray<T>): void {
         // return ;
         for (let i = 0; i < cmds.length; ++i) {
             if (--cmds.array[i].refCount === 0) {
@@ -93,7 +93,7 @@ export class WebGLCommandPool<T extends WebGLCmdObject> {
         }
     }
 
-    public release () {
+    public release (): void {
         for (let i = 0; i < this._freeCmds.length; ++i) {
             const cmd = this._freeCmds.array[i];
             cmd.clear();
@@ -120,7 +120,7 @@ export class WebGLCommandAllocator {
         this.blitTextureCmdPool = new WebGLCommandPool(WebGLCmdBlitTexture, 1);
     }
 
-    public clearCmds (cmdPackage: WebGLCmdPackage) {
+    public clearCmds (cmdPackage: WebGLCmdPackage): void {
         if (cmdPackage.beginRenderPassCmds.length) {
             this.beginRenderPassCmdPool.freeCmds(cmdPackage.beginRenderPassCmds);
             cmdPackage.beginRenderPassCmds.clear();
@@ -154,7 +154,7 @@ export class WebGLCommandAllocator {
         cmdPackage.cmds.clear();
     }
 
-    public releaseCmds () {
+    public releaseCmds (): void {
         this.beginRenderPassCmdPool.release();
         this.bindStatesCmdPool.release();
         this.drawCmdPool.release();

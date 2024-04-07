@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { Color, Vec3, Mat4, Quat } from '../core';
+import { Color, Vec3, Mat4, Quat } from '@base/math';
 import { ParticleSystem } from './particle-system';
 import { ParticleSystemRendererBase } from './renderer/particle-system-renderer-base';
 
@@ -90,7 +90,7 @@ export class Particle {
         this.startRow = 0;
     }
 
-    public reset () {
+    public reset (): void {
         this.rotation.set(0, 0, 0);
         this.startEuler.set(0, 0, 0);
         this.startRotation.set(0, 0, 0, 1);
@@ -151,11 +151,11 @@ export abstract class ParticleModuleBase implements IParticleModule {
     public needUpdate = false;
     public needAnimate = true;
 
-    public bindTarget (target: ParticleSystemRendererBase) {
+    public bindTarget (target: ParticleSystemRendererBase): void {
         this.target = target;
     }
 
-    public update (space: number, trans: Mat4) {}
+    public update (space: number, trans: Mat4): void {}
     public abstract name: string;
     public abstract animate (p: Particle, dt?: number): void;
 }

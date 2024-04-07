@@ -22,16 +22,8 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    help,
-    executeInEditMode,
-    menu,
-    tooltip,
-    type,
-    serializable,
-} from 'cc.decorator';
-import { Vec3 } from '../../../../core';
+import { ccclass, help, executeInEditMode, menu, tooltip, type, serializable } from 'cc.decorator';
+import { Vec3 } from '@base/math';
 import { Collider } from './collider';
 import { IBoxShape } from '../../../spec/i-physics-shape';
 import { EColliderType } from '../../physics-enum';
@@ -58,7 +50,7 @@ export class BoxCollider extends Collider {
      */
     @type(Vec3)
     @tooltip('i18n:physics3d.collider.box_size')
-    public get size () {
+    public get size (): Vec3 {
         return this._size;
     }
 
@@ -77,7 +69,7 @@ export class BoxCollider extends Collider {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    public get shape () {
+    public get shape (): IBoxShape {
         return this._shape as IBoxShape;
     }
 

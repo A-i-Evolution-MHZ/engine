@@ -24,8 +24,8 @@
  THE SOFTWARE.
 */
 
-import { Rect } from '../math';
-import { legacyCC } from '../global-exports';
+import { cclegacy } from '@base/global';
+import { Rect } from '@base/math';
 
 /**
  * @zh `visibleRect` is a singleton object which defines the actual visible rect of the current view.
@@ -37,55 +37,55 @@ export const visibleRect = {
      * @zh 与游戏场景有关的屏幕左上方坐标。
      * @en Top left coordinate of the screen related to the game scene.
      */
-    topLeft: legacyCC.v2(0, 0),
+    topLeft: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕右上方坐标。
      * @en Top right coordinate of the screen related to the game scene.
      */
-    topRight: legacyCC.v2(0, 0),
+    topRight: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕上方中心坐标。
      * @en Top center coordinate of the screen related to the game scene.
      */
-    top: legacyCC.v2(0, 0),
+    top: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕左下坐标。
      * @en Bottom left coordinate of the screen related to the game scene.
      */
-    bottomLeft: legacyCC.v2(0, 0),
+    bottomLeft: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕右下坐标。
      * @en Bottom right coordinate of the screen related to the game scene.
      */
-    bottomRight: legacyCC.v2(0, 0),
+    bottomRight: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕下方中心坐标。
      * @en Bottom center coordinate of the screen related to the game scene.
      */
-    bottom: legacyCC.v2(0, 0),
+    bottom: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕中心坐标。
      * @en Center coordinate of the screen related to the game scene.
      */
-    center: legacyCC.v2(0, 0),
+    center: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕左边中心坐标。
      * @en Left center coordinate of the screen related to the game scene.
      */
-    left: legacyCC.v2(0, 0),
+    left: cclegacy.v2(0, 0),
 
     /**
      * @zh 与游戏场景有关的屏幕右边中心坐标。
      * @en Right center coordinate of the screen related to the game scene.
      */
-    right: legacyCC.v2(0, 0),
+    right: cclegacy.v2(0, 0),
 
     /**
      * @zh 屏幕宽度。
@@ -105,7 +105,7 @@ export const visibleRect = {
      * @param visibleRect_ @zh 当前视图的实际可见区域。@en The actual visible area of the current view.
      * @NOTE: @zh 必须是有效的区域。例如区域大小不能为负数。@en It must be a valid region. For example, the region size cannot be negative.
      */
-    init (visibleRect_: Rect) {
+    init (visibleRect_: Rect): void {
         const w = this.width = visibleRect_.width;
         const h = this.height = visibleRect_.height;
         const l = visibleRect_.x;
@@ -143,4 +143,4 @@ export const visibleRect = {
     },
 };
 
-legacyCC.visibleRect = visibleRect;
+cclegacy.visibleRect = visibleRect;

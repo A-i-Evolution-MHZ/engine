@@ -23,7 +23,8 @@
 */
 
 import { ccclass } from 'cc.decorator';
-import { QuatCurve, Quat } from '../../core';
+import { Quat } from '@base/math';
+import { QuatCurve } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM, createEvalSymbol } from '../define';
 import { SingleChannelTrack, TrackEval } from './track';
 
@@ -38,14 +39,14 @@ export class QuatTrack extends SingleChannelTrack<QuatCurve> {
     /**
      * @internal
      */
-    protected createCurve () {
+    protected createCurve (): QuatCurve {
         return new QuatCurve();
     }
 
     /**
      * @internal
      */
-    public [createEvalSymbol] () {
+    public [createEvalSymbol] (): QuatTrackEval {
         return new QuatTrackEval(this.channels()[0].curve);
     }
 }
@@ -55,11 +56,11 @@ export class QuatTrackEval implements TrackEval<Quat> {
 
     }
 
-    public get requiresDefault () {
+    public get requiresDefault (): boolean {
         return false;
     }
 
-    public evaluate (time: number) {
+    public evaluate (time: number): Quat {
         this._curve.evaluate(time, this._result);
         return this._result;
     }

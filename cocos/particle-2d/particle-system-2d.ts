@@ -23,13 +23,13 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass, editable, type, displayOrder, menu,
-    executeInEditMode, serializable, playOnFocus, tooltip, visible, formerlySerializedAs, override,
-} from 'cc.decorator';
-import { EDITOR } from 'internal:constants';
+import { ccclass, editable, type, displayOrder, menu, executeInEditMode, serializable, playOnFocus, tooltip, visible, formerlySerializedAs, override } from 'cc.decorator';
+import { EDITOR, EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { warnID, errorID, error } from '@base/debug';
+import { ccwindow } from '@base/global';
+import { Color, Vec2 } from '@base/math';
 import { UIRenderer } from '../2d/framework/ui-renderer';
-import { Color, Vec2, warnID, errorID, error, path, cclegacy  } from '../core';
+import { path } from '../core';
 import { Simulator } from './particle-simulator-2d';
 import { SpriteFrame } from '../2d/assets/sprite-frame';
 import { ImageAsset } from '../asset/assets/image-asset';
@@ -41,7 +41,8 @@ import codec from '../../external/compression/ZipUtils';
 import { IBatcher } from '../2d/renderer/i-batcher';
 import { assetManager, builtinResMgr } from '../asset/asset-manager';
 import { PositionType, EmitterMode, DURATION_INFINITY, START_RADIUS_EQUAL_TO_END_RADIUS, START_SIZE_EQUAL_TO_END_SIZE } from './define';
-import { ccwindow } from '../core/global-exports';
+import type { IAssembler } from '../2d';
+import type { TextureBase } from '../asset/assets/texture-base';
 
 /**
  * Image formats
@@ -105,7 +106,7 @@ export enum ImageFormat {
     UNKNOWN,
 }
 
-export function getImageFormatByData (imgData) {
+export function getImageFormatByData (imgData): ImageFormat {
     // if it is a png file buffer.
     if (imgData.length > 8 && imgData[0] === 0x89
         && imgData[1] === 0x50
@@ -182,11 +183,11 @@ export class ParticleSystem2D extends UIRenderer {
     @editable
     @displayOrder(6)
     @tooltip('i18n:particle_system.custom')
-    public get custom () {
+    public get custom (): boolean {
         return this._custom;
     }
     public set custom (value) {
-        if (EDITOR && !cclegacy.GAME_VIEW && !value && !this._file) {
+        if (EDITOR_NOT_IN_PREVIEW && !value && !this._file) {
             warnID(6000);
             return;
         }
@@ -252,7 +253,7 @@ export class ParticleSystem2D extends UIRenderer {
      * @zh 当前播放的粒子数量。
      * @readonly
      */
-    public get particleCount () {
+    public get particleCount (): number {
         return this._simulator.particles.length;
     }
 
@@ -262,7 +263,7 @@ export class ParticleSystem2D extends UIRenderer {
      */
     @editable
     @tooltip('i18n:particle_system.totalParticles')
-    public get totalParticles () {
+    public get totalParticles (): number {
         return this._totalParticles;
     }
     public set totalParticles (value: number) {
@@ -312,7 +313,7 @@ export class ParticleSystem2D extends UIRenderer {
      */
     @editable
     @tooltip('i18n:particle_system.startColor')
-    public get startColor () {
+    public get startColor (): Color {
         return this._startColor;
     }
 
@@ -341,7 +342,7 @@ export class ParticleSystem2D extends UIRenderer {
     }
 
     @override
-    @visible(() => false)
+    @visible((): boolean => false)
     set color (value) {
     }
 
@@ -495,7 +496,7 @@ export class ParticleSystem2D extends UIRenderer {
      */
     @type(PositionType)
     @tooltip('i18n:particle_system.positionType')
-    public get positionType () {
+    public get positionType (): number {
         return this._positionType;
     }
 
@@ -512,7 +513,7 @@ export class ParticleSystem2D extends UIRenderer {
     @editable
     @displayOrder(2)
     @tooltip('i18n:particle_system.preview')
-    public get preview () {
+    public get preview (): boolean {
         return this._preview;
     }
 
@@ -665,7 +666,7 @@ export class ParticleSystem2D extends UIRenderer {
      * @en Indicate whether the system simulation have stopped.
      * @zh 指示粒子播放是否完毕。
      */
-    public get stopped () {
+    public get stopped (): boolean {
         return this._stopped;
     }
 
@@ -674,11 +675,11 @@ export class ParticleSystem2D extends UIRenderer {
      * @zh 是否激活粒子。
      * @readonly
      */
-    public get active () {
+    public get active (): boolean {
         return this._simulator.active;
     }
 
-    public get assembler () {
+    public get assembler (): IAssembler | null {
         return this._assembler;
     }
     public aspectRatio = 1;
@@ -750,13 +751,13 @@ export class ParticleSystem2D extends UIRenderer {
         this._useFile = false;
     }
 
-    public onEnable () {
+    public onEnable (): void {
         super.onEnable();
         this._updateMaterial();
         this._updatePositionType();
     }
 
-    public onDestroy () {
+    public onDestroy (): void {
         super.onDestroy();
 
         if (this.autoRemoveOnFinish) {
@@ -771,14 +772,14 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    private initProperties () {
+    private initProperties (): void {
         this._previewTimer = null;
         this._focused = false;
         this.aspectRatio = 1;
         this._simulator = new Simulator(this);
     }
 
-    public onFocusInEditor () {
+    public onFocusInEditor (): void {
         this._focused = true;
         const components = getParticleComponents(this.node);
         for (let i = 0; i < components.length; ++i) {
@@ -786,7 +787,7 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    public onLostFocusInEditor () {
+    public onLostFocusInEditor (): void {
         this._focused = false;
         const components = getParticleComponents(this.node);
         for (let i = 0; i < components.length; ++i) {
@@ -794,13 +795,13 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    private _startPreview () {
+    private _startPreview (): void {
         if (this._preview) {
             this.resetSystem();
         }
     }
 
-    private _stopPreview () {
+    private _stopPreview (): void {
         if (this._preview) {
             this.resetSystem();
             this.stopSystem();
@@ -810,7 +811,7 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    public __preload () {
+    public __preload (): void {
         super.__preload();
 
         if (this._custom && this.spriteFrame && !this._renderSpriteFrame) {
@@ -827,14 +828,14 @@ export class ParticleSystem2D extends UIRenderer {
         }
 
         // auto play
-        if (!EDITOR || cclegacy.GAME_VIEW) {
+        if (!EDITOR_NOT_IN_PREVIEW) {
             if (this.playOnLoad) {
                 this.resetSystem();
             }
         }
     }
 
-    protected _flushAssembler () {
+    protected _flushAssembler (): void {
         const assembler = ParticleSystem2D.Assembler.getAssembler(this);
 
         if (this._assembler !== assembler) {
@@ -847,7 +848,7 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    protected lateUpdate (dt) {
+    protected lateUpdate (dt): void {
         if (!this._simulator.finished) {
             this._simulator.step(dt);
         }
@@ -860,7 +861,7 @@ export class ParticleSystem2D extends UIRenderer {
      * @zh 添加一个粒子到发射器中。
      * @return {Boolean}
      */
-    public addParticle () {
+    public addParticle (): void {
         // Not implemented
     }
 
@@ -871,7 +872,7 @@ export class ParticleSystem2D extends UIRenderer {
      * // stop particle system.
      * myParticleSystem.stopSystem();
      */
-    public stopSystem () {
+    public stopSystem (): void {
         this._stopped = true;
         this._simulator.stop();
     }
@@ -883,7 +884,7 @@ export class ParticleSystem2D extends UIRenderer {
      * // play particle system.
      * myParticleSystem.resetSystem();
      */
-    public resetSystem () {
+    public resetSystem (): void {
         this._stopped = false;
         this._simulator.reset();
         this.markForUpdateRenderData();
@@ -894,14 +895,14 @@ export class ParticleSystem2D extends UIRenderer {
      * @zh 发射器中粒子是否大于等于设置的总粒子数量。
      * @return {Boolean}
      */
-    public isFull () {
+    public isFull (): boolean {
         return (this.particleCount >= this.totalParticles);
     }
 
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _applyFile () {
+    public _applyFile (): void {
         const file = this._file;
         if (file) {
             if (!file) {
@@ -933,10 +934,10 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _initTextureWithDictionary (dict: any) {
+    public _initTextureWithDictionary (dict: any): boolean {
         if (dict.spriteFrameUuid) {
             const spriteFrameUuid = dict.spriteFrameUuid;
-            assetManager.loadAny(spriteFrameUuid, (err: Error, spriteFrame: SpriteFrame) => {
+            assetManager.loadAny(spriteFrameUuid, (err: Error, spriteFrame: SpriteFrame): void => {
                 if (err) {
                     dict.spriteFrameUuid = undefined;
                     this._initTextureWithDictionary(dict);
@@ -950,7 +951,7 @@ export class ParticleSystem2D extends UIRenderer {
             const imgPath = path.changeBasename(this._plistFile, dict.textureFileName || '');
             if (dict.textureFileName) {
                 // Try to get the texture from the cache
-                assetManager.loadRemote<ImageAsset>(imgPath, (err: Error | null, imageAsset: ImageAsset) => {
+                assetManager.loadRemote<ImageAsset>(imgPath, (err: Error | null, imageAsset: ImageAsset): void => {
                     if (err) {
                         dict.textureFileName = undefined;
                         this._initTextureWithDictionary(dict);
@@ -1021,7 +1022,7 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _initWithDictionary (dict: any) {
+    public _initWithDictionary (dict: any): boolean {
         this._useFile = true;
         this.totalParticles = parseInt(dict.maxParticles || 0);
 
@@ -1137,7 +1138,7 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _syncAspect () {
+    public _syncAspect (): void {
         if (this._renderSpriteFrame) {
             const frameRect = this._renderSpriteFrame.rect;
             this.aspectRatio = frameRect.width / frameRect.height;
@@ -1147,7 +1148,7 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _applySpriteFrame () {
+    public _applySpriteFrame (): void {
         this._renderSpriteFrame = this._renderSpriteFrame || this._spriteFrame;
         if (this._renderSpriteFrame) {
             if (this._renderSpriteFrame.texture) {
@@ -1167,16 +1168,16 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _getTexture () {
+    public _getTexture (): TextureBase | null {
         return (this._renderSpriteFrame && this._renderSpriteFrame.texture);
     }
 
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _updateMaterial () {
+    public _updateMaterial (): void {
         if (this._customMaterial) {
-            this.setMaterial(this._customMaterial, 0);
+            this.setSharedMaterial(this._customMaterial, 0);
             const target = this.getRenderMaterial(0)!.passes[0].blendState.targets[0];
             this._dstBlendFactor = target.blendDst;
             this._srcBlendFactor = target.blendSrc;
@@ -1191,8 +1192,8 @@ export class ParticleSystem2D extends UIRenderer {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _finishedSimulation () {
-        if (EDITOR && !cclegacy.GAME_VIEW) {
+    public _finishedSimulation (): void {
+        if (EDITOR_NOT_IN_PREVIEW) {
             if (this._preview && this._focused && !this.active /* && !cc.engine.isPlaying */) {
                 this.resetSystem();
             }
@@ -1206,11 +1207,11 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    protected _canRender () {
+    protected _canRender (): boolean {
         return super._canRender() && !this._stopped && this._renderSpriteFrame !== null && this._renderSpriteFrame !== undefined;
     }
 
-    protected _render (render: IBatcher) {
+    protected _render (render: IBatcher): void {
         if (this._positionType === PositionType.RELATIVE) {
             render.commitComp(this, this._simulator.renderData, this._renderSpriteFrame, this._assembler, this.node.parent);
         } else if (this.positionType === PositionType.GROUPED) {
@@ -1220,7 +1221,7 @@ export class ParticleSystem2D extends UIRenderer {
         }
     }
 
-    protected _updatePositionType () {
+    protected _updatePositionType (): void {
         if (this._positionType === PositionType.RELATIVE) {
             this._renderEntity.setRenderTransform(this.node.parent);
             this._renderEntity.setUseLocal(true);

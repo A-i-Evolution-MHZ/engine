@@ -27,7 +27,6 @@ import { SetIndex } from '../define';
 import { getPhaseID } from '../pass-phase';
 import { renderQueueClearFunc, RenderQueue, convertRenderQueue, renderQueueSortFunc } from '../render-queue';
 import { ClearFlagBit, Color, Rect } from '../../gfx';
-import { RenderBatchedQueue } from '../render-batched-queue';
 import { RenderInstancedQueue } from '../render-instanced-queue';
 import { IRenderStageInfo, RenderStage } from '../render-stage';
 import { ForwardStagePriority } from '../enum';
@@ -74,7 +73,6 @@ export class ForwardStage extends RenderStage {
     protected _renderQueues: RenderQueue[] = [];
 
     private _renderArea = new Rect();
-    private _batchedQueue: RenderBatchedQueue;
     private _instancedQueue: RenderInstancedQueue;
     private _phaseID = getPhaseID('default');
     private _clearFlag = 0xffffffff;
@@ -86,19 +84,18 @@ export class ForwardStage extends RenderStage {
 
     constructor () {
         super();
-        this._batchedQueue = new RenderBatchedQueue();
         this._instancedQueue = new RenderInstancedQueue();
         this._uiPhase = new UIPhase();
     }
 
-    public addRenderInstancedQueue (queue: RenderInstancedQueue) {
+    public addRenderInstancedQueue (queue: RenderInstancedQueue): void {
         if (this.additiveInstanceQueues.includes(queue)) {
             return;
         }
         this.additiveInstanceQueues.push(queue);
     }
 
-    public removeRenderInstancedQueue (queue: RenderInstancedQueue) {
+    public removeRenderInstancedQueue (queue: RenderInstancedQueue): void {
         const index = this.additiveInstanceQueues.indexOf(queue);
         if (index > -1) {
             this.additiveInstanceQueues.splice(index, 1);
@@ -113,7 +110,7 @@ export class ForwardStage extends RenderStage {
         return true;
     }
 
-    public activate (pipeline: ForwardPipeline, flow: ForwardFlow) {
+    public activate (pipeline: ForwardPipeline, flow: ForwardFlow): void {
         super.activate(pipeline, flow);
         for (let i = 0; i < this.renderQueues.length; i++) {
             this._renderQueues[i] = convertRenderQueue(this.renderQueues[i]);
@@ -124,12 +121,11 @@ export class ForwardStage extends RenderStage {
         this._uiPhase.activate(pipeline);
     }
 
-    public destroy () {
+    public destroy (): void {
     }
 
-    public render (camera: Camera) {
+    public render (camera: Camera): void {
         this._instancedQueue.clear();
-        this._batchedQueue.clear();
         const pipeline = this._pipeline as ForwardPipeline;
         const device = pipeline.device;
         this._renderQueues.forEach(renderQueueClearFunc);
@@ -150,10 +146,6 @@ export class ForwardStage extends RenderStage {
                         const instancedBuffer = pass.getInstancedBuffer();
                         instancedBuffer.merge(subModel, p);
                         this._instancedQueue.queue.add(instancedBuffer);
-                    } else if (batchingScheme === BatchingSchemes.VB_MERGING) {
-                        const batchedBuffer = pass.getBatchedBuffer();
-                        batchedBuffer.merge(subModel, p, ro.model);
-                        this._batchedQueue.queue.add(batchedBuffer);
                     } else {
                         for (k = 0; k < this._renderQueues.length; k++) {
                             this._renderQueues[k].insertRenderPass(ro, m, p);
@@ -174,7 +166,6 @@ export class ForwardStage extends RenderStage {
         }
 
         this._instancedQueue.uploadBuffers(cmdBuff);
-        this._batchedQueue.uploadBuffers(cmdBuff);
         this._additiveLightQueue.gatherLightPasses(camera, cmdBuff);
         this._planarQueue.gatherShadowPasses(camera, cmdBuff);
 
@@ -198,7 +189,6 @@ export class ForwardStage extends RenderStage {
         }
 
         this._instancedQueue.recordCommandBuffer(device, renderPass, cmdBuff);
-        this._batchedQueue.recordCommandBuffer(device, renderPass, cmdBuff);
 
         this._additiveLightQueue.recordCommandBuffer(device, renderPass, cmdBuff);
 

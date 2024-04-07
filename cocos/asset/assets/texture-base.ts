@@ -25,10 +25,14 @@
 
 import { EDITOR, TEST } from 'internal:constants';
 import { ccclass, serializable } from 'cc.decorator';
+import { errorID } from '@base/debug';
+import { cclegacy } from '@base/global';
+import { js } from '@base/utils';
+import { ccenum } from '@base/object';
 import { Asset } from './asset';
 import { Filter, PixelFormat, WrapMode } from './asset-enum';
 import { Sampler, Texture, Device, Format, SamplerInfo, Address, Filter as GFXFilter, deviceManager } from '../../gfx';
-import { errorID, murmurhash2_32_gc, ccenum, cclegacy, js } from '../../core';
+import { murmurhash2_32_gc } from '../../core';
 
 ccenum(Format);
 
@@ -160,7 +164,7 @@ export class TextureBase extends Asset {
      * @zh 获取标识符。
      * @returns @en The id of this texture. @zh 此贴图的 id。
      */
-    public getId () {
+    public getId (): string {
         return this._id;
     }
 
@@ -169,7 +173,7 @@ export class TextureBase extends Asset {
      * @zh 获取像素格式。
      * @returns @en The pixel format. @zh 像素格式。
      */
-    public getPixelFormat () {
+    public getPixelFormat (): PixelFormat {
         return this._format;
     }
 
@@ -178,7 +182,7 @@ export class TextureBase extends Asset {
      * @zh 获取各向异性。
      * @returns @en The anisotropy. @zh 各项异性值。
      */
-    public getAnisotropy () {
+    public getAnisotropy (): number {
         return this._anisotropy;
     }
 
@@ -191,7 +195,7 @@ export class TextureBase extends Asset {
      * @param wrapT @en T(V) coordinate wrap mode. @zh T(V) 坐标系缠绕模式.
      * @param wrapR @en R(W) coordinate wrap mode. @zh R(W) 坐标系缠绕模式.
      */
-    public setWrapMode (wrapS: WrapMode, wrapT: WrapMode, wrapR?: WrapMode) {
+    public setWrapMode (wrapS: WrapMode, wrapT: WrapMode, wrapR?: WrapMode): void {
         if (wrapR === undefined) wrapR = wrapS; // wrap modes should be as consistent as possible for performance
 
         this._wrapS = wrapS;
@@ -212,7 +216,7 @@ export class TextureBase extends Asset {
      * @param minFilter @en Filter mode for scale down. @zh 贴图缩小时使用的过滤模式。
      * @param magFilter @en Filter mode for scale up. @zh 贴图放大时使用的过滤模式。
      */
-    public setFilters (minFilter: Filter, magFilter: Filter) {
+    public setFilters (minFilter: Filter, magFilter: Filter): void {
         this._minFilter = minFilter;
         this._samplerInfo.minFilter = minFilter as unknown as GFXFilter;
         this._magFilter = magFilter;
@@ -228,7 +232,7 @@ export class TextureBase extends Asset {
      * @zh 设置此贴图的多层 mip 过滤算法。
      * @param mipFilter @en Filter mode for multiple mip level. @zh 多层 mip 过滤模式。
      */
-    public setMipFilter (mipFilter: Filter) {
+    public setMipFilter (mipFilter: Filter): void {
         this._mipFilter = mipFilter;
         this._samplerInfo.mipFilter = mipFilter as unknown as GFXFilter;
 
@@ -242,7 +246,7 @@ export class TextureBase extends Asset {
      * @zh 设置此贴图的各向异性。
      * @param anisotropy @en The anisotropy to be set. @zh 待设置的各向异性数值。
      */
-    public setAnisotropy (anisotropy: number) {
+    public setAnisotropy (anisotropy: number): void {
         this._anisotropy = anisotropy;
         this._samplerInfo.maxAnisotropy = anisotropy;
 
@@ -255,7 +259,7 @@ export class TextureBase extends Asset {
      * @en Destroy the current texture, clear up the related GPU resources.
      * @zh 销毁此贴图，并释放占用的 GPU 资源。
      */
-    public destroy () {
+    public destroy (): boolean {
         const destroyed = super.destroy();
         if (destroyed && cclegacy.director.root?.batcher2D) {
             cclegacy.director.root.batcher2D._releaseDescriptorSetCache(this._textureHash);
@@ -267,7 +271,7 @@ export class TextureBase extends Asset {
      * @en Gets the texture hash.
      * @zh 获取此贴图的哈希值。
      */
-    public getHash () {
+    public getHash (): number {
         return this._textureHash;
     }
 
@@ -292,7 +296,7 @@ export class TextureBase extends Asset {
      * @en Gets the sampler resource for the texture
      * @zh 获取此贴图底层的 GFX 采样信息。
      */
-    public getGFXSampler () {
+    public getGFXSampler (): Sampler {
         if (!this._gfxSampler) {
             if (this._gfxDevice) {
                 this._gfxSampler = this._gfxDevice.getSampler(this._samplerInfo);
@@ -320,7 +324,7 @@ export class TextureBase extends Asset {
     /**
      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
-    public _deserialize (serializedData: any, handle: any) {
+    public _deserialize (serializedData: any, handle: any): void {
         const data = serializedData as string;
         const fields = data.split(',');
         fields.unshift('');
@@ -340,15 +344,15 @@ export class TextureBase extends Asset {
         return deviceManager.gfxDevice;
     }
 
-    protected _getGFXFormat () {
+    protected _getGFXFormat (): Format {
         return this._getGFXPixelFormat(this._format);
     }
 
-    protected _setGFXFormat (format?: PixelFormat) {
+    protected _setGFXFormat (format?: PixelFormat): void {
         this._format = format === undefined ? PixelFormat.RGBA8888 : format;
     }
 
-    protected _getGFXPixelFormat (format: PixelFormat) {
+    protected _getGFXPixelFormat (format: PixelFormat): Format {
         if (format === PixelFormat.RGBA_ETC1) {
             format = PixelFormat.RGB_ETC1;
         } else if (format === PixelFormat.RGB_A_PVRTC_4BPPV1) {

@@ -22,8 +22,8 @@
  THE SOFTWARE.
 */
 
+import { cclegacy } from '@base/global';
 import { AttributeName, Format, FormatInfos, Attribute } from '../../gfx';
-import { cclegacy } from '../../core';
 
 /**
  * @en Vertex format with vector 3 position attribute
@@ -122,7 +122,7 @@ export const vfmtPosUvTwoColor4B = [
  * @param attrs All attributes of the vertex format
  * @returns Total components count
  */
-export function getComponentPerVertex (attrs: Attribute[]) {
+export function getComponentPerVertex (attrs: Attribute[]): number {
     let count = 0;
     for (let i = 0; i < attrs.length; i++) {
         const attr = attrs[i];
@@ -139,7 +139,7 @@ export function getComponentPerVertex (attrs: Attribute[]) {
  * @param attrs All attributes of the vertex format
  * @returns Total stride
  */
-export function getAttributeStride (attrs: Attribute[]) {
+export function getAttributeStride (attrs: Attribute[]): number {
     let count = 0;
     for (let i = 0; i < attrs.length; i++) {
         const attr = attrs[i];

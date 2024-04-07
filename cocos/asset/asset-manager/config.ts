@@ -21,9 +21,10 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-import { EDITOR, TEST } from 'internal:constants';
+import { EDITOR_NOT_IN_PREVIEW, TEST } from 'internal:constants';
+import { cclegacy } from '@base/global';
+import { js } from '@base/utils';
 import { Asset } from '../assets';
-import { js, cclegacy } from '../../core';
 import Cache from './cache';
 import { decodeUuid, normalize } from './helper';
 
@@ -146,8 +147,8 @@ const isMatchByWord = (path: string, test: string): boolean => {
     return true;
 };
 
-const processOptions = (options: IConfigOption) => {
-    if (EDITOR || TEST) { return; }
+const processOptions = (options: IConfigOption): void => {
+    if (EDITOR_NOT_IN_PREVIEW || TEST) { return; }
     let uuids = options.uuids;
     const paths = options.paths;
     const types = options.types;
@@ -217,7 +218,7 @@ const processOptions = (options: IConfigOption) => {
             if (!Object.prototype.hasOwnProperty.call(options.extensionMap, ext)) {
                 continue;
             }
-            options.extensionMap[ext].forEach((uuid, index) => {
+            options.extensionMap[ext].forEach((uuid, index): void => {
                 options.extensionMap[ext][index] = uuids[uuid] || uuid;
             });
         }
@@ -241,7 +242,7 @@ export default class Config {
 
     public paths = new Cache<IAddressableInfo[]>();
 
-    public init (options: IConfigOption) {
+    public init (options: IConfigOption): void {
         processOptions(options);
 
         this.importBase = options.importBase || '';
@@ -253,14 +254,14 @@ export default class Config {
         this._initUuid(options.uuids);
         this._initPath(options.paths);
         this._initScene(options.scenes);
-        this._initPackage(options.packs);
+        this._initPackage(options.packs, options.extensionMap);
         this._initVersion(options.versions);
         this._initRedirect(options.redirect);
         for (const ext in options.extensionMap) {
             if (!Object.prototype.hasOwnProperty.call(options.extensionMap, ext)) {
                 continue;
             }
-            options.extensionMap[ext].forEach((uuid) => {
+            options.extensionMap[ext].forEach((uuid): void => {
                 const assetInfo = this.assetInfos.get(uuid);
                 if (assetInfo) {
                     assetInfo.extension = ext;
@@ -297,7 +298,7 @@ export default class Config {
         }
 
         const infos = out || [];
-        this.paths.forEach((items, p) => {
+        this.paths.forEach((items, p): void => {
             if ((p.startsWith(path) && isMatchByWord(p, path)) || !path) {
                 for (let i = 0, l = items.length; i < l; i++) {
                     const entry = items[i];
@@ -323,17 +324,17 @@ export default class Config {
             name = `/${name}`;
         }
         // search scene
-        const info = this.scenes.find((val, key) => key.endsWith(name));
+        const info = this.scenes.find((val, key): boolean => key.endsWith(name));
         return info;
     }
 
-    public destroy () {
+    public destroy (): void {
         this.paths.destroy();
         this.scenes.destroy();
         this.assetInfos.destroy();
     }
 
-    private _initUuid (uuidList: string[]) {
+    private _initUuid (uuidList: string[]): void {
         if (!uuidList) {
             return;
         }
@@ -344,7 +345,7 @@ export default class Config {
         }
     }
 
-    private _initPath (pathList: Record<string, string[]>) {
+    private _initPath (pathList: Record<string, string[]>): void {
         if (!pathList) { return; }
         const paths = this.paths;
         paths.clear();
@@ -369,7 +370,7 @@ export default class Config {
         }
     }
 
-    private _initScene (sceneList: Record<string, string>) {
+    private _initScene (sceneList: Record<string, string>): void {
         if (!sceneList) { return; }
         const scenes = this.scenes;
         scenes.clear();
@@ -382,12 +383,20 @@ export default class Config {
         }
     }
 
-    private _initPackage (packageList: Record<string, string[]>) {
+    private _initPackage (packageList: Record<string, string[]>, extensionMap: IConfigOption['extensionMap']): void {
         if (!packageList) { return; }
         const assetInfos = this.assetInfos;
         for (const packUuid in packageList) {
             const uuids = packageList[packUuid];
-            const pack = { uuid: packUuid, packedUuids: uuids, ext: '.json' };
+            let mappedExtension = '.json';
+            for (const ext in extensionMap) {
+                const mappedUUIDs = extensionMap[ext];
+                if (mappedUUIDs.includes(packUuid)) {
+                    mappedExtension = ext;
+                    break;
+                }
+            }
+            const pack = { uuid: packUuid, packedUuids: uuids, ext: mappedExtension };
             assetInfos.add(packUuid, pack);
 
             for (let i = 0, l = uuids.length; i < l; i++) {
@@ -407,7 +416,7 @@ export default class Config {
         }
     }
 
-    private _initVersion (versions: { import?: string[], native?: string[] }) {
+    private _initVersion (versions: { import?: string[], native?: string[] }): void {
         if (!versions) { return; }
         const assetInfos = this.assetInfos;
         let entries = versions.import;
@@ -428,7 +437,7 @@ export default class Config {
         }
     }
 
-    private _initRedirect (redirect: string[]) {
+    private _initRedirect (redirect: string[]): void {
         if (!redirect) { return; }
         const assetInfos = this.assetInfos;
         for (let i = 0, l = redirect.length; i < l; i += 2) {

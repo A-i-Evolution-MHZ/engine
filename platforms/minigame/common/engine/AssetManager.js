@@ -26,9 +26,7 @@ function downloadScript (url, options, onComplete) {
     if (REGEX.test(url)) {
         onComplete && onComplete(new Error('Can not load remote scripts'));
     } else {
-        if (sys.platform === sys.Platform.TAOBAO_MINI_GAME) {
-            require(`../../../${url}`);
-        } else if (sys.platform !== sys.Platform.TAOBAO_CREATIVE_APP) { //Can't load scripts dynamically on Taobao platform
+        if (sys.platform !== sys.Platform.TAOBAO_CREATIVE_APP) { //Can't load scripts dynamically on Taobao platform
             require(`../../../${url}`);
         }
         onComplete && onComplete(null);
@@ -167,46 +165,6 @@ function downloadAsset (url, options, onComplete) {
     download(url, doNothing, options, options.onFileProgress, onComplete);
 }
 
-const downloadCCON = (url, options, onComplete) => {
-    downloadJson(url, options, (err, json) => {
-        if (err) {
-            onComplete(err);
-            return;
-        }
-        const cconPreface = cc.internal.parseCCONJson(json);
-        const chunkPromises = Promise.all(cconPreface.chunks.map((chunk) => new Promise((resolve, reject) => {
-            downloadArrayBuffer(`${cc.path.mainFileName(url)}${chunk}`, {}, (errChunk, chunkBuffer) => {
-                if (errChunk) {
-                    reject(errChunk);
-                } else {
-                    resolve(new Uint8Array(chunkBuffer));
-                }
-            });
-        })));
-        chunkPromises.then((chunks) => {
-            const ccon = new cc.internal.CCON(cconPreface.document, chunks);
-            onComplete(null, ccon);
-        }).catch((err) => {
-            onComplete(err);
-        });
-    });
-};
-
-const downloadCCONB = (url, options, onComplete) => {
-    downloadArrayBuffer(url, options, (err, arrayBuffer) => {
-        if (err) {
-            onComplete(err);
-            return;
-        }
-        try {
-            const ccon = cc.internal.decodeCCONBinary(new Uint8Array(arrayBuffer));
-            onComplete(null, ccon);
-        } catch (err) {
-            onComplete(err);
-        }
-    });
-};
-
 function downloadBundle (nameOrUrl, options, onComplete) {
     const bundleName = cc.path.basename(nameOrUrl);
     const version = options.version || cc.assetManager.downloader.bundleVers[bundleName];
@@ -280,7 +238,7 @@ function downloadBundle (nameOrUrl, options, onComplete) {
                     // to remove in the future
                     if (sys.platform === sys.Platform.ALIPAY_MINI_GAME && sys.os === sys.OS.ANDROID) {
                         const resPath = `${unzipPath}res/`;
-                        if (fs.accessSync({ path: resPath })) {
+                        if (fs.accessSync({ path: resPath }).success) {
                             data.base = resPath;
                         }
                     }
@@ -327,6 +285,8 @@ const parsePlist = function (url, options, onComplete) {
 };
 
 downloader.downloadScript = downloadScript;
+downloader._downloadArrayBuffer = downloadArrayBuffer;
+downloader._downloadJson = downloadJson;
 parser.parsePVRTex = parsePVRTex;
 parser.parsePKMTex = parsePKMTex;
 parser.parseASTCTex = parseASTCTex;
@@ -361,9 +321,6 @@ downloader.register({
     '.woff': downloadAsset,
     '.svg': downloadAsset,
     '.ttc': downloadAsset,
-
-    '.ccon': downloadCCON,
-    '.cconb': downloadCCONB,
 
     // Txt
     '.txt': downloadAsset,

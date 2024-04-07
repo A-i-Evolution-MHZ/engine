@@ -23,13 +23,16 @@
 */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 
-import { markAsWarning, removeProperty, replaceProperty, js, Color, cclegacy } from '../../core';
+import { cclegacy } from '@base/global';
+import { js, markAsWarning, removeProperty, replaceProperty } from '@base/utils';
+import { Color } from '@base/math';
 import { UIComponent } from './ui-component';
 import { UITransform } from './ui-transform';
 import { UIRenderer } from './ui-renderer';
 import { Canvas } from './canvas';
 import type { RenderTexture } from '../../asset/assets/render-texture';
 import type { ClearFlagBit } from '../../gfx/base/define';
+import type { Camera } from '../../render-scene/scene';
 
 removeProperty(UIComponent.prototype, 'UIComponent', [
     {
@@ -40,67 +43,58 @@ removeProperty(UIComponent.prototype, 'UIComponent', [
     },
 ]);
 
-removeProperty(UIRenderer.prototype, 'Renderable2D.prototype', [
-    {
-        name: 'srcBlendFactor',
-    },
-    {
-        name: 'dstBlendFactor',
-    },
-]);
-
 replaceProperty(Canvas.prototype, 'Canvas.prototype', [
     {
         name: 'camera',
         newName: 'cameraComponent.camera',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): Camera | undefined {
             return this._cameraComponent?.camera;
         },
     },
     {
         name: 'clearFlag',
         newName: 'cameraComponent.clearFlags',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): ClearFlagBit | 0 {
             return this._cameraComponent ? this._cameraComponent.clearFlags : 0;
         },
-        customSetter (this: Canvas, val: ClearFlagBit) {
+        customSetter (this: Canvas, val: ClearFlagBit): void {
             if (this._cameraComponent) this._cameraComponent.clearFlags = val;
         },
     },
     {
         name: 'color',
         newName: 'cameraComponent.clearColor',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): Readonly<Color> {
             return this._cameraComponent ? this._cameraComponent.clearColor : Color.BLACK;
         },
-        customSetter (this: Canvas, val: Readonly<Color>) {
+        customSetter (this: Canvas, val: Readonly<Color>): void {
             if (this._cameraComponent) this._cameraComponent.clearColor = val;
         },
     },
     {
         name: 'priority',
         newName: 'cameraComponent.priority',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): number {
             return this._cameraComponent ? this._cameraComponent.priority : 0;
         },
-        customSetter (this: Canvas, val: number) {
+        customSetter (this: Canvas, val: number): void {
             if (this._cameraComponent) this._cameraComponent.priority = val;
         },
     },
     {
         name: 'targetTexture',
         newName: 'cameraComponent.targetTexture',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): RenderTexture | null {
             return this._cameraComponent ? this._cameraComponent.targetTexture : null;
         },
-        customSetter (this: Canvas, value: RenderTexture) {
+        customSetter (this: Canvas, value: RenderTexture): void {
             if (this._cameraComponent) this._cameraComponent.targetTexture = value;
         },
     },
     {
         name: 'visibility',
         newName: 'cameraComponent.visibility',
-        customGetter (this: Canvas) {
+        customGetter (this: Canvas): number {
             return this._cameraComponent ? this._cameraComponent.visibility : 0;
         },
     },

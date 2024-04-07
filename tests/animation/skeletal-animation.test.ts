@@ -1,13 +1,16 @@
 
+import { CCObject } from '@base/object';
 import { SkeletalAnimationState } from '../../cocos/3d/skeletal-animation/skeletal-animation-state';
 import { SkeletalAnimation } from '../../cocos/3d/skeletal-animation/skeletal-animation';
-import { CCObject } from '../../cocos/core';
 import { AnimationClip } from '../../cocos/animation/animation-clip';
 import { VectorTrack } from '../../cocos/animation/animation';
 import { JointAnimationInfo } from '../../cocos/3d/skeletal-animation/skeletal-animation-utils';
 import { SkinnedMeshRenderer } from '../../cocos/3d/skinned-mesh-renderer';
 import { Node, Scene } from '../../cocos/scene-graph';
 import { director, game } from '../../cocos/game';
+import { SkinningModel } from '../../cocos/3d/models/skinning-model';
+import { Mesh, Skeleton } from '../../cocos/3d';
+import { BakedSkinningModel } from '../../cocos/3d/models/baked-skinning-model';
 
 describe('Skeletal animation state', () => {
     function createSimpleClip(name: string, duration: number, from: number, to: number, path = '') {
@@ -102,12 +105,17 @@ describe('Skeletal animation state', () => {
 
         const childNode = new Node('Child');
         const childSkin = childNode.addComponent(SkinnedMeshRenderer) as SkinnedMeshRenderer;
+        const childSkinSetUseBakedAnimationMock = mockSkinSetUseBakedAnimation(childSkin);
         childSkin.skinningRoot = n_0_0;
         n_0_0.addChild(childNode);
-        const childSkinSetUseBakedAnimationMock = mockSkinSetUseBakedAnimation(childSkin);
         expect(animationAddUserMock).toBeCalledTimes(1);
         expect(animationAddUserMock.mock.calls[0][0]).toBe(childSkin);
         animationAddUserMock.mockClear();
+        
+        // Assigning to the skinning root cause `setUseBakedAnimation` to be called.
+        expect(childSkinSetUseBakedAnimationMock).toBeCalledTimes(1);
+        expect(childSkinSetUseBakedAnimationMock.mock.calls[0][0]).toBe(true);
+        childSkinSetUseBakedAnimationMock.mockClear();
 
         // Another child's skin
         const anotherChildSkin = anotherChildNode.addComponent(SkinnedMeshRenderer) as SkinnedMeshRenderer;
@@ -128,12 +136,6 @@ describe('Skeletal animation state', () => {
         const parentSkinSetUseBakedAnimationMock = mockSkinSetUseBakedAnimation(parentSkin);
         parentSkin.skinningRoot = n_0_0;
         expect(animationAddUserMock).toBeCalledTimes(0);
-
-        // Assigning to the skinning root cause `setUseBakedAnimation` to be called.
-        childSkin.skinningRoot = n_0_0;
-        expect(childSkinSetUseBakedAnimationMock).toBeCalledTimes(1);
-        expect(childSkinSetUseBakedAnimationMock.mock.calls[0][0]).toBe(true);
-        childSkinSetUseBakedAnimationMock.mockClear();
 
         // Change to the animation's bake option. Skins are notified.
         animation_0_0.useBakedAnimation = false;
@@ -220,5 +222,61 @@ describe('Skeletal animation component', () => {
         expect(state.isPlaying && state.isPaused).toBe(true);
         skeletalAnimation.enabled = true;
         expect(state.isPlaying && !state.isPaused).toBe(true);
+    });
+
+    test('Bugfix - Inactivated skeletal animation components shall not affect skinned mesh renderers', () => {
+        const node = new Node();
+        const skeletalAnimation = node.addComponent(SkeletalAnimation) as SkeletalAnimation;
+        skeletalAnimation.enabled = false;
+        const skinnedMeshRenderer = node.addComponent(SkinnedMeshRenderer) as SkinnedMeshRenderer;
+        skinnedMeshRenderer.skinningRoot = node;
+
+        const scene = new Scene('');
+        scene.addChild(node);
+
+        director.runSceneImmediate(scene);
+        // The skinned mesh renderer shall not being in baked mode.
+        expect(skinnedMeshRenderer.model).not.toBeInstanceOf(BakedSkinningModel);
+
+        // While skeletal animation is activated, the skinned mesh renderer should be turned into baked mode.
+        skeletalAnimation.enabled = true;
+        director.tick(0.2);
+        expect(skinnedMeshRenderer.model).toBeInstanceOf(BakedSkinningModel);
+    });
+  
+    describe(`useBakedAnimation`, () => {
+        test.each([
+            [true],
+            [false],
+        ] as [use: boolean][])(`useBakedAnimation: %s`, (
+            use,
+        ) => {
+            const clip = new AnimationClip('meow');
+            clip.duration = 1.0;
+
+            const node = new Node();
+
+            const skinnedMeshRenderer = node.addComponent(SkinnedMeshRenderer) as SkinnedMeshRenderer;
+            skinnedMeshRenderer.mesh = new Mesh();
+            skinnedMeshRenderer.skeleton = new Skeleton();
+            skinnedMeshRenderer.skinningRoot = node;
+
+            const skeletalAnimation = node.addComponent(SkeletalAnimation) as SkeletalAnimation;
+            skeletalAnimation.clips = [clip];
+
+            skeletalAnimation.useBakedAnimation = use;
+            expect(skeletalAnimation.useBakedAnimation).toBe(use);
+
+            const scene = new Scene('Scene');
+            scene.addChild(node);
+
+            director.runSceneImmediate(scene);
+
+            if (use) {
+                expect(skinnedMeshRenderer.model).toBeInstanceOf(BakedSkinningModel);
+            } else {
+                expect(skinnedMeshRenderer.model).toBeInstanceOf(SkinningModel);
+            }
+        });
     });
 });

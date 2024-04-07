@@ -24,18 +24,8 @@
  THE SOFTWARE.
 */
 
-import {
-    ccclass,
-    help,
-    executeInEditMode,
-    menu,
-    visible,
-    type,
-    editable,
-    serializable,
-    tooltip,
-} from 'cc.decorator';
-import { Vec3, IVec3Like } from '../../../../core';
+import { ccclass, help, executeInEditMode, menu, visible, type, editable, serializable, tooltip } from 'cc.decorator';
+import { Vec3, IVec3Like } from '@base/math';
 import { Collider } from './collider';
 import { ISimplexShape } from '../../../spec/i-physics-shape';
 import { ESimplexType, EColliderType } from '../../physics-enum';
@@ -57,7 +47,7 @@ export class SimplexCollider extends Collider {
 
     @type(ESimplexType)
     @tooltip('i18n:physics3d.collider.simplex_shapeType')
-    get shapeType () {
+    get shapeType (): ESimplexType {
         return this._shapeType;
     }
 
@@ -70,7 +60,7 @@ export class SimplexCollider extends Collider {
 
     @editable
     @tooltip('i18n:physics3d.collider.simplex_vertex0')
-    get vertex0 () {
+    get vertex0 (): IVec3Like {
         return this._vertices[0];
     }
 
@@ -81,7 +71,7 @@ export class SimplexCollider extends Collider {
 
     @visible(function (this: SimplexCollider) { return this._shapeType > 1; })
     @tooltip('i18n:physics3d.collider.simplex_vertex1')
-    get vertex1 () {
+    get vertex1 (): IVec3Like {
         return this._vertices[1];
     }
 
@@ -92,7 +82,7 @@ export class SimplexCollider extends Collider {
 
     @visible(function (this: SimplexCollider) { return this._shapeType > 2; })
     @tooltip('i18n:physics3d.collider.simplex_vertex2')
-    get vertex2 () {
+    get vertex2 (): IVec3Like {
         return this._vertices[2];
     }
 
@@ -103,7 +93,7 @@ export class SimplexCollider extends Collider {
 
     @visible(function (this: SimplexCollider) { return this._shapeType > 3; })
     @tooltip('i18n:physics3d.collider.simplex_vertex3')
-    get vertex3 () {
+    get vertex3 (): IVec3Like {
         return this._vertices[3];
     }
 
@@ -118,11 +108,11 @@ export class SimplexCollider extends Collider {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    public get shape () {
+    public get shape (): ISimplexShape {
         return this._shape as ISimplexShape;
     }
 
-    get vertices () {
+    get vertices (): IVec3Like[] {
         return this._vertices;
     }
 
@@ -143,7 +133,7 @@ export class SimplexCollider extends Collider {
         super(EColliderType.SIMPLEX);
     }
 
-    updateVertices () {
+    updateVertices (): void {
         if (this._shape) {
             this.shape.setVertices(this._vertices);
         }

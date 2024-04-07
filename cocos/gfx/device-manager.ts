@@ -24,11 +24,13 @@
 */
 
 import { JSB, WEBGPU } from 'internal:constants';
-import { cclegacy, error, getError, sys, screen, Settings, settings } from '../core';
+import { cclegacy } from '@base/global';
+import { error, getError } from '@base/debug';
+import { BrowserType } from '@pal/system-info';
+import { sys, screen, Settings, settings } from '../core';
 import { BindingMappingInfo, DeviceInfo, SwapchainInfo } from './base/define';
 import { Device } from './base/device';
 import { Swapchain } from './base/swapchain';
-import { BrowserType } from '../../pal/system-info/enum-type';
 
 /**
  * @en
@@ -92,15 +94,15 @@ export class DeviceManager {
     private _swapchain!: Swapchain;
     private _renderType: RenderType = RenderType.UNKNOWN;
 
-    public get gfxDevice () {
+    public get gfxDevice (): Device {
         return this._gfxDevice;
     }
 
-    public get swapchain () {
+    public get swapchain (): Swapchain {
         return this._swapchain;
     }
 
-    public init (canvas: HTMLCanvasElement | null, bindingMappingInfo: BindingMappingInfo) {
+    public init (canvas: HTMLCanvasElement | null, bindingMappingInfo: BindingMappingInfo): void {
         // Avoid setup to be called twice.
         if (this.initialized) { return; }
         const renderMode = settings.querySettings(Settings.Category.RENDERING, 'renderMode');
@@ -156,10 +158,10 @@ export class DeviceManager {
             return;
         }
 
-        if (this._canvas) { this._canvas.oncontextmenu = () => false; }
+        if (this._canvas) { this._canvas.oncontextmenu = (): boolean => false; }
     }
 
-    private _initSwapchain () {
+    private _initSwapchain (): void {
         const swapchainInfo = new SwapchainInfo(1, this._canvas!);
         const windowSize = screen.windowSize;
         swapchainInfo.width = windowSize.width;
